@@ -51,5 +51,8 @@ dmypy.json
 .env
 .env.local
 
+# Lock files (consumers resolve their own deps)
+uv.lock
+
 # ADV spec database (local dev state)
 .adv/db/
