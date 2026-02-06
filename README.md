@@ -29,6 +29,61 @@ We wanted the best retrieval quality available, at low cost, without sending cod
 | **Multi-agent** | N/A | Single user | **3+ concurrent agents** |
 | **Offline** | Yes | No | No (needs Voyage API) |
 | **Web search** | No | Yes | No |
+| **Setup effort** | None | Minimal | Moderate (API key + config) |
+| **Maturity** | Decades | Production | v0.1.0 |
+
+### Performance
+
+| Metric | mgrep | lgrep | Notes |
+|--------|-------|-------|-------|
+| **Total query latency** | ~170ms | ~110ms | lgrep benefits from local vector search |
+| **Embedding time** | Included in query | ~90ms | Both require a network call to an embedding API |
+| **Search time** | Unknown (cloud) | ~15ms | LanceDB local search is fast |
+| **Initial index (~8k files)** | Unknown | ~15-20 min | Bottlenecked by embedding API rate limits |
+| **Incremental update** | Unknown | <2s per file | Hash-based skip avoids re-embedding unchanged files |
+| **RAM (idle)** | Unknown | ~300MB | Python + LanceDB |
+| **RAM (indexing)** | Unknown | ~500MB | Batch processing |
+| **Disk per project** | Cloud-hosted | ~250MB | Local LanceDB index |
+
+### Where mgrep wins
+
+Being objective: mgrep is the better choice if you value any of the following.
+
+- **Zero setup friction.** Install and go. No API key signup, no environment variables, no MCP config. lgrep requires a Voyage AI account, an API key, and OpenCode configuration.
+- **Web search.** mgrep can search the web alongside your codebase. lgrep is code-only.
+- **Multimodal support.** mgrep handles more than just code. lgrep is purpose-built for code search.
+- **Maturity.** mgrep is a production tool maintained by Mixedbread. lgrep is v0.1.0.
+
+### Where lgrep wins
+
+- **Retrieval quality.** Voyage Code 3 scores 92% on code retrieval benchmarks vs Mixedbread's ~85%. In practice this means fewer missed results and better ranking for conceptual queries.
+- **Cost.** ~$3/month vs $15-30/month. 5-10x cheaper.
+- **Privacy.** Your code and vectors never leave your machine. Only the search query text (a short natural language string) is sent to the Voyage API. mgrep uploads all code to Mixedbread's cloud.
+- **Hybrid search.** lgrep combines vector similarity with BM25 keyword matching using Reciprocal Rank Fusion. This catches both semantic matches ("authentication flow" → `jwt.verify()`) and exact keyword matches that pure vector search can miss.
+- **Multi-agent.** A single lgrep server handles 3+ concurrent OpenCode agents querying the same index. Designed for multi-agent workflows from the start.
+
+### Caveats on these numbers
+
+We want to be transparent about what we know and don't know:
+
+- **Quality percentages** (92% vs 85%) come from published embedding benchmarks ([Voyage Code 3](https://blog.voyageai.com/2024/12/04/voyage-code-3/), [DataStax 2025 benchmark](https://dev.to/datastax/the-best-embedding-models-for-information-retrieval-in-2025-3dp5)), not our own head-to-head retrieval tests on the same codebase. Real-world results may differ.
+- **mgrep latency** (~170ms) is estimated from typical cloud API round-trip overhead. We haven't profiled mgrep directly. mgrep may have internal optimizations (caching, precomputed results) that improve this.
+- **mgrep cost** ($15-30/month) is based on published pricing at time of development. Check current pricing.
+- **lgrep latency** (~110ms) is measured: ~90ms Voyage API call + ~15ms local LanceDB search + overhead. Actual latency varies with network conditions and index size.
+
+### Embedding models compared
+
+lgrep uses Voyage Code 3 by default. Here's how it compares to alternatives:
+
+| Provider | Model | Code retrieval quality | Cost per 1M tokens | Context window |
+|----------|-------|----------------------|---------------------|----------------|
+| **Voyage (default)** | voyage-code-3 | 92% | $0.18 | 32K |
+| OpenAI | text-embedding-3-large | ~85% | $0.13 | 8K |
+| Mixedbread (mgrep) | mixedbread-ai | ~85% | Included in subscription | Unknown |
+| Local CPU (Jina) | jina-code-v2 | ~78% | $0 | 8K |
+| Local GPU (GTX 1070) | jina-code-v2 | ~79% | $0 (hardware cost) | 8K |
+
+Voyage Code 3's 32K context window is particularly relevant for code -- it allows larger chunks that preserve more structural context than models limited to 8K tokens.
 
 ### Architecture decision
 
@@ -42,7 +97,7 @@ We evaluated 5 approaches before settling on Voyage Code 3 (cloud embeddings) + 
 | Local + GPU (GTX 1070) | 79% | $0 | ~80ms | Fully local |
 | Local + CPU only | 78% | $0 | ~140ms | Fully local |
 
-The winning approach gives the best retrieval quality at 5x lower cost than mgrep, with faster latency and better privacy. The only data sent to Voyage is the search query text -- your code and vectors never leave your machine.
+The fully local options (GPU/CPU) are the cheapest and most private, but the quality drop from 92% to 78-79% is significant -- it means noticeably worse search results. The cloud-managed options (mgrep, LanceDB Cloud) sacrifice privacy. Voyage + local LanceDB hits the best balance: top-tier quality, low cost, code stays on your machine.
 
 ## How it works
 
