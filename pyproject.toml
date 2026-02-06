@@ -1,0 +1,60 @@
+[project]
+name = "lgrep"
+version = "0.1.0"
+description = "Semantic code search MCP server using Voyage Code 3 embeddings and LanceDB"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Jeremy Rede" }
+]
+keywords = ["mcp", "semantic-search", "code-search", "embeddings", "lancedb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "lancedb>=0.5.0",
+    "voyageai>=0.3.0",
+    "mcp>=1.0.0",
+    "watchdog>=4.0.0",
+    "chonkie[code]>=1.5.0,<2.0.0",
+    "gitignorefile>=1.1.0",
+    "pydantic>=2.0.0",
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+lgrep = "lgrep.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lgrep"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

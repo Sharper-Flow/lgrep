@@ -1,0 +1,10 @@
+{
+  "name": "lgrep",
+  "version": "0.1.0",
+  "specs_dir": ".adv/specs",
+  "changes_dir": ".adv/changes",
+  "archive_dir": ".adv/archive",
+  "docs_dir": "docs/specs",
+  "db_dir": ".adv/db",
+  "project_file": "project.md"
+}

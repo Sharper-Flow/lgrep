@@ -1,0 +1,12 @@
+# Example .lgrepignore file
+# Use this to exclude files from semantic indexing that are not caught by .gitignore
+
+# Large documentation folders
+docs/site/
+
+# Test data or fixtures
+tests/fixtures/**/*.json
+*.test.data
+
+# Large generated files
+src/generated/

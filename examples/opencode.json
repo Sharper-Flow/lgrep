@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "lgrep": {
+      "type": "local",
+      "command": ["python", "-m", "lgrep.server"],
+      "env": {
+        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
+        "LGREP_LOG_LEVEL": "INFO"
+      },
+      "enabled": true
+    }
+  }
+}
