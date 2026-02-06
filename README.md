@@ -6,15 +6,25 @@ Search your codebase by *meaning*, not just keywords. Find `jwt.verify()` when y
 
 `lgrep` is an [MCP](https://modelcontextprotocol.io/) server that combines [Voyage Code 3](https://blog.voyageai.com/2024/12/04/voyage-code-3/) embeddings with local [LanceDB](https://lancedb.github.io/lancedb/) vector storage. Your code never leaves your machine -- only search queries hit the Voyage API.
 
+## Inspiration
+
+`grep` is one of the most important tools ever built for developers. Forty years later, we still reach for it (or ripgrep) dozens of times a day. But grep searches text, not meaning. When you're working with AI agents that think in concepts -- "find the authentication flow", "where is rate limiting handled" -- keyword matching falls short.
+
+Semantic code search exists, but every option we found required either uploading your code to someone else's servers, paying a recurring subscription, or accepting significantly worse search quality with local models. We wanted something different: a first-class grep replacement that understands code semantically, keeps everything local, and doesn't cost $20/month to run.
+
+`lgrep` is our answer. It's built for developers and AI agents who want the best available search quality without a cloud dependency for their codebase. Your vectors live on your machine. Your code never leaves your disk. The only thing that touches the network is the short natural language query you're searching for.
+
+We also built it because we run multiple AI coding agents simultaneously and needed a shared semantic index they could all query without stepping on each other. Nothing we found supported that well.
+
 ## Why lgrep?
 
-We built `lgrep` because existing options had tradeoffs we didn't want to accept:
+The existing options all have tradeoffs we didn't want to accept:
 
-- **grep / ripgrep** -- fast, but keyword-only. Can't find conceptually related code.
-- **[mgrep](https://github.com/mixedbread-ai/mgrep)** -- semantic search, but syncs all code to Mixedbread cloud servers, costs $15-30/month, and tops out at ~85% retrieval quality.
-- **Local embedding models** -- private, but quality drops to 78% with CPU inference.
+- **grep / ripgrep** -- fast and local, but keyword-only. Can't find conceptually related code. Searching for "error handling in API routes" returns nothing if the code uses `try/catch` with `res.status(500)`.
+- **[mgrep](https://github.com/mixedbread-ai/mgrep)** -- semantic search that works, but uploads all your code to Mixedbread's cloud servers, costs $15-30/month, and uses embeddings that top out at ~85% retrieval quality.
+- **Local embedding models** -- fully private, but quality drops to 78% with CPU inference. The gap between 78% and 92% is the difference between useful results and noise.
 
-We wanted the best retrieval quality available, at low cost, without sending code to someone else's servers.
+We wanted the best retrieval quality available, at low cost, without handing our codebase to a third party.
 
 ### lgrep vs mgrep vs grep
 
