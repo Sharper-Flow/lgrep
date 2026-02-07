@@ -2,10 +2,11 @@
   "mcp": {
     "lgrep": {
       "type": "local",
-      "command": ["python", "-m", "lgrep.server"],
+      "command": ["lgrep", "--transport", "stdio"],
       "env": {
         "VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
-        "LGREP_LOG_LEVEL": "INFO"
+        "LGREP_LOG_LEVEL": "INFO",
+        "LGREP_WARM_PATHS": "/home/user/dev/my-project:/home/user/dev/other-project"
       },
       "enabled": true
     }

@@ -180,7 +180,8 @@ Add to `~/.config/opencode/opencode.json`:
       "type": "local",
       "command": ["lgrep"],
       "env": {
-        "VOYAGE_API_KEY": "your-api-key-here"
+        "VOYAGE_API_KEY": "your-api-key-here",
+        "LGREP_WARM_PATHS": "/path/to/project-a:/path/to/project-b"
       },
       "enabled": true
     }
@@ -188,7 +189,7 @@ Add to `~/.config/opencode/opencode.json`:
 }
 ```
 
-### 3. Index your project
+### 3. Index your project (first-time prewarm)
 
 Once OpenCode starts with `lgrep` enabled, the agent can call:
 
@@ -197,6 +198,53 @@ lgrep_index(path="/path/to/your/project")
 ```
 
 After that, semantic search is available immediately.
+
+### 4. Verify the setup
+
+Use this minimal verification flow:
+
+1. `lgrep_status(path="/path/to/your/project")` returns project stats (or indicates not indexed yet).
+2. `lgrep_index(path="/path/to/your/project")` completes successfully.
+3. `lgrep_search(query="authentication flow", path="/path/to/your/project")` returns ranked results.
+
+## Tool Selection Decision Matrix
+
+MCP registration is the transport layer. Tool choice behavior is policy.
+
+| If the task is... | First tool to use | Why |
+|---|---|---|
+| Intent/concept discovery | `lgrep_search` | Semantic retrieval finds meaning, not just text |
+| Exact identifier or regex lookup | `Grep` | Exact matching is faster and deterministic |
+| Known-file review | `Read` | Direct inspection avoids unnecessary search |
+
+Examples:
+
+- "Where do we enforce auth between route and service?" -> `lgrep_search`
+- "Find references to `verifyToken`" -> `Grep`
+- "Open `src/auth/jwt.ts` and explain it" -> `Read`
+
+## Transport Defaults
+
+- **Local default:** `stdio` transport via OpenCode MCP (`"command": ["lgrep"]`).
+- **Opt-in:** streamable HTTP for shared/multi-client deployments.
+- Use streamable HTTP only when you need a long-running shared server; keep stdio for the simplest local setup.
+
+### Streamable HTTP Security Controls
+
+When running lgrep with `--transport streamable-http`, be aware of the following:
+
+- **Localhost binding (default):** The server binds to `127.0.0.1` by default, preventing external network access. Do not change the `--host` to `0.0.0.0` unless you have a reverse proxy or firewall in front.
+- **No built-in authentication:** lgrep does not implement API key or token-based auth on the HTTP transport. If you expose it on a network, place it behind a reverse proxy with authentication (e.g., nginx + basic auth, or a service mesh).
+- **CORS / Origin:** lgrep does not set CORS headers. Browser-based MCP clients should not connect directly. For multi-client setups, use a proxy that handles origin validation.
+- **Explicit opt-in:** Streamable HTTP is explicitly non-default. You must pass `--transport streamable-http` to enable it. The stdio transport has no network attack surface.
+
+```bash
+# Local-only (recommended for shared local agents):
+lgrep --transport streamable-http --host 127.0.0.1 --port 6285
+
+# DANGER: Do NOT do this without auth/firewall:
+# lgrep --transport streamable-http --host 0.0.0.0 --port 6285
+```
 
 ## MCP Tools
 
@@ -236,6 +284,7 @@ After that, semantic search is available immediately.
 | `VOYAGE_API_KEY` | **Yes** | -- | Voyage AI API key |
 | `LGREP_LOG_LEVEL` | No | `INFO` | Log level: DEBUG, INFO, WARNING, ERROR |
 | `LGREP_CACHE_DIR` | No | `~/.cache/lgrep` | Where LanceDB vector databases are stored |
+| `LGREP_WARM_PATHS` | No | -- | Colon-separated project paths to pre-load from disk cache at startup |
 
 See [`.env.example`](.env.example) for a template.
 
@@ -265,10 +314,20 @@ See [`.lgrepignore.example`](.lgrepignore.example) for more patterns.
 ### Cost breakdown
 
 | Component | Usage (3 agents, ~8k files) | Monthly cost |
-|-----------|---------------------------|--------------|
+|-----------|---------------------------|--------------| 
 | Voyage Code 3 embeddings | ~15M tokens | ~$2.70 |
 | LanceDB storage | Local | $0 |
 | **Total** | | **~$3** |
+
+### Cold-start vs warm-path latency
+
+| Scenario | Expected latency | Description |
+|----------|-----------------|-------------|
+| **Warm path** (disk cache exists) | ~110ms per query | Auto-loads from `~/.cache/lgrep/` on first search. No re-indexing. |
+| **Warm path** (`LGREP_WARM_PATHS` set) | ~110ms per query | Pre-loaded at server startup. Zero cold-start on first search. |
+| **Cold start** (no cache, auto-index) | 15-20 min for ~8k files | First search triggers full indexing. Subsequent searches are warm-path. |
+
+To eliminate cold-start latency: run `lgrep_index` once per project, then set `LGREP_WARM_PATHS` in your MCP config for instant availability on server restart.
 
 ## Supported languages
 

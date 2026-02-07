@@ -23,7 +23,7 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
-from lgrep.storage import ChunkStore, get_project_db_path
+from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
@@ -87,6 +87,7 @@ class LgrepContext:
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
 
 
 # ============================================================================
@@ -110,6 +111,82 @@ async def _startup(server: FastMCP) -> LgrepContext:
     return ctx
 
 
+async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
+    """Warm a single project by loading its disk cache into memory.
+
+    Isolated error handling — never raises.  Returns a status dict
+    so the caller can log a summary.
+    """
+    path_str = str(project_path)
+    try:
+        result = await _ensure_project_initialized(app_ctx, project_path)
+        if isinstance(result, str):
+            log.warning("warm_skipped", project=path_str, reason=result)
+            return {"path": path_str, "status": "skipped", "detail": result}
+        log.info("project_warmed", project=path_str)
+        return {"path": path_str, "status": "warmed"}
+    except Exception as e:
+        log.warning("warm_failed", project=path_str, error=str(e))
+        return {"path": path_str, "status": "error", "detail": str(e)}
+
+
+async def _warm_projects(app_ctx: LgrepContext) -> None:
+    """Eagerly load cached indexes listed in ``LGREP_WARM_PATHS``.
+
+    Parses the env var as an ``os.pathsep``-separated list of project
+    directories, filters to those that have an existing disk cache, and
+    calls ``_ensure_project_initialized`` for each — concurrently.
+
+    Errors in individual projects are logged and skipped; warming never
+    blocks server startup.
+    """
+    raw = os.environ.get("LGREP_WARM_PATHS", "")
+    if not raw:
+        return
+
+    # Parse, expand, resolve, deduplicate
+    seen: set[str] = set()
+    paths: list[Path] = []
+    for entry in raw.split(os.pathsep):
+        entry = entry.strip()
+        if not entry:
+            continue
+        resolved = Path(entry).expanduser().resolve()
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not resolved.is_dir():
+            log.warning("warm_path_not_directory", path=key)
+            continue
+        if not has_disk_cache(key):
+            log.info("warm_no_disk_cache", path=key)
+            continue
+        paths.append(resolved)
+
+    if not paths:
+        return
+
+    # Respect MAX_PROJECTS — existing projects count toward the cap
+    available = MAX_PROJECTS - len(app_ctx.projects)
+    if len(paths) > available:
+        log.warning(
+            "warm_paths_capped",
+            requested=len(paths),
+            available=available,
+            max=MAX_PROJECTS,
+        )
+        paths = paths[:available]
+
+    results = await asyncio.gather(
+        *[_warm_project(app_ctx, p) for p in paths],
+        return_exceptions=True,
+    )
+
+    warmed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "warmed")
+    log.info("warm_complete", warmed=warmed, total=len(paths))
+
+
 async def _shutdown(ctx: LgrepContext) -> None:
     """Gracefully shut down all projects: stop watchers and release resources."""
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
@@ -124,8 +201,9 @@ async def _shutdown(ctx: LgrepContext) -> None:
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
-    """Manage application lifecycle."""
+    """Manage application lifecycle with optional eager warming."""
     ctx = await _startup(server)
+    await _warm_projects(ctx)
     try:
         yield ctx
     finally:
@@ -276,8 +354,77 @@ async def lgrep_search(
     # Look up project by resolved path
     project_path = str(Path(path).resolve())
     state = app_ctx.projects.get(project_path)
+
+    # Auto-load from disk cache if the index exists but isn't in memory
+    # (e.g. after server restart). If no disk cache exists, auto-index
+    # on first semantic search for an existing directory.
     if not state:
-        return _error_response(f"Project not indexed: {path}. Call lgrep_index first.")
+        if has_disk_cache(project_path):
+            log.info("search_auto_loading_from_disk", project=project_path)
+            result = await _ensure_project_initialized(app_ctx, Path(project_path))
+            if isinstance(result, str):
+                return result  # propagate init error (e.g. missing API key)
+            state = result
+        else:
+            path_obj = Path(project_path)
+            if not path_obj.exists() or not path_obj.is_dir():
+                return _error_response(f"Path does not exist or is not a directory: {path}")
+
+            # Single-flight auto-index: only one caller indexes, others wait.
+            is_leader = False
+            async with app_ctx._lock:
+                if project_path in app_ctx._indexing_events:
+                    # Another call is already indexing — become a follower
+                    event = app_ctx._indexing_events[project_path]
+                else:
+                    # First caller — become the leader
+                    event = asyncio.Event()
+                    app_ctx._indexing_events[project_path] = event
+                    is_leader = True
+
+            if is_leader:
+                log.info("search_auto_index_start", project=project_path)
+                result = await _ensure_project_initialized(app_ctx, path_obj)
+                if isinstance(result, str):
+                    async with app_ctx._lock:
+                        app_ctx._indexing_events.pop(project_path, None)
+                    event.set()
+                    return result
+                state = result
+
+                try:
+                    status = await asyncio.to_thread(state.indexer.index_all)
+                    log.info(
+                        "search_auto_index_success",
+                        project=project_path,
+                        files=status.file_count,
+                        chunks=status.chunk_count,
+                        duration_ms=round(status.duration_ms, 2),
+                    )
+                except Exception as e:
+                    app_ctx.projects.pop(project_path, None)
+                    log.exception("search_auto_index_failed", project=project_path, error=str(e))
+                    async with app_ctx._lock:
+                        app_ctx._indexing_events.pop(project_path, None)
+                    event.set()
+                    return _error_response(
+                        "Failed to auto-index project on first search. Check server logs for details."
+                    )
+                finally:
+                    async with app_ctx._lock:
+                        app_ctx._indexing_events.pop(project_path, None)
+                    event.set()
+            else:
+                # Follower: wait for the leader to finish indexing
+                log.info("search_auto_index_waiting", project=project_path)
+                await event.wait()
+
+                # After leader finishes, project should be in memory
+                state = app_ctx.projects.get(project_path)
+                if not state:
+                    return _error_response(
+                        "Auto-indexing by a concurrent request failed. Retry your search."
+                    )
 
     try:
         # 1. Embed query (run in thread to avoid blocking event loop)
@@ -369,7 +516,28 @@ async def lgrep_status(
         # Single-project status
         project_path = str(Path(path).resolve())
         state = app_ctx.projects.get(project_path)
+
+        # Fallback: read stats directly from disk cache (no API key needed)
         if not state:
+            if has_disk_cache(project_path):
+                log.info("status_reading_disk_cache", project=project_path)
+                try:
+                    db_path = get_project_db_path(project_path)
+                    store = ChunkStore(db_path)
+                    chunks = store.count_chunks()
+                    files_set = store.get_indexed_files()
+                    return json.dumps(
+                        {
+                            "files": len(files_set),
+                            "chunks": chunks,
+                            "watching": False,
+                            "project": project_path,
+                            "disk_cache": True,
+                        }
+                    )
+                except Exception as e:
+                    log.warning("disk_cache_read_failed", project=project_path, error=str(e))
+
             return json.dumps({"files": 0, "chunks": 0, "watching": False, "project": project_path})
 
         stats = await _get_project_stats(project_path, state)

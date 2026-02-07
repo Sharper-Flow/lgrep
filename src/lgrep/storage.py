@@ -101,6 +101,23 @@ def get_project_db_path(project_path: str | Path) -> Path:
     return cache_dir / path_hash
 
 
+def has_disk_cache(project_path: str | Path) -> bool:
+    """Check whether a project has an existing LanceDB index on disk.
+
+    Looks for the ``chunks.lance`` directory inside the project's cache
+    directory.  This is a pure filesystem check — it does not open the
+    database or require an API key.
+
+    Args:
+        project_path: Path to the project directory.
+
+    Returns:
+        True if a chunks table exists on disk for this project.
+    """
+    db_path = get_project_db_path(project_path)
+    return (db_path / (CHUNKS_TABLE + ".lance")).is_dir()
+
+
 class ChunkStore:
     """LanceDB-backed storage for code chunks.
 

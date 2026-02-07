@@ -8,12 +8,14 @@ from pathlib import Path
 import pytest
 
 from lgrep.storage import (
+    CHUNKS_TABLE,
     EMBEDDING_DIM,
     ChunkStore,
     CodeChunk,
     SearchResult,
     SearchResults,
     get_project_db_path,
+    has_disk_cache,
 )
 
 
@@ -228,6 +230,53 @@ class TestChunkStoreCorruptionRecovery:
             db_path = Path(tmpdir) / "deep" / "nested" / "db"
             store = ChunkStore(db_path)
             assert db_path.exists()
+
+
+class TestHasDiskCache:
+    """Tests for has_disk_cache function."""
+
+    def test_returns_true_when_chunks_lance_exists(self, tmp_path, monkeypatch):
+        """Should return True when the project has a chunks.lance directory on disk."""
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+
+        # Point cache dir at tmp_path so get_project_db_path resolves there
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+
+        # Create the expected disk cache structure
+        db_path = get_project_db_path(project_path)
+        db_path.mkdir(parents=True, exist_ok=True)
+        (db_path / (CHUNKS_TABLE + ".lance")).mkdir()
+
+        assert has_disk_cache(project_path) is True
+
+    def test_returns_false_when_no_cache_dir(self, tmp_path, monkeypatch):
+        """Should return False when no cache directory exists at all."""
+        project_path = tmp_path / "noproject"
+        project_path.mkdir()
+
+        cache_dir = tmp_path / "empty_cache"
+        cache_dir.mkdir()
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+
+        assert has_disk_cache(project_path) is False
+
+    def test_returns_false_when_cache_dir_exists_but_no_lance(self, tmp_path, monkeypatch):
+        """Should return False when db directory exists but chunks.lance does not."""
+        project_path = tmp_path / "partial"
+        project_path.mkdir()
+
+        cache_dir = tmp_path / "cache2"
+        cache_dir.mkdir()
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+
+        # Create db directory without chunks.lance
+        db_path = get_project_db_path(project_path)
+        db_path.mkdir(parents=True, exist_ok=True)
+
+        assert has_disk_cache(project_path) is False
 
 
 class TestSearchResult:

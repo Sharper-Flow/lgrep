@@ -103,7 +103,7 @@ async def test_full_flow_integration(sample_project):
     response = await lgrep_watch_start(str(sample_project), ctx=mock_ctx)
     watch_data = json.loads(response)
     assert watch_data["watching"] is True
-    
+
     # 5. Stop Watcher
     response = await lgrep_watch_stop(ctx=mock_ctx)
     stop_data = json.loads(response)
@@ -199,8 +199,6 @@ def charge_card(card_number, amount):
                 assert "auth.py" not in result["file_path"]
 
             # 8. Search unindexed project returns error
-            resp_err = json.loads(
-                await lgrep_search("test", path="/not/indexed", ctx=mock_ctx)
-            )
+            resp_err = json.loads(await lgrep_search("test", path="/not/indexed", ctx=mock_ctx))
             assert "error" in resp_err
-            assert "not indexed" in resp_err["error"].lower()
+            assert "does not exist" in resp_err["error"].lower()

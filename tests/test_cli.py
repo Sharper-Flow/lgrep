@@ -62,6 +62,48 @@ class TestCLIDispatch:
         assert rc == 0
         mock_index.assert_called_once_with(["--help"])
 
+    def test_main_server_defaults_to_stdio(self):
+        """No subcommand should start MCP server with stdio defaults."""
+        with (
+            patch("sys.argv", ["lgrep"]),
+            patch("lgrep.server.run_server", return_value=0) as mock_run,
+        ):
+            rc = main()
+
+        assert rc == 0
+        mock_run.assert_called_once_with(transport="stdio", host="127.0.0.1", port=6285)
+
+    def test_main_server_streamable_http(self):
+        """CLI should support streamable-http transport with host/port options."""
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "lgrep",
+                    "--transport",
+                    "streamable-http",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "6388",
+                ],
+            ),
+            patch("lgrep.server.run_server", return_value=0) as mock_run,
+        ):
+            rc = main()
+
+        assert rc == 0
+        mock_run.assert_called_once_with(transport="streamable-http", host="127.0.0.1", port=6388)
+
+    def test_main_invalid_transport(self, capsys):
+        """Invalid transport should return a validation error."""
+        with patch("sys.argv", ["lgrep", "--transport", "http"]):
+            rc = main()
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Invalid transport" in err
+
 
 class TestCmdSearchArgParsing:
     """Tests for _cmd_search argument parsing."""
@@ -313,8 +355,14 @@ class TestCmdIndexExecution:
     @patch("lgrep.storage.ChunkStore")
     @patch("lgrep.storage.get_project_db_path")
     def test_index_success(
-        self, mock_get_path, mock_store_cls, mock_embedder_cls, mock_indexer_cls,
-        capsys, monkeypatch, tmp_path
+        self,
+        mock_get_path,
+        mock_store_cls,
+        mock_embedder_cls,
+        mock_indexer_cls,
+        capsys,
+        monkeypatch,
+        tmp_path,
     ):
         """Successful index should print JSON status and exit 0."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
@@ -344,8 +392,14 @@ class TestCmdIndexExecution:
     @patch("lgrep.storage.ChunkStore")
     @patch("lgrep.storage.get_project_db_path")
     def test_index_custom_chunk_size(
-        self, mock_get_path, mock_store_cls, mock_embedder_cls, mock_indexer_cls,
-        capsys, monkeypatch, tmp_path
+        self,
+        mock_get_path,
+        mock_store_cls,
+        mock_embedder_cls,
+        mock_indexer_cls,
+        capsys,
+        monkeypatch,
+        tmp_path,
     ):
         """--chunk-size N should pass custom chunk size to Indexer."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
@@ -369,8 +423,13 @@ class TestCmdIndexExecution:
     @patch("lgrep.storage.ChunkStore")
     @patch("lgrep.storage.get_project_db_path")
     def test_index_defaults_to_cwd(
-        self, mock_get_path, mock_store_cls, mock_embedder_cls, mock_indexer_cls,
-        capsys, monkeypatch
+        self,
+        mock_get_path,
+        mock_store_cls,
+        mock_embedder_cls,
+        mock_indexer_cls,
+        capsys,
+        monkeypatch,
     ):
         """Omitting path should default to cwd."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
@@ -394,8 +453,14 @@ class TestCmdIndexExecution:
     @patch("lgrep.storage.ChunkStore")
     @patch("lgrep.storage.get_project_db_path")
     def test_index_exception_returns_json_error(
-        self, mock_get_path, mock_store_cls, mock_embedder_cls, mock_indexer_cls,
-        capsys, monkeypatch, tmp_path
+        self,
+        mock_get_path,
+        mock_store_cls,
+        mock_embedder_cls,
+        mock_indexer_cls,
+        capsys,
+        monkeypatch,
+        tmp_path,
     ):
         """Exceptions during indexing should be caught and returned as JSON."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
