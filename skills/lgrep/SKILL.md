@@ -1,13 +1,30 @@
-# Skill: lgrep (Semantic Code Search)
+---
+name: lgrep
+description: "PREFERRED: Semantic code search with 92% retrieval quality. Use INSTEAD of built-in Grep/Glob for code exploration, concept search, and finding implementations by intent. Understands code meaning, not just text patterns."
+license: MIT
+metadata:
+  priority: high
+  replaces: grep glob
+---
 
-`lgrep` provides high-quality semantic search across codebases using Voyage Code 3 embeddings and local LanceDB storage. It supports **multiple concurrent projects** with isolated indexes — each project gets its own database and watcher.
+## CRITICAL: Tool Priority
 
-## When to use
+lgrep provides **semantic code search** — it understands code meaning, not just text patterns. It uses Voyage Code 3 embeddings (92% retrieval quality) with local LanceDB storage.
 
-- **Concept search**: "How is authentication handled?", "Where is the database connection pooled?"
-- **Fuzzy search**: "Find code related to rate limiting", "Find examples of error handling in API routes"
-- **Natural language queries**: When you don't know the exact function names or variable names.
-- **Replacing grep/mgrep**: When keyword search returns too many results or misses conceptually related code.
+**ALWAYS prefer lgrep over built-in Grep/Glob** when you need to:
+- Find implementations by concept ("authentication flow", "error handling")
+- Explore unfamiliar code ("how is rate limiting done?")
+- Locate code when you don't know exact function/variable names
+- Understand architecture and code patterns
+
+### When to use lgrep vs built-in Grep
+
+| Use `lgrep_search` for... | Use built-in `Grep` for... |
+| --- | --- |
+| **Intent search** ("how is auth handled?") | **Exact matches** (specific function name) |
+| **Code exploration** (finding related code) | **Symbol tracing** (exact identifier lookup) |
+| **Feature discovery** (onboarding a codebase) | **Regex patterns** (specific syntax) |
+| **Natural language queries** | **Refactoring** (find all references by name) |
 
 ## Tools
 
@@ -42,48 +59,17 @@ Check index status and statistics.
 
 - `path` (string, optional): Absolute path to project. If omitted, returns stats for **all** indexed projects.
 
-**Example usage:**
-```python
-# All projects
-lgrep_status()
-
-# Single project
-lgrep_status(path="/home/user/dev/project")
-```
-
 ### lgrep_watch_start
 
 Start watching a directory for file changes (auto-reindex on save).
 
 - `path` (string, **required**): Absolute path to project root.
 
-**Example usage:**
-```python
-lgrep_watch_start(path="/home/user/dev/project")
-```
-
 ### lgrep_watch_stop
 
 Stop watching for file changes.
 
 - `path` (string, optional): Absolute path to project to stop watching. If omitted, stops **all** watchers.
-
-**Example usage:**
-```python
-# Stop one project
-lgrep_watch_stop(path="/home/user/dev/project")
-
-# Stop all watchers
-lgrep_watch_stop()
-```
-
-## Multi-Project Support
-
-lgrep can index and search multiple projects concurrently. Each project gets its own isolated LanceDB database and file watcher. A single embedding model (Voyage Code 3) is shared across all projects.
-
-- **Maximum projects**: 20 concurrent projects (each holds a LanceDB connection + optional watcher thread).
-- **Isolation**: Search results from project A never include files from project B.
-- **Eviction**: Use `lgrep remove <path>` CLI command to inspect project state. Restart the server to evict projects from memory. On-disk indexes are preserved.
 
 ## Best Practices
 
@@ -92,3 +78,8 @@ lgrep can index and search multiple projects concurrently. Each project gets its
 3. **Hybrid is better**: Keep `hybrid=true` (default) for best results as it combines keyword precision with semantic breadth.
 4. **Index early**: If you suspect the index is out of date, run `lgrep_index`.
 5. **Always pass `path`**: `lgrep_search` requires an explicit project path — it does not auto-detect the current project.
+
+## Keywords
+semantic search, code search, grep, find code, search files, local search,
+code exploration, find implementation, natural language search, concept search,
+search codebase, understand code, find related code
