@@ -1,6 +1,8 @@
 """Run lgrep as a module: python -m lgrep"""
 
-from lgrep.server import run_server
+import sys
+
+from lgrep.cli import main
 
 if __name__ == "__main__":
-    run_server()
+    sys.exit(main())

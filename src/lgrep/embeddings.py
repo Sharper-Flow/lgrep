@@ -19,6 +19,7 @@ log = structlog.get_logger()
 MODEL_NAME = "voyage-code-3"
 DEFAULT_DIMENSIONS = 1024  # Matryoshka: 256-2048
 MAX_BATCH_SIZE = 128
+MAX_BATCH_TOKENS = 100_000  # Voyage limit is 120k; use 100k for safety margin
 MAX_RETRIES = 5
 BASE_DELAY = 1.0
 
@@ -91,6 +92,8 @@ class VoyageEmbedder:
     ) -> tuple[list[list[float]], int]:
         """Embed a single batch with exponential backoff retry.
 
+        Automatically splits batches that exceed Voyage's token limit.
+
         Args:
             batch: List of text strings to embed
             input_type: Voyage input type ("document" or "query")
@@ -110,11 +113,25 @@ class VoyageEmbedder:
                 )
                 return result.embeddings, result.total_tokens
             except Exception as e:
+                error_msg = str(e)
+
+                # Token limit exceeded - split batch and retry immediately
+                if "max allowed tokens" in error_msg and len(batch) > 1:
+                    mid = len(batch) // 2
+                    log.warning(
+                        "voyage_batch_token_limit_splitting",
+                        batch_size=len(batch),
+                        split_into=[mid, len(batch) - mid],
+                    )
+                    emb1, tok1 = self._embed_batch_with_retry(batch[:mid], input_type)
+                    emb2, tok2 = self._embed_batch_with_retry(batch[mid:], input_type)
+                    return emb1 + emb2, tok1 + tok2
+
                 if attempt == MAX_RETRIES - 1:
                     log.error(
                         "voyage_batch_failed_permanent",
                         input_type=input_type,
-                        error=str(e),
+                        error=error_msg,
                     )
                     raise
 
@@ -123,12 +140,17 @@ class VoyageEmbedder:
                     "voyage_batch_failed_retrying",
                     attempt=attempt + 1,
                     delay=delay,
-                    error=str(e),
+                    error=error_msg,
                 )
                 time.sleep(delay)
 
         # Unreachable: the loop always returns or raises on the last attempt
         raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate: ~4 chars per token for code."""
+        return len(text) // 4
 
     def embed_documents(
         self,
@@ -137,9 +159,11 @@ class VoyageEmbedder:
     ) -> EmbeddingResult:
         """Embed a list of documents (code chunks) with retry logic.
 
+        Uses token-aware batching to stay within Voyage's per-batch token limit.
+
         Args:
             texts: List of text strings to embed
-            batch_size: Number of texts per API call (max 128)
+            batch_size: Max number of texts per API call (max 128)
 
         Returns:
             EmbeddingResult with embeddings and token usage
@@ -150,11 +174,37 @@ class VoyageEmbedder:
         all_embeddings: list[list[float]] = []
         total_tokens = 0
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+        # Build token-aware batches
+        batches: list[list[str]] = []
+        current_batch: list[str] = []
+        current_tokens = 0
+
+        for text in texts:
+            est = self._estimate_tokens(text)
+            if current_batch and (
+                len(current_batch) >= batch_size
+                or current_tokens + est > MAX_BATCH_TOKENS
+            ):
+                batches.append(current_batch)
+                current_batch = []
+                current_tokens = 0
+            current_batch.append(text)
+            current_tokens += est
+
+        if current_batch:
+            batches.append(current_batch)
+
+        log.info(
+            "voyage_embed_batching",
+            total_texts=len(texts),
+            num_batches=len(batches),
+            batch_sizes=[len(b) for b in batches],
+        )
+
+        for batch_num, batch in enumerate(batches, 1):
             log.debug(
                 "voyage_embed_batch",
-                batch_num=i // batch_size + 1,
+                batch_num=batch_num,
                 batch_size=len(batch),
             )
             embeddings, tokens = self._embed_batch_with_retry(batch, "document")

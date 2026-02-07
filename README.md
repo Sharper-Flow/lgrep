@@ -202,11 +202,11 @@ After that, semantic search is available immediately.
 
 | Tool | Description |
 |------|-------------|
-| `lgrep_search(query, limit=10, hybrid=true)` | Search code by meaning. Returns file paths, line numbers, code snippets, and relevance scores. |
+| `lgrep_search(query, path, limit=10, hybrid=true)` | Search code by meaning. `path` (required) selects which project to search. Returns file paths, line numbers, code snippets, and relevance scores. |
 | `lgrep_index(path)` | Build or refresh the index for a project directory. Skips unchanged files automatically. |
-| `lgrep_status()` | Check index stats: file count, chunk count, project path, watcher status. |
+| `lgrep_status(path?)` | Check index stats: file count, chunk count, watcher status. Omit `path` for all projects. |
 | `lgrep_watch_start(path)` | Start background file watcher for incremental re-indexing on save. |
-| `lgrep_watch_stop()` | Stop the background watcher. |
+| `lgrep_watch_stop(path?)` | Stop the background watcher. Omit `path` to stop all watchers. |
 
 ### Example search result
 
@@ -295,7 +295,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-72 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, and integration.
+81 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, and integration.
 
 ## License
 
