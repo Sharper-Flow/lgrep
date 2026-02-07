@@ -40,7 +40,7 @@ We wanted the best retrieval quality available, at low cost, without handing our
 | **Offline** | Yes | No | No (needs Voyage API) |
 | **Web search** | No | Yes | No |
 | **Setup effort** | None | Minimal | Moderate (API key + config) |
-| **Maturity** | Decades | Production | v0.1.0 |
+| **Maturity** | Decades | Production | v0.2.0 |
 
 ### Performance
 
@@ -62,7 +62,7 @@ Being objective: mgrep is the better choice if you value any of the following.
 - **Zero setup friction.** Install and go. No API key signup, no environment variables, no MCP config. lgrep requires a Voyage AI account, an API key, and OpenCode configuration.
 - **Web search.** mgrep can search the web alongside your codebase. lgrep is code-only.
 - **Multimodal support.** mgrep handles more than just code. lgrep is purpose-built for code search.
-- **Maturity.** mgrep is a production tool maintained by Mixedbread. lgrep is v0.1.0.
+- **Maturity.** mgrep is a production tool maintained by Mixedbread. lgrep is v0.2.0.
 
 ### Where lgrep wins
 
@@ -189,23 +189,24 @@ Add to `~/.config/opencode/opencode.json`:
 }
 ```
 
-### 3. Index your project (first-time prewarm)
+### 3. Search
 
-Once OpenCode starts with `lgrep` enabled, the agent can call:
+That's it. Just search:
 
 ```
-lgrep_index(path="/path/to/your/project")
+lgrep_search(query="authentication flow", path="/path/to/your/project")
 ```
 
-After that, semantic search is available immediately.
+On first search, lgrep auto-indexes the project (15-20 min for ~8k files). Subsequent searches use the cached index (~110ms). After a server restart, the disk cache is auto-loaded — no re-indexing needed.
 
-### 4. Verify the setup
+To skip the cold-start entirely, set `LGREP_WARM_PATHS` (see step 2) to pre-load indexes at startup.
 
-Use this minimal verification flow:
+### 4. Verify the setup (optional)
 
-1. `lgrep_status(path="/path/to/your/project")` returns project stats (or indicates not indexed yet).
-2. `lgrep_index(path="/path/to/your/project")` completes successfully.
-3. `lgrep_search(query="authentication flow", path="/path/to/your/project")` returns ranked results.
+If you want to confirm everything is working:
+
+1. `lgrep_status(path="/path/to/your/project")` — returns project stats or disk cache info.
+2. `lgrep_search(query="authentication flow", path="/path/to/your/project")` — returns ranked results.
 
 ## Tool Selection Decision Matrix
 
@@ -345,6 +346,8 @@ AST-aware chunking via tree-sitter for 30+ languages including Python, TypeScrip
 
 **Stale results** -- Call `lgrep_index` to refresh, or use `lgrep_watch_start` for automatic incremental updates.
 
+**First search is slow** -- This is expected. On the first search for a new project, lgrep auto-indexes the entire codebase (~15-20 min for ~8k files). Subsequent searches use the cached index and complete in ~110ms. Set `LGREP_WARM_PATHS` to pre-load at startup.
+
 ## Development
 
 ```bash
@@ -354,7 +357,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-81 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, and integration.
+134 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, auto-index, concurrency, CLI transport, and integration.
 
 ## License
 
