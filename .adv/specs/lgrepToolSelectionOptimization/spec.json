@@ -1,0 +1,141 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anomalyco/oc-plugins/main/advance/plugin/schemas/spec.schema.json",
+  "name": "lgrepToolSelectionOptimization",
+  "title": "LgrepToolSelectionOptimization",
+  "purpose": "Capability: LgrepToolSelectionOptimization",
+  "version": "1.0.0",
+  "updated_at": "2026-02-07T21:47:49.069Z",
+  "requirements": [
+    {
+      "id": "rq-1",
+      "title": "Prefer semantic search for intent-based discovery",
+      "body": "Agents MUST prefer `lgrep_search` as the first search action for intent-based code discovery prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.",
+      "priority": "must",
+      "tags": [
+        "tool-selection",
+        "semantic-search"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-1.1",
+          "title": "Semantic prompts choose lgrep first",
+          "given": [
+            "A fixed semantic-discovery prompt fixture set"
+          ],
+          "when": "The tool-choice harness runs",
+          "then": [
+            "`lgrep_search` is selected as first search action in at least 90% of fixture cases"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-2",
+      "title": "Prefer exact-match tools for exact queries",
+      "body": "Agents MUST prefer exact-match tools for exact identifier and regex prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.",
+      "priority": "must",
+      "tags": [
+        "tool-selection",
+        "exact-match"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-2.1",
+          "title": "Exact prompts avoid semantic-first behavior",
+          "given": [
+            "A fixed exact-identifier and regex prompt fixture set"
+          ],
+          "when": "The tool-choice harness runs",
+          "then": [
+            "Exact-match tools are selected as first search action in at least 90% of fixture cases"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-3",
+      "title": "First semantic search auto-setup",
+      "body": "First semantic search in a fresh project MUST succeed without manual user invocation of `lgrep_index` and MUST emit explicit status for start, retry, success, and failure outcomes.",
+      "priority": "must",
+      "tags": [
+        "onboarding",
+        "auto-index",
+        "observability"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-3.1",
+          "title": "Cold project auto-indexes on first search",
+          "given": [
+            "A valid project path with no loaded in-memory state"
+          ],
+          "when": "`lgrep_search` is called",
+          "then": [
+            "Index initialization is auto-triggered",
+            "Search completes without the user manually calling `lgrep_index`"
+          ]
+        },
+        {
+          "id": "rq-3.2",
+          "title": "Auto-setup failure is actionable",
+          "given": [
+            "First-run search where credentials are missing or indexing fails"
+          ],
+          "when": "Auto-setup is attempted",
+          "then": [
+            "A clear remediation-oriented error is returned",
+            "Partial initialization state is not persisted"
+          ]
+        },
+        {
+          "id": "rq-3.3",
+          "title": "Concurrent cold searches are single-flight",
+          "given": [
+            "Concurrent first-run semantic searches for the same project path"
+          ],
+          "when": "Auto-index initialization starts",
+          "then": [
+            "Only one initialization/index flow executes",
+            "All callers observe consistent terminal outcomes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-4",
+      "title": "Decision matrix and transport guidance are validated",
+      "body": "Documentation MUST provide a tool-choice decision matrix and validated setup workflow, including stdio as local default and streamable-http as explicit opt-in with security guidance.",
+      "priority": "must",
+      "tags": [
+        "documentation",
+        "transport",
+        "security"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-4.1",
+          "title": "Documented setup path is test-validated",
+          "given": [
+            "README, skill docs, and example configuration"
+          ],
+          "when": "A user follows the documented setup path",
+          "then": [
+            "At least one integration test reproduces the documented workflow end-to-end"
+          ]
+        },
+        {
+          "id": "rq-4.2",
+          "title": "Transport defaults and safeguards are explicit",
+          "given": [
+            "Documentation for streamable-http mode"
+          ],
+          "when": "A user evaluates transport options",
+          "then": [
+            "Docs explicitly state stdio as local default",
+            "Docs list streamable-http opt-in security controls (localhost binding, auth expectations, and origin guidance)"
+          ]
+        }
+      ]
+    }
+  ]
+}
