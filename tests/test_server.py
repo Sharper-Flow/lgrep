@@ -10,6 +10,7 @@ import pytest
 from mcp.server.fastmcp import Context
 
 from lgrep.server import (
+    AUTO_INDEX_MAX_ATTEMPTS,
     lgrep_index,
     lgrep_search,
     lgrep_status,
@@ -349,7 +350,6 @@ class TestAcceptanceToolChoiceAndOnboarding:
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
 
         call_counter = {"count": 0}
-        resolved_path = str(project_path.resolve())
 
         def slow_index_all():
             import time
@@ -444,10 +444,62 @@ class TestAcceptanceToolChoiceAndOnboarding:
         data = json.loads(response)
         assert "error" in data
         assert "Failed to auto-index" in data["error"]
+        assert mock_state.indexer.index_all.call_count == AUTO_INDEX_MAX_ATTEMPTS
         # Must NOT tell user to run lgrep_index manually
         assert "lgrep_index" not in data["error"]
         # Partial state must be removed
         assert str(project_path.resolve()) not in app_ctx.projects
+
+    @pytest.mark.asyncio
+    async def test_search_auto_index_retries_then_succeeds(self, tmp_path):
+        """Transient indexing failure should retry and eventually succeed."""
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = MagicMock()
+        app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        project_path = tmp_path / "retry_success_project"
+        project_path.mkdir()
+
+        mock_db = MagicMock()
+        mock_state = ProjectState(db=mock_db, indexer=MagicMock())
+
+        results = SearchResults(
+            results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
+            query_time_ms=5.0,
+            total_chunks=100,
+        )
+        mock_db.search_hybrid.return_value = results
+
+        attempts = {"count": 0}
+
+        def flaky_index_all():
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise RuntimeError("temporary embedding timeout")
+            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+
+        mock_state.indexer.index_all.side_effect = flaky_index_all
+
+        async def fake_ensure_init(ctx, path):
+            ctx.projects[str(path)] = mock_state
+            return mock_state
+
+        with (
+            patch("lgrep.server.has_disk_cache", return_value=False),
+            patch("lgrep.server._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch("lgrep.server.AUTO_INDEX_RETRY_BASE_DELAY_S", 0),
+        ):
+            response = await lgrep_search(
+                query="find auth logic",
+                path=str(project_path),
+                ctx=mock_ctx,
+            )
+
+        data = json.loads(response)
+        assert "results" in data
+        assert attempts["count"] == 2
 
     @pytest.mark.asyncio
     async def test_search_auto_index_concurrent_leader_failure(self, tmp_path):

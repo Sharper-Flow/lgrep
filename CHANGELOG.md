@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Default transport is now explicitly `stdio` (was implicit before).
 - Error messages for unindexed projects improved (now says "does not exist" instead of suggesting `lgrep_index`).
-- Test suite expanded from 81 to 134 tests.
+- Test suite expanded from 81 to 135 tests.
 
 ## [0.1.0] - 2026-02-06
 

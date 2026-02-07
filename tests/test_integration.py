@@ -45,7 +45,7 @@ def connect():
 
 @pytest.mark.asyncio
 async def test_full_flow_integration(sample_project):
-    """Test full flow: index project -> check status -> search."""
+    """Test full flow: first search auto-indexes -> check status -> watcher."""
 
     # Mock Voyage API to return deterministic vectors
     def mock_embed_docs(texts, **kwargs):
@@ -72,24 +72,9 @@ async def test_full_flow_integration(sample_project):
         mock_embedder.embed_query.side_effect = mock_embed_query
         mock_embedder_class.return_value = mock_embedder
 
-        # 1. Index the project
-        response = await lgrep_index(str(sample_project), ctx=mock_ctx)
-        status_data = json.loads(response)
-        assert status_data["file_count"] == 2
-        assert status_data["chunk_count"] >= 2
-
-        # 2. Check status
-        response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)
-        status_data = json.loads(response)
-        assert status_data["files"] == 2
-        assert status_data["project"] == str(sample_project.resolve())
-
-        # 3. Search for "login"
-        # Since we use deterministic mock embeddings, we can't test semantic quality,
-        # but we can test that it returns results from the database.
+        # 1. Search first (cold start): should auto-index and return results
         response = await lgrep_search("login", path=str(sample_project), ctx=mock_ctx)
         search_data = json.loads(response)
-
         assert "results" in search_data
         assert len(search_data["results"]) > 0
 
@@ -98,6 +83,12 @@ async def test_full_flow_integration(sample_project):
         assert "file_path" in res
         assert "content" in res
         assert "score" in res
+
+        # 2. Check status reflects indexed project
+        response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)
+        status_data = json.loads(response)
+        assert status_data["files"] == 2
+        assert status_data["project"] == str(sample_project.resolve())
 
     # 4. Test Watcher
     response = await lgrep_watch_start(str(sample_project), ctx=mock_ctx)

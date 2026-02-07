@@ -34,6 +34,8 @@ log = structlog.get_logger()
 # Guard against unbounded memory growth.
 # Each project holds a LanceDB connection + potential watcher thread.
 MAX_PROJECTS = 20
+AUTO_INDEX_MAX_ATTEMPTS = 2
+AUTO_INDEX_RETRY_BASE_DELAY_S = 0.1
 
 
 def time_tool(func):
@@ -168,7 +170,7 @@ async def _warm_projects(app_ctx: LgrepContext) -> None:
         return
 
     # Respect MAX_PROJECTS — existing projects count toward the cap
-    available = MAX_PROJECTS - len(app_ctx.projects)
+    available = max(0, MAX_PROJECTS - len(app_ctx.projects))
     if len(paths) > available:
         log.warning(
             "warm_paths_capped",
@@ -319,6 +321,133 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
         }
 
 
+async def _finish_single_flight_indexing(
+    app_ctx: LgrepContext, project_path: str, event: asyncio.Event
+) -> None:
+    """Release single-flight state and notify any waiting followers."""
+    async with app_ctx._lock:
+        if app_ctx._indexing_events.get(project_path) is event:
+            app_ctx._indexing_events.pop(project_path, None)
+    event.set()
+
+
+async def _auto_index_project_single_flight(
+    app_ctx: LgrepContext, project_path: str, path_obj: Path
+) -> ProjectState | str:
+    """Auto-index project on first search using leader/follower coordination."""
+    is_leader = False
+    async with app_ctx._lock:
+        if project_path in app_ctx._indexing_events:
+            event = app_ctx._indexing_events[project_path]
+        else:
+            event = asyncio.Event()
+            app_ctx._indexing_events[project_path] = event
+            is_leader = True
+
+    if not is_leader:
+        log.info("search_auto_index_waiting", project=project_path)
+        await event.wait()
+        state = app_ctx.projects.get(project_path)
+        if not state:
+            return _error_response(
+                "Auto-indexing by a concurrent request failed. Retry your search."
+            )
+        return state
+
+    log.info("search_auto_index_start", project=project_path)
+    try:
+        result = await _ensure_project_initialized(app_ctx, path_obj)
+        if isinstance(result, str):
+            return result
+        state = result
+
+        for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
+            try:
+                status = await asyncio.to_thread(state.indexer.index_all)
+                log.info(
+                    "search_auto_index_success",
+                    project=project_path,
+                    files=status.file_count,
+                    chunks=status.chunk_count,
+                    duration_ms=round(status.duration_ms, 2),
+                    attempt=attempt,
+                    max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                )
+                return state
+            except Exception as e:
+                if attempt < AUTO_INDEX_MAX_ATTEMPTS:
+                    delay_s = AUTO_INDEX_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+                    log.warning(
+                        "search_auto_index_retry",
+                        project=project_path,
+                        attempt=attempt,
+                        max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                        delay_s=delay_s,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(delay_s)
+                    continue
+
+                app_ctx.projects.pop(project_path, None)
+                log.exception(
+                    "search_auto_index_failed",
+                    project=project_path,
+                    attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                    error=str(e),
+                )
+                return _error_response(
+                    "Failed to auto-index project on first search. Check server logs for details."
+                )
+    except Exception as e:
+        app_ctx.projects.pop(project_path, None)
+        log.exception("search_auto_index_failed", project=project_path, error=str(e))
+        return _error_response(
+            "Failed to auto-index project on first search. Check server logs for details."
+        )
+    finally:
+        await _finish_single_flight_indexing(app_ctx, project_path, event)
+
+
+async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> ProjectState | str:
+    """Resolve project path and ensure a ready ProjectState for search."""
+    project_path = str(Path(path).resolve())
+    state = app_ctx.projects.get(project_path)
+    if state:
+        return state
+
+    if has_disk_cache(project_path):
+        log.info("search_auto_loading_from_disk", project=project_path)
+        result = await _ensure_project_initialized(app_ctx, Path(project_path))
+        return result
+
+    path_obj = Path(project_path)
+    if not path_obj.exists() or not path_obj.is_dir():
+        return _error_response(f"Path does not exist or is not a directory: {path}")
+
+    return await _auto_index_project_single_flight(app_ctx, project_path, path_obj)
+
+
+async def _execute_search(
+    app_ctx: LgrepContext,
+    state: ProjectState,
+    query: str,
+    limit: int,
+    hybrid: bool,
+    project_path: str,
+) -> str:
+    """Run embedding + storage search and return JSON output."""
+    try:
+        query_vector = await asyncio.to_thread(app_ctx.embedder.embed_query, query)
+        if hybrid:
+            results = await asyncio.to_thread(state.db.search_hybrid, query_vector, query, limit)
+        else:
+            results = await asyncio.to_thread(state.db.search_vector, query_vector, limit)
+        return json.dumps(asdict(results))
+    except Exception as e:
+        log.exception("search_failed", project=project_path, error=str(e))
+        return _error_response("Search failed. Check server logs for details.")
+
+
 # ============================================================================
 # MCP Tools
 # ============================================================================
@@ -350,97 +479,14 @@ async def lgrep_search(
         return _error_response("Internal error: Context missing")
 
     app_ctx: LgrepContext = ctx.request_context.lifespan_context
-
-    # Look up project by resolved path
     project_path = str(Path(path).resolve())
-    state = app_ctx.projects.get(project_path)
 
-    # Auto-load from disk cache if the index exists but isn't in memory
-    # (e.g. after server restart). If no disk cache exists, auto-index
-    # on first semantic search for an existing directory.
-    if not state:
-        if has_disk_cache(project_path):
-            log.info("search_auto_loading_from_disk", project=project_path)
-            result = await _ensure_project_initialized(app_ctx, Path(project_path))
-            if isinstance(result, str):
-                return result  # propagate init error (e.g. missing API key)
-            state = result
-        else:
-            path_obj = Path(project_path)
-            if not path_obj.exists() or not path_obj.is_dir():
-                return _error_response(f"Path does not exist or is not a directory: {path}")
+    result = await _ensure_search_project_state(app_ctx, path)
+    if isinstance(result, str):
+        return result
+    state = result
 
-            # Single-flight auto-index: only one caller indexes, others wait.
-            is_leader = False
-            async with app_ctx._lock:
-                if project_path in app_ctx._indexing_events:
-                    # Another call is already indexing — become a follower
-                    event = app_ctx._indexing_events[project_path]
-                else:
-                    # First caller — become the leader
-                    event = asyncio.Event()
-                    app_ctx._indexing_events[project_path] = event
-                    is_leader = True
-
-            if is_leader:
-                log.info("search_auto_index_start", project=project_path)
-                result = await _ensure_project_initialized(app_ctx, path_obj)
-                if isinstance(result, str):
-                    async with app_ctx._lock:
-                        app_ctx._indexing_events.pop(project_path, None)
-                    event.set()
-                    return result
-                state = result
-
-                try:
-                    status = await asyncio.to_thread(state.indexer.index_all)
-                    log.info(
-                        "search_auto_index_success",
-                        project=project_path,
-                        files=status.file_count,
-                        chunks=status.chunk_count,
-                        duration_ms=round(status.duration_ms, 2),
-                    )
-                except Exception as e:
-                    app_ctx.projects.pop(project_path, None)
-                    log.exception("search_auto_index_failed", project=project_path, error=str(e))
-                    async with app_ctx._lock:
-                        app_ctx._indexing_events.pop(project_path, None)
-                    event.set()
-                    return _error_response(
-                        "Failed to auto-index project on first search. Check server logs for details."
-                    )
-                finally:
-                    async with app_ctx._lock:
-                        app_ctx._indexing_events.pop(project_path, None)
-                    event.set()
-            else:
-                # Follower: wait for the leader to finish indexing
-                log.info("search_auto_index_waiting", project=project_path)
-                await event.wait()
-
-                # After leader finishes, project should be in memory
-                state = app_ctx.projects.get(project_path)
-                if not state:
-                    return _error_response(
-                        "Auto-indexing by a concurrent request failed. Retry your search."
-                    )
-
-    try:
-        # 1. Embed query (run in thread to avoid blocking event loop)
-        query_vector = await asyncio.to_thread(app_ctx.embedder.embed_query, query)
-
-        # 2. Search (run in thread - LanceDB I/O)
-        if hybrid:
-            results = await asyncio.to_thread(state.db.search_hybrid, query_vector, query, limit)
-        else:
-            results = await asyncio.to_thread(state.db.search_vector, query_vector, limit)
-
-        # 3. Format response
-        return json.dumps(asdict(results))
-    except Exception as e:
-        log.exception("search_failed", project=project_path, error=str(e))
-        return _error_response("Search failed. Check server logs for details.")
+    return await _execute_search(app_ctx, state, query, limit, hybrid, project_path)
 
 
 @mcp.tool()
