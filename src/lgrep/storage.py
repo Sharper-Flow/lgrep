@@ -287,7 +287,11 @@ class ChunkStore:
         row_count = self.table.count_rows()
         if row_count > 1000:
             try:
-                self.table.create_index("vector", replace=True)
+                self.table.create_index(
+                    metric="cosine",
+                    vector_column_name="vector",
+                    replace=True,
+                )
             except Exception as idx_err:
                 log.debug("vector_index_create_skipped", error=str(idx_err))
 
