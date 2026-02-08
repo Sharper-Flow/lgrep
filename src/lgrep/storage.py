@@ -162,33 +162,35 @@ class ChunkStore:
         """Get or create the chunks table."""
         if self._table is None:
             try:
-                table_names = self.db.list_tables()
-                if CHUNKS_TABLE in table_names:
-                    self._table = self.db.open_table(CHUNKS_TABLE)
-                    log.debug("chunk_table_opened", rows=self._table.count_rows())
-                else:
-                    # Create empty table with schema
+                # Use open_table directly (EAFP) — avoids lancedb
+                # list_tables() returning ListTablesResponse which
+                # breaks `in` operator checks.
+                self._table = self.db.open_table(CHUNKS_TABLE)
+                log.debug("chunk_table_opened", rows=self._table.count_rows())
+            except Exception:
+                # Table doesn't exist yet, create it
+                try:
                     self._table = self.db.create_table(
                         CHUNKS_TABLE,
                         schema=CodeChunk.to_arrow_schema(),
                     )
                     log.info("chunk_table_created")
-            except Exception as e:
-                log.warning(
-                    "chunk_table_open_failed",
-                    error=str(e),
-                    action="dropping and recreating table",
-                )
-                # Drop corrupted table and recreate
-                try:
-                    self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
-                except Exception as drop_err:
-                    log.debug("drop_table_also_failed", error=str(drop_err))
-                self._table = self.db.create_table(
-                    CHUNKS_TABLE,
-                    schema=CodeChunk.to_arrow_schema(),
-                )
-                log.info("chunk_table_recreated_after_corruption")
+                except Exception as create_err:
+                    log.warning(
+                        "chunk_table_create_failed",
+                        error=str(create_err),
+                        action="dropping and recreating table",
+                    )
+                    # Last resort: table exists but is corrupted
+                    try:
+                        self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
+                    except Exception as drop_err:
+                        log.debug("drop_table_also_failed", error=str(drop_err))
+                    self._table = self.db.create_table(
+                        CHUNKS_TABLE,
+                        schema=CodeChunk.to_arrow_schema(),
+                    )
+                    log.info("chunk_table_recreated_after_corruption")
         return self._table
 
     def add_chunks(self, chunks: list[CodeChunk]) -> int:
