@@ -7,9 +7,9 @@ import pytest
 
 from lgrep.chunking import (
     DEFAULT_CHUNK_SIZE,
+    ChunkInfo,
     CodeChunker,
     CodeChunkResult,
-    ChunkInfo,
     detect_language,
 )
 

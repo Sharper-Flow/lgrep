@@ -182,8 +182,7 @@ class VoyageEmbedder:
         for text in texts:
             est = self._estimate_tokens(text)
             if current_batch and (
-                len(current_batch) >= batch_size
-                or current_tokens + est > MAX_BATCH_TOKENS
+                len(current_batch) >= batch_size or current_tokens + est > MAX_BATCH_TOKENS
             ):
                 batches.append(current_batch)
                 current_batch = []

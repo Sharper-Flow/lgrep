@@ -1,13 +1,11 @@
 """Tests for the indexing logic."""
 
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from lgrep.indexing import Indexer
-from lgrep.storage import ChunkStore, CodeChunk
+from lgrep.storage import ChunkStore
 
 
 @pytest.fixture

@@ -1,12 +1,8 @@
 """Tests for CLI search and index subcommands."""
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from lgrep.cli import _cmd_index, _cmd_search, main
 from lgrep.indexing import IndexStatus

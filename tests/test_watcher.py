@@ -1,14 +1,13 @@
 """Tests for file watcher."""
 
 import asyncio
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from watchdog.events import FileModifiedEvent
 
-from lgrep.watcher import FileWatcher, IndexingHandler
+from lgrep.watcher import IndexingHandler
 
 
 class TestFileWatcher:

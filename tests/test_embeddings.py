@@ -12,9 +12,11 @@ class TestVoyageEmbedder:
 
     def test_init_requires_api_key(self) -> None:
         """Should raise error if no API key provided."""
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValueError, match="Voyage API key required"):
-                VoyageEmbedder()
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(ValueError, match="Voyage API key required"),
+        ):
+            VoyageEmbedder()
 
     def test_init_with_api_key_param(self) -> None:
         """Should accept API key as parameter."""
@@ -25,11 +27,13 @@ class TestVoyageEmbedder:
 
     def test_init_with_env_var(self) -> None:
         """Should read API key from environment."""
-        with patch.dict("os.environ", {"VOYAGE_API_KEY": "env-key"}):
-            with patch("voyageai.Client") as mock_client:
-                embedder = VoyageEmbedder()
-                assert embedder.api_key == "env-key"
-                mock_client.assert_called_once_with(api_key="env-key")
+        with (
+            patch.dict("os.environ", {"VOYAGE_API_KEY": "env-key"}),
+            patch("voyageai.Client") as mock_client,
+        ):
+            embedder = VoyageEmbedder()
+            assert embedder.api_key == "env-key"
+            mock_client.assert_called_once_with(api_key="env-key")
 
     def test_embed_documents_empty(self) -> None:
         """Should handle empty document list."""
