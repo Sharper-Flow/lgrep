@@ -1,7 +1,7 @@
 # LgrepToolSelectionOptimization
 
-> **Version:** 1.0.0
-> **Updated:** 2026-02-07
+> **Version:** 1.1.0
+> **Updated:** 2026-02-08
 
 ## Purpose
 
@@ -128,5 +128,187 @@ Documentation MUST provide a tool-choice decision matrix and validated setup wor
 **Then:**
 - Docs explicitly state stdio as local default
 - Docs list streamable-http opt-in security controls (localhost binding, auth expectations, and origin guidance)
+
+---
+
+### Proposal quality checks are mandatory and measurable
+
+**ID:** `rq-5` | **Priority:** **[MUST]**
+
+Proposal quality validation MUST enforce mandatory checks for unambiguous wording, verifiable acceptance criteria, and requirement-to-scenario traceability. Full INVEST dimensions SHOULD be advisory guidance and MUST NOT hard-block progression by themselves.
+
+**Tags:** `proposal-quality`, `validation`, `invest`, `adv-lifecycle`
+
+#### Scenarios
+
+**Proposal meeting mandatory checks passes** (`rq-5.1`)
+
+**Given:**
+- A proposal with measurable requirements and scenario trace links
+
+**When:** Validation runs
+
+**Then:**
+- Validation reports pass for mandatory proposal-quality checks
+
+**Proposal missing mandatory checks fails with remediation** (`rq-5.2`)
+
+**Given:**
+- A proposal with ambiguous wording or missing traceability
+
+**When:** Validation runs
+
+**Then:**
+- Validation fails with actionable remediation guidance for each failed check
+
+---
+
+### Task and gate sequencing uses explicit transitions
+
+**ID:** `rq-6` | **Priority:** **[MUST]**
+
+Task and gate progression MUST be represented as explicit transition rules with mandatory and conditional paths. Invalid transitions MUST be rejected with actionable error messages using a structured error contract that includes `code`, `message`, `remediation`, and `allowed_next_transitions`. Approved bypass or override transitions MUST record actor, reason, and timestamp.
+
+**Tags:** `workflow`, `gates`, `fsm`, `audit`, `adv-lifecycle`
+
+#### Scenarios
+
+**Valid transition across mandatory gate path succeeds** (`rq-6.1`)
+
+**Given:**
+- A change with required prerequisites complete for the next gate
+
+**When:** A gate transition is requested
+
+**Then:**
+- Transition succeeds and new gate state is persisted
+
+**Invalid transition is rejected with structured remediation** (`rq-6.2`)
+
+**Given:**
+- A requested transition that violates transition rules
+
+**When:** A gate transition is requested
+
+**Then:**
+- Transition is rejected
+- Error includes the unmet guard and an actionable next step
+- Error payload includes code, message, remediation, and allowed_next_transitions
+
+**Approved override transition is auditable** (`rq-6.3`)
+
+**Given:**
+- A transition requiring override and explicit approval
+
+**When:** Override transition is executed
+
+**Then:**
+- An audit artifact records actor, reason, and timestamp
+
+---
+
+### Acceptance coverage uses compact deterministic matrix
+
+**ID:** `rq-7` | **Priority:** **[MUST]**
+
+Acceptance coverage MUST use command-level contract tests plus a deterministic 3-scenario integration matrix covering success, validation failure, and remediation outcomes.
+
+**Tags:** `testing`, `acceptance`, `determinism`, `adv-lifecycle`
+
+#### Scenarios
+
+**Matrix cardinality and labels are fixed** (`rq-7.1`)
+
+**Given:**
+- Acceptance scenario fixtures
+
+**When:** Acceptance harness loads scenarios
+
+**Then:**
+- Exactly three integration scenarios exist: success, validation failure, remediation
+
+**Contract tests verify command outcomes** (`rq-7.2`)
+
+**Given:**
+- Command-level test fixtures for prep, validate, and apply
+
+**When:** Contract tests run
+
+**Then:**
+- Expected success and failure outputs are observed deterministically
+
+---
+
+### Lifecycle command documentation is executable
+
+**ID:** `rq-8` | **Priority:** **[MUST]**
+
+Documentation MUST include command-level examples for `/adv-prep`, `/adv-validate`, and `/adv-apply` with required inputs and observable success and failure outcomes.
+
+**Tags:** `documentation`, `lifecycle`, `examples`, `adv-lifecycle`
+
+#### Scenarios
+
+**Lifecycle examples define required inputs** (`rq-8.1`)
+
+**Given:**
+- Lifecycle command documentation
+
+**When:** Examples are reviewed
+
+**Then:**
+- Each command example includes required input fields
+
+**Lifecycle examples define observable outcomes** (`rq-8.2`)
+
+**Given:**
+- Lifecycle command documentation
+
+**When:** Examples are reviewed
+
+**Then:**
+- Each command example includes observable success and failure outcomes
+
+**Missing required inputs are documented with remediation** (`rq-8.3`)
+
+**Given:**
+- Lifecycle command documentation
+
+**When:** Failure examples are reviewed
+
+**Then:**
+- Each command includes a missing-input failure example with remediation guidance
+
+---
+
+### Lifecycle operations emit auditable status artifacts
+
+**ID:** `rq-9` | **Priority:** **[MUST]**
+
+Lifecycle operations MUST emit structured status markers and auditable artifacts for prep, validate, and apply execution paths so failures can be diagnosed and overrides can be traced.
+
+**Tags:** `observability`, `audit`, `operations`, `adv-lifecycle`
+
+#### Scenarios
+
+**Prep/validate/apply emit structured status markers** (`rq-9.1`)
+
+**Given:**
+- A lifecycle command execution
+
+**When:** The command completes
+
+**Then:**
+- Structured status markers are emitted for outcome state
+
+**Failure and override paths produce auditable artifacts** (`rq-9.2`)
+
+**Given:**
+- A failed transition or approved override
+
+**When:** Execution terminates
+
+**Then:**
+- Artifacts include enough context to diagnose failure and trace authorization
 
 ---

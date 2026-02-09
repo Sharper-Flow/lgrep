@@ -3,8 +3,8 @@
   "name": "lgrepToolSelectionOptimization",
   "title": "LgrepToolSelectionOptimization",
   "purpose": "Capability: LgrepToolSelectionOptimization",
-  "version": "1.0.0",
-  "updated_at": "2026-02-07T21:47:49.069Z",
+  "version": "1.1.0",
+  "updated_at": "2026-02-08T18:07:19.493Z",
   "requirements": [
     {
       "id": "rq-1",
@@ -133,6 +133,211 @@
           "then": [
             "Docs explicitly state stdio as local default",
             "Docs list streamable-http opt-in security controls (localhost binding, auth expectations, and origin guidance)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-5",
+      "title": "Proposal quality checks are mandatory and measurable",
+      "body": "Proposal quality validation MUST enforce mandatory checks for unambiguous wording, verifiable acceptance criteria, and requirement-to-scenario traceability. Full INVEST dimensions SHOULD be advisory guidance and MUST NOT hard-block progression by themselves.",
+      "priority": "must",
+      "tags": [
+        "proposal-quality",
+        "validation",
+        "invest",
+        "adv-lifecycle"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-5.1",
+          "title": "Proposal meeting mandatory checks passes",
+          "given": [
+            "A proposal with measurable requirements and scenario trace links"
+          ],
+          "when": "Validation runs",
+          "then": [
+            "Validation reports pass for mandatory proposal-quality checks"
+          ]
+        },
+        {
+          "id": "rq-5.2",
+          "title": "Proposal missing mandatory checks fails with remediation",
+          "given": [
+            "A proposal with ambiguous wording or missing traceability"
+          ],
+          "when": "Validation runs",
+          "then": [
+            "Validation fails with actionable remediation guidance for each failed check"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-6",
+      "title": "Task and gate sequencing uses explicit transitions",
+      "body": "Task and gate progression MUST be represented as explicit transition rules with mandatory and conditional paths. Invalid transitions MUST be rejected with actionable error messages using a structured error contract that includes `code`, `message`, `remediation`, and `allowed_next_transitions`. Approved bypass or override transitions MUST record actor, reason, and timestamp.",
+      "priority": "must",
+      "tags": [
+        "workflow",
+        "gates",
+        "fsm",
+        "audit",
+        "adv-lifecycle"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-6.1",
+          "title": "Valid transition across mandatory gate path succeeds",
+          "given": [
+            "A change with required prerequisites complete for the next gate"
+          ],
+          "when": "A gate transition is requested",
+          "then": [
+            "Transition succeeds and new gate state is persisted"
+          ]
+        },
+        {
+          "id": "rq-6.2",
+          "title": "Invalid transition is rejected with structured remediation",
+          "given": [
+            "A requested transition that violates transition rules"
+          ],
+          "when": "A gate transition is requested",
+          "then": [
+            "Transition is rejected",
+            "Error includes the unmet guard and an actionable next step",
+            "Error payload includes code, message, remediation, and allowed_next_transitions"
+          ]
+        },
+        {
+          "id": "rq-6.3",
+          "title": "Approved override transition is auditable",
+          "given": [
+            "A transition requiring override and explicit approval"
+          ],
+          "when": "Override transition is executed",
+          "then": [
+            "An audit artifact records actor, reason, and timestamp"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-7",
+      "title": "Acceptance coverage uses compact deterministic matrix",
+      "body": "Acceptance coverage MUST use command-level contract tests plus a deterministic 3-scenario integration matrix covering success, validation failure, and remediation outcomes.",
+      "priority": "must",
+      "tags": [
+        "testing",
+        "acceptance",
+        "determinism",
+        "adv-lifecycle"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-7.1",
+          "title": "Matrix cardinality and labels are fixed",
+          "given": [
+            "Acceptance scenario fixtures"
+          ],
+          "when": "Acceptance harness loads scenarios",
+          "then": [
+            "Exactly three integration scenarios exist: success, validation failure, remediation"
+          ]
+        },
+        {
+          "id": "rq-7.2",
+          "title": "Contract tests verify command outcomes",
+          "given": [
+            "Command-level test fixtures for prep, validate, and apply"
+          ],
+          "when": "Contract tests run",
+          "then": [
+            "Expected success and failure outputs are observed deterministically"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-8",
+      "title": "Lifecycle command documentation is executable",
+      "body": "Documentation MUST include command-level examples for `/adv-prep`, `/adv-validate`, and `/adv-apply` with required inputs and observable success and failure outcomes.",
+      "priority": "must",
+      "tags": [
+        "documentation",
+        "lifecycle",
+        "examples",
+        "adv-lifecycle"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-8.1",
+          "title": "Lifecycle examples define required inputs",
+          "given": [
+            "Lifecycle command documentation"
+          ],
+          "when": "Examples are reviewed",
+          "then": [
+            "Each command example includes required input fields"
+          ]
+        },
+        {
+          "id": "rq-8.2",
+          "title": "Lifecycle examples define observable outcomes",
+          "given": [
+            "Lifecycle command documentation"
+          ],
+          "when": "Examples are reviewed",
+          "then": [
+            "Each command example includes observable success and failure outcomes"
+          ]
+        },
+        {
+          "id": "rq-8.3",
+          "title": "Missing required inputs are documented with remediation",
+          "given": [
+            "Lifecycle command documentation"
+          ],
+          "when": "Failure examples are reviewed",
+          "then": [
+            "Each command includes a missing-input failure example with remediation guidance"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-9",
+      "title": "Lifecycle operations emit auditable status artifacts",
+      "body": "Lifecycle operations MUST emit structured status markers and auditable artifacts for prep, validate, and apply execution paths so failures can be diagnosed and overrides can be traced.",
+      "priority": "must",
+      "tags": [
+        "observability",
+        "audit",
+        "operations",
+        "adv-lifecycle"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-9.1",
+          "title": "Prep/validate/apply emit structured status markers",
+          "given": [
+            "A lifecycle command execution"
+          ],
+          "when": "The command completes",
+          "then": [
+            "Structured status markers are emitted for outcome state"
+          ]
+        },
+        {
+          "id": "rq-9.2",
+          "title": "Failure and override paths produce auditable artifacts",
+          "given": [
+            "A failed transition or approved override"
+          ],
+          "when": "Execution terminates",
+          "then": [
+            "Artifacts include enough context to diagnose failure and trace authorization"
           ]
         }
       ]
