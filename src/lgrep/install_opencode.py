@@ -89,13 +89,15 @@ def install() -> int:
     TOOL_PATH.write_text(TOOL_TEMPLATE)
     print(f"  [ok] Custom tool written to {TOOL_PATH}")
 
-    # 2. Copy SKILL.md
+    # 2. Copy SKILL.md (skip if source and dest resolve to the same file)
     SKILL_DIR.mkdir(parents=True, exist_ok=True)
-    if _PACKAGE_SKILL.exists():
+    if not _PACKAGE_SKILL.exists():
+        print(f"  [warn] Skill source not found at {_PACKAGE_SKILL}, skipping")
+    elif _PACKAGE_SKILL.resolve() == SKILL_PATH.resolve():
+        print(f"  [ok] Skill already at {SKILL_PATH} (same file)")
+    else:
         shutil.copy2(_PACKAGE_SKILL, SKILL_PATH)
         print(f"  [ok] Skill copied to {SKILL_PATH}")
-    else:
-        print(f"  [warn] Skill source not found at {_PACKAGE_SKILL}, skipping")
 
     # 3. Add MCP entry to opencode.json
     config_path = _config_path()

@@ -199,3 +199,29 @@ class TestInstallUninstall:
         config = json.loads(config_path.read_text())
         assert "sentry" in config["mcp"]
         assert "lgrep" in config["mcp"]
+
+    def test_install_same_file_skill_does_not_crash(self, tmp_path):
+        """install() should not crash when SKILL source and dest are the same file."""
+        config_dir = tmp_path / ".config" / "opencode"
+        tool_path = config_dir / "tools" / "lgrep.ts"
+        skill_dir = config_dir / "skills" / "lgrep"
+        skill_path = skill_dir / "SKILL.md"
+        config_path = config_dir / "opencode.json"
+
+        # Pre-create skill so _PACKAGE_SKILL and SKILL_PATH resolve to same file
+        skill_dir.mkdir(parents=True)
+        skill_path.write_text("existing skill content")
+
+        with (
+            patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.TOOL_PATH", tool_path),
+            patch("lgrep.install_opencode.SKILL_DIR", skill_dir),
+            patch("lgrep.install_opencode.SKILL_PATH", skill_path),
+            patch("lgrep.install_opencode._PACKAGE_SKILL", skill_path),
+            patch("lgrep.install_opencode._config_path", return_value=config_path),
+        ):
+            result = install()
+
+        assert result == 0
+        # Skill content should be unchanged (not corrupted by same-file copy)
+        assert skill_path.read_text() == "existing skill content"
