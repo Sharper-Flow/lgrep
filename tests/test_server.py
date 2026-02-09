@@ -11,19 +11,29 @@ from mcp.server.fastmcp import Context
 
 from lgrep.server import (
     AUTO_INDEX_MAX_ATTEMPTS,
-    lgrep_index,
-    lgrep_search,
-    lgrep_status,
-    lgrep_watch_start,
-    lgrep_watch_stop,
-    remove_project,
+    MAX_PROJECTS,
     LgrepContext,
     ProjectState,
-    MAX_PROJECTS,
     _ensure_project_initialized,
-    _stop_watcher,
     _shutdown,
+    _stop_watcher,
     _warm_projects,
+    remove_project,
+)
+from lgrep.server import (
+    index as lgrep_index,
+)
+from lgrep.server import (
+    search as lgrep_search,
+)
+from lgrep.server import (
+    status as lgrep_status,
+)
+from lgrep.server import (
+    watch_start as lgrep_watch_start,
+)
+from lgrep.server import (
+    watch_stop as lgrep_watch_stop,
 )
 from lgrep.storage import SearchResult, SearchResults
 
@@ -254,7 +264,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         covered = 0
         missing = []
 
-        for prompt, expected_tool, doc_keyword in all_scenarios:
+        for prompt, _expected_tool, doc_keyword in all_scenarios:
             if doc_keyword.lower() in content:
                 covered += 1
             else:

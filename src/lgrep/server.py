@@ -455,11 +455,13 @@ async def _execute_search(
 
 @mcp.tool()
 @time_tool
-async def lgrep_search(
-    query: str,
-    path: str,
+async def search(
+    query: str | None = None,
+    path: str = "",
     limit: int = 10,
     hybrid: bool = True,
+    q: str | None = None,
+    m: int | None = None,
     ctx: Context | None = None,
 ) -> str:
     """Search code semantically using natural language.
@@ -469,11 +471,16 @@ async def lgrep_search(
         path: Absolute path to the project to search
         limit: Maximum number of results to return (default: 10)
         hybrid: Use hybrid search combining vector similarity + keyword matching (default: True)
-
-    Returns:
-        JSON with search results including file paths, line numbers, and code snippets.
+        q: Alias for query (use for shorthand or if query is missing)
+        m: Alias for limit (max results)
     """
+    query = query or q
+    limit = m if m is not None else limit
+
     log.info("lgrep_search", query=query, project=path, limit=limit, hybrid=hybrid)
+
+    if not query:
+        return _error_response("Internal error: query or q is required")
 
     if not ctx:
         return _error_response("Internal error: Context missing")
@@ -491,7 +498,7 @@ async def lgrep_search(
 
 @mcp.tool()
 @time_tool
-async def lgrep_index(
+async def index(
     path: str,
     ctx: Context | None = None,
 ) -> str:
@@ -539,7 +546,7 @@ async def lgrep_index(
 
 @mcp.tool()
 @time_tool
-async def lgrep_status(
+async def status(
     path: str = "",
     ctx: Context | None = None,
 ) -> str:
@@ -601,7 +608,7 @@ async def lgrep_status(
 
 @mcp.tool()
 @time_tool
-async def lgrep_watch_start(
+async def watch_start(
     path: str,
     ctx: Context | None = None,
 ) -> str:
@@ -656,7 +663,7 @@ async def lgrep_watch_start(
 
 @mcp.tool()
 @time_tool
-async def lgrep_watch_stop(
+async def watch_stop(
     path: str = "",
     ctx: Context | None = None,
 ) -> str:

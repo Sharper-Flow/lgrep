@@ -29,6 +29,16 @@ def main() -> int:
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
+    if args and args[0] == "install-opencode":
+        from lgrep.install_opencode import install
+
+        return install()
+
+    if args and args[0] == "uninstall-opencode":
+        from lgrep.install_opencode import uninstall
+
+        return uninstall()
+
     if "--help" in sys.argv or "-h" in sys.argv:
         _print_help()
         return 0
@@ -74,6 +84,8 @@ def _print_help() -> None:
     print("  search <query> [path]          search indexed project (one-shot, no server)")
     print("  index [path]                   index a project for semantic search")
     print("  remove <path>                  show project index info")
+    print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
+    print("  uninstall-opencode             remove lgrep from OpenCode")
     print()
     print("search options:")
     print("  -m, --limit N                  max results (default: 10)")

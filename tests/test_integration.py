@@ -9,12 +9,22 @@ import pytest
 from mcp.server.fastmcp import Context
 
 from lgrep.server import (
-    lgrep_index,
-    lgrep_search,
-    lgrep_status,
-    lgrep_watch_start,
-    lgrep_watch_stop,
     LgrepContext,
+)
+from lgrep.server import (
+    index as lgrep_index,
+)
+from lgrep.server import (
+    search as lgrep_search,
+)
+from lgrep.server import (
+    status as lgrep_status,
+)
+from lgrep.server import (
+    watch_start as lgrep_watch_start,
+)
+from lgrep.server import (
+    watch_stop as lgrep_watch_stop,
 )
 
 
@@ -83,6 +93,12 @@ async def test_full_flow_integration(sample_project):
         assert "file_path" in res
         assert "content" in res
         assert "score" in res
+
+        # 1.1 Search using q and m aliases
+        response = await lgrep_search(q="database", m=5, path=str(sample_project), ctx=mock_ctx)
+        search_data = json.loads(response)
+        assert "results" in search_data
+        assert len(search_data["results"]) > 0
 
         # 2. Check status reflects indexed project
         response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)

@@ -38,20 +38,44 @@ Prefer lgrep when you need to:
 - **Use `Grep` first:** "find all references to `verifyToken`"
 - **Use file read first:** "open `src/auth/jwt.ts` and explain line 42"
 
+## Setup
+
+**Recommended — one command:**
+```bash
+lgrep install-opencode
+```
+
+This installs a custom tool wrapper, MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+
+**Manual** — add to `~/.config/opencode/opencode.json`:
+```json
+{
+  "mcp": {
+    "lgrep": { "type": "remote", "url": "http://localhost:6285/mcp" }
+  }
+}
+```
+
 ## Tools
+
+> **Note:** Tool functions are named `search`, `index`, `status`, etc. OpenCode auto-prefixes them as `lgrep_search`, `lgrep_index`, etc.
 
 ### lgrep_search
 
 Searches a project semantically.
 
-- `query` (string, **required**): Natural language search query.
+- `q` (string, **required**): Natural language search query. Alias: `query`.
 - `path` (string, **required**): Absolute path to the project to search. Auto-loads from disk if previously indexed in a prior session.
-- `limit` (int): Maximum results (default 10).
+- `m` (int): Maximum results (default 10). Alias: `limit`.
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
 
 **Example usage:**
 ```python
-lgrep_search(query="JWT verification and token handling", path="/home/user/dev/project")
+# Short form (preferred by agents)
+lgrep_search(q="JWT verification and token handling", path="/home/user/dev/project", m=5)
+
+# Long form (also accepted)
+lgrep_search(query="JWT verification and token handling", path="/home/user/dev/project", limit=5)
 ```
 
 ### lgrep_index
