@@ -154,6 +154,7 @@ class ChunkStore:
 
         self._table: Table | None = None
         self._fts_indexed = False
+        self._vector_indexed = False
 
         log.info("chunk_store_connected", db_path=str(self.db_path))
 
@@ -167,30 +168,29 @@ class ChunkStore:
                 # breaks `in` operator checks.
                 self._table = self.db.open_table(CHUNKS_TABLE)
                 log.debug("chunk_table_opened", rows=self._table.count_rows())
-            except Exception:
-                # Table doesn't exist yet, create it
+            except (FileNotFoundError, ValueError) as _not_found:
+                # Table doesn't exist yet — normal first-run path
+                self._table = self.db.create_table(
+                    CHUNKS_TABLE,
+                    schema=CodeChunk.to_arrow_schema(),
+                )
+                log.info("chunk_table_created")
+            except Exception as open_err:
+                # Unexpected error (corruption, permission, etc.)
+                log.warning(
+                    "chunk_table_open_failed",
+                    error=str(open_err),
+                    action="dropping and recreating table",
+                )
                 try:
-                    self._table = self.db.create_table(
-                        CHUNKS_TABLE,
-                        schema=CodeChunk.to_arrow_schema(),
-                    )
-                    log.info("chunk_table_created")
-                except Exception as create_err:
-                    log.warning(
-                        "chunk_table_create_failed",
-                        error=str(create_err),
-                        action="dropping and recreating table",
-                    )
-                    # Last resort: table exists but is corrupted
-                    try:
-                        self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
-                    except Exception as drop_err:
-                        log.debug("drop_table_also_failed", error=str(drop_err))
-                    self._table = self.db.create_table(
-                        CHUNKS_TABLE,
-                        schema=CodeChunk.to_arrow_schema(),
-                    )
-                    log.info("chunk_table_recreated_after_corruption")
+                    self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
+                except Exception as drop_err:
+                    log.debug("drop_table_also_failed", error=str(drop_err))
+                self._table = self.db.create_table(
+                    CHUNKS_TABLE,
+                    schema=CodeChunk.to_arrow_schema(),
+                )
+                log.info("chunk_table_recreated_after_corruption")
         return self._table
 
     def add_chunks(self, chunks: list[CodeChunk]) -> int:
@@ -283,15 +283,17 @@ class ChunkStore:
         # Ensure FTS index exists
         self.ensure_fts_index()
 
-        # Create vector index if needed (for large tables)
+        # Create vector index if needed (for large tables, once per session)
         row_count = self.table.count_rows()
-        if row_count > 1000:
+        if row_count > 1000 and not self._vector_indexed:
             try:
                 self.table.create_index(
                     metric="cosine",
                     vector_column_name="vector",
                     replace=True,
                 )
+                self._vector_indexed = True
+                log.info("vector_index_created", rows=row_count)
             except Exception as idx_err:
                 log.debug("vector_index_create_skipped", error=str(idx_err))
 
@@ -409,4 +411,5 @@ class ChunkStore:
         self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
         self._table = None
         self._fts_indexed = False
+        self._vector_indexed = False
         log.info("chunk_store_cleared")

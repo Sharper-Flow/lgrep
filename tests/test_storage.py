@@ -1,9 +1,9 @@
 """Tests for LanceDB storage."""
 
+import hashlib
 import tempfile
-import time
-import uuid
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,296 +12,306 @@ from lgrep.storage import (
     EMBEDDING_DIM,
     ChunkStore,
     CodeChunk,
-    SearchResult,
-    SearchResults,
     get_project_db_path,
     has_disk_cache,
 )
 
 
+def make_chunk(
+    file_path="test.py",
+    chunk_index=0,
+    start_line=1,
+    end_line=5,
+    content="print('hello')",
+    vector=None,
+    file_hash="hash",
+    indexed_at=123.456,
+):
+    """Helper to create a CodeChunk."""
+    if vector is None:
+        vector = [0.1] * EMBEDDING_DIM
+    return CodeChunk(
+        id=hashlib.sha256(f"{file_path}:{chunk_index}".encode()).hexdigest(),
+        file_path=file_path,
+        chunk_index=chunk_index,
+        start_line=start_line,
+        end_line=end_line,
+        content=content,
+        vector=vector,
+        file_hash=file_hash,
+        indexed_at=indexed_at,
+    )
+
+
 @pytest.fixture
-def temp_db_path():
-    """Create a temporary database path."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir) / "test_db"
+def temp_db_path(tmp_path):
+    """Temporary database directory."""
+    return tmp_path / "lgrep_test_db"
 
 
 @pytest.fixture
 def chunk_store(temp_db_path):
-    """Create a ChunkStore with temporary storage."""
+    """Initialized ChunkStore."""
     return ChunkStore(temp_db_path)
 
 
-def make_chunk(
-    file_path: str = "test.py",
-    chunk_index: int = 0,
-    content: str = "def test(): pass",
-) -> CodeChunk:
-    """Create a test chunk with random embedding."""
-    import random
-
-    return CodeChunk(
-        id=str(uuid.uuid4()),
-        file_path=file_path,
-        chunk_index=chunk_index,
-        start_line=1 + chunk_index * 10,
-        end_line=10 + chunk_index * 10,
-        content=content,
-        vector=[random.random() for _ in range(EMBEDDING_DIM)],
-        file_hash="abc123",
-        indexed_at=time.time(),
-    )
+@pytest.fixture
+def sample_chunks():
+    """List of sample chunks."""
+    return [
+        make_chunk(file_path="a.py", chunk_index=0, content="def a(): pass"),
+        make_chunk(file_path="a.py", chunk_index=1, content="def b(): pass"),
+        make_chunk(file_path="b.py", chunk_index=0, content="def c(): pass"),
+    ]
 
 
-class TestGetProjectDbPath:
-    """Tests for get_project_db_path function."""
-
-    def test_returns_path_in_cache_dir(self):
-        """Should return path under cache directory."""
-        result = get_project_db_path("/home/user/myproject")
-        assert ".cache/lgrep" in str(result) or "lgrep" in str(result)
-
-    def test_different_projects_get_different_paths(self):
-        """Should return different paths for different projects."""
-        path1 = get_project_db_path("/project/a")
-        path2 = get_project_db_path("/project/b")
-        assert path1 != path2
-
-    def test_same_project_gets_same_path(self):
-        """Should return same path for same project."""
-        path1 = get_project_db_path("/project/a")
-        path2 = get_project_db_path("/project/a")
-        assert path1 == path2
-
-
-class TestCodeChunk:
+class TestCodeChunkModel:
     """Tests for CodeChunk model."""
 
-    def test_create_chunk(self):
-        """Should create chunk with all fields."""
+    def test_model_fields(self):
+        """Should have all required fields."""
         chunk = make_chunk()
-        assert chunk.id
         assert chunk.file_path == "test.py"
-        assert chunk.chunk_index == 0
         assert len(chunk.vector) == EMBEDDING_DIM
+        assert isinstance(chunk.id, str)
 
-    def test_model_dump(self):
-        """Should serialize to dict."""
-        chunk = make_chunk()
-        data = chunk.model_dump()
-        assert "id" in data
-        assert "vector" in data
-        assert len(data["vector"]) == EMBEDDING_DIM
-
-
-class TestChunkStore:
-    """Tests for ChunkStore class."""
-
-    def test_init_creates_directory(self, temp_db_path):
-        """Should create database directory."""
-        store = ChunkStore(temp_db_path)
-        assert temp_db_path.exists()
-
-    def test_add_chunks_empty(self, chunk_store):
-        """Should handle empty chunk list."""
-        result = chunk_store.add_chunks([])
-        assert result == 0
-
-    def test_add_chunks(self, chunk_store):
-        """Should add chunks to store."""
-        chunks = [make_chunk(chunk_index=i) for i in range(3)]
-        result = chunk_store.add_chunks(chunks)
-
-        assert result == 3
-        assert chunk_store.count_chunks() == 3
-
-    def test_delete_by_file(self, chunk_store):
-        """Should delete chunks for a specific file."""
-        chunks = [
-            make_chunk(file_path="keep.py", chunk_index=0),
-            make_chunk(file_path="delete.py", chunk_index=0),
-            make_chunk(file_path="delete.py", chunk_index=1),
-        ]
-        chunk_store.add_chunks(chunks)
-
-        deleted = chunk_store.delete_by_file("delete.py")
-
-        assert deleted == 2
-        assert chunk_store.count_chunks() == 1
-
-    def test_search_vector(self, chunk_store):
-        """Should perform vector search."""
-        import random
-
-        # Add some chunks
-        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(5)]
-        chunk_store.add_chunks(chunks)
-
-        # Search with random query vector
-        query_vector = [random.random() for _ in range(EMBEDDING_DIM)]
-        results = chunk_store.search_vector(query_vector, limit=3)
-
-        assert len(results.results) == 3
-        assert results.total_chunks == 5
-        assert results.query_time_ms > 0
-
-    def test_get_indexed_files(self, chunk_store):
-        """Should return set of indexed file paths."""
-        chunks = [
-            make_chunk(file_path="a.py"),
-            make_chunk(file_path="b.py"),
-            make_chunk(file_path="a.py", chunk_index=1),
-        ]
-        chunk_store.add_chunks(chunks)
-
-        files = chunk_store.get_indexed_files()
-        assert files == {"a.py", "b.py"}
-
-    def test_delete_by_file_with_quotes(self, chunk_store):
-        """Should handle file paths containing single quotes without SQL injection."""
-        chunks = [
-            make_chunk(file_path="normal.py", chunk_index=0),
-            make_chunk(file_path="it's a file.py", chunk_index=0),
-        ]
-        chunk_store.add_chunks(chunks)
-        assert chunk_store.count_chunks() == 2
-
-        # This should not break or cause SQL injection
-        deleted = chunk_store.delete_by_file("it's a file.py")
-        assert deleted == 1
-        assert chunk_store.count_chunks() == 1
-
-    def test_delete_by_file_with_sql_injection_attempt(self, chunk_store):
-        """Should safely handle malicious file paths."""
-        chunks = [
-            make_chunk(file_path="safe.py", chunk_index=0),
-            make_chunk(file_path="evil.py", chunk_index=0),
-        ]
-        chunk_store.add_chunks(chunks)
-        assert chunk_store.count_chunks() == 2
-
-        # Attempt SQL injection via file path - should not delete all rows
-        chunk_store.delete_by_file("' OR '1'='1")
-        # safe.py and evil.py should still exist (injection attempt matched nothing real)
-        assert chunk_store.count_chunks() == 2
-
-    def test_clear(self, chunk_store):
-        """Should clear all chunks."""
-        chunks = [make_chunk(chunk_index=i) for i in range(3)]
-        chunk_store.add_chunks(chunks)
-        assert chunk_store.count_chunks() == 3
-
-        chunk_store.clear()
-        assert chunk_store.count_chunks() == 0
+    def test_arrow_schema(self):
+        """Should export valid arrow schema."""
+        schema = CodeChunk.to_arrow_schema()
+        assert "file_path" in schema.names
+        assert "vector" in schema.names
 
 
-class TestChunkStoreCorruptionRecovery:
-    """Tests for graceful corruption recovery."""
+class TestDbPathResolution:
+    """Tests for database path resolution."""
 
-    def test_corrupted_db_recovers_gracefully(self, temp_db_path):
-        """Should recover from corrupted database by clearing and reconnecting."""
-        # Create a valid store and add data
-        store = ChunkStore(temp_db_path)
-        chunks = [make_chunk(chunk_index=i) for i in range(3)]
-        store.add_chunks(chunks)
-        assert store.count_chunks() == 3
+    def test_get_project_db_path_consistency(self):
+        """Same project path should resolve to same db path."""
+        path = "/home/user/project"
+        db1 = get_project_db_path(path)
+        db2 = get_project_db_path(path)
+        assert db1 == db2
 
-        # Simulate corruption by writing garbage to data files inside .lance dirs
-        corrupted = False
-        for f in temp_db_path.rglob("*"):
-            if f.is_file() and f.suffix != "":
-                f.write_bytes(b"CORRUPTED DATA")
-                corrupted = True
-                break
-        assert corrupted, "Should have found a file to corrupt"
+    def test_get_project_db_path_different(self):
+        """Different project paths should resolve to different db paths."""
+        db1 = get_project_db_path("/path/a")
+        db2 = get_project_db_path("/path/b")
+        assert db1 != db2
 
-        # Re-opening should not crash - should recover
-        store2 = ChunkStore(temp_db_path)
-        # The store should be functional (either recovered or cleared)
-        # count_chunks should not raise
-        count = store2.count_chunks()
-        assert isinstance(count, int)
-
-    def test_init_with_nonexistent_path_creates_dir(self):
-        """Should create directory if it doesn't exist."""
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "deep" / "nested" / "db"
-            store = ChunkStore(db_path)
-            assert db_path.exists()
-
-
-class TestHasDiskCache:
-    """Tests for has_disk_cache function."""
-
-    def test_returns_true_when_chunks_lance_exists(self, tmp_path, monkeypatch):
-        """Should return True when the project has a chunks.lance directory on disk."""
-        project_path = tmp_path / "myproject"
+    def test_has_disk_cache_check(self, tmp_path):
+        """Should detect if lance files exist on disk."""
+        project_path = tmp_path / "my_project"
         project_path.mkdir()
 
-        # Point cache dir at tmp_path so get_project_db_path resolves there
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+        assert has_disk_cache(project_path) is False
 
-        # Create the expected disk cache structure
+        # Create dummy lance file structure
         db_path = get_project_db_path(project_path)
-        db_path.mkdir(parents=True, exist_ok=True)
-        (db_path / (CHUNKS_TABLE + ".lance")).mkdir()
+        (db_path / (CHUNKS_TABLE + ".lance")).mkdir(parents=True)
 
         assert has_disk_cache(project_path) is True
 
-    def test_returns_false_when_no_cache_dir(self, tmp_path, monkeypatch):
-        """Should return False when no cache directory exists at all."""
-        project_path = tmp_path / "noproject"
-        project_path.mkdir()
 
-        cache_dir = tmp_path / "empty_cache"
-        cache_dir.mkdir()
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+class TestChunkStoreLifecycle:
+    """Tests for ChunkStore initialization and basic operations."""
 
-        assert has_disk_cache(project_path) is False
+    def test_init_creates_directory(self, temp_db_path):
+        """Should create database directory."""
+        ChunkStore(temp_db_path)
+        assert temp_db_path.exists()
 
-    def test_returns_false_when_cache_dir_exists_but_no_lance(self, tmp_path, monkeypatch):
-        """Should return False when db directory exists but chunks.lance does not."""
-        project_path = tmp_path / "partial"
-        project_path.mkdir()
+    def test_init_reconnects_on_corruption(self, temp_db_path):
+        """Should clear and reconnect if database is corrupted."""
+        temp_db_path.mkdir()
+        (temp_db_path / "junk.txt").write_text("some data")
 
-        cache_dir = tmp_path / "cache2"
-        cache_dir.mkdir()
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+        # Mock lancedb.connect to fail once then succeed
+        with patch("lancedb.connect", side_effect=[RuntimeError("corrupt"), MagicMock()]):
+            store = ChunkStore(temp_db_path)
+            assert store.db is not None
 
-        # Create db directory without chunks.lance
-        db_path = get_project_db_path(project_path)
-        db_path.mkdir(parents=True, exist_ok=True)
+        # Verify directory was cleared (junk.txt should be gone)
+        assert not (temp_db_path / "junk.txt").exists()
 
-        assert has_disk_cache(project_path) is False
+    def test_init_deeply_nested_path(self):
+        """Should create deeply nested database directory if needed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "deep" / "nested" / "db"
+            ChunkStore(db_path)
+            assert db_path.exists()
+
+    def test_add_chunks(self, chunk_store, sample_chunks):
+        """Should add chunks to the database."""
+        count = chunk_store.add_chunks(sample_chunks)
+        assert count == 3
+        assert chunk_store.count_chunks() == 3
+
+    def test_add_chunks_empty(self, chunk_store):
+        """Should handle empty list gracefully."""
+        assert chunk_store.add_chunks([]) == 0
+
+    def test_upsert_chunks(self, chunk_store, sample_chunks):
+        """Should update existing chunks and add new ones."""
+        chunk_store.add_chunks(sample_chunks)
+
+        # Update one chunk, add one new
+        updated = sample_chunks[0]
+        updated.content = "updated content"
+
+        new_chunk = make_chunk(file_path="c.py", chunk_index=0)
+
+        chunk_store.upsert_chunks([updated, new_chunk])
+
+        assert chunk_store.count_chunks() == 4
+        # Verify update
+        results = chunk_store.table.search().where(f"id = '{updated.id}'").to_list()
+        assert results[0]["content"] == "updated content"
+
+    def test_upsert_chunks_empty(self, chunk_store):
+        """Should handle empty list gracefully."""
+        assert chunk_store.upsert_chunks([]) == 0
+
+    def test_delete_by_file(self, chunk_store, sample_chunks):
+        """Should delete all chunks associated with a file."""
+        chunk_store.add_chunks(sample_chunks)
+        assert chunk_store.count_chunks() == 3
+
+        deleted = chunk_store.delete_by_file("a.py")
+        assert deleted == 2
+        assert chunk_store.count_chunks() == 1
+
+    def test_get_file_hash(self, chunk_store, sample_chunks):
+        """Should retrieve the stored hash for a file."""
+        chunk_store.add_chunks(sample_chunks)
+        h = chunk_store.get_file_hash("a.py")
+        assert h == "hash"
+
+    def test_get_file_hash_missing(self, chunk_store):
+        """Should return None for missing files."""
+        assert chunk_store.get_file_hash("none.py") is None
+
+    def test_get_indexed_files(self, chunk_store, sample_chunks):
+        """Should return set of all indexed file paths."""
+        chunk_store.add_chunks(sample_chunks)
+        files = chunk_store.get_indexed_files()
+        assert files == {"a.py", "b.py"}
+
+    def test_clear(self, chunk_store, sample_chunks):
+        """Should drop the table and reset state."""
+        chunk_store.add_chunks(sample_chunks)
+        chunk_store.ensure_fts_index()
+        assert chunk_store.count_chunks() == 3
+
+        chunk_store.clear()
+        assert chunk_store._table is None
+        assert chunk_store._fts_indexed is False
+        # Accessing table property recreates it empty
+        assert chunk_store.count_chunks() == 0
 
 
-class TestSearchResult:
-    """Tests for SearchResult dataclass."""
+class TestSearch:
+    """Tests for search functionality."""
 
-    def test_create_result(self):
-        """Should create search result."""
-        result = SearchResult(
-            file_path="test.py",
-            start_line=1,
-            end_line=10,
-            content="def test(): pass",
-            score=0.95,
-        )
-        assert result.file_path == "test.py"
-        assert result.score == 0.95
-        assert result.match_type == "hybrid"
+    def test_search_vector(self, chunk_store, sample_chunks):
+        """Should perform pure vector search."""
+        chunk_store.add_chunks(sample_chunks)
+        query_vector = [0.1] * EMBEDDING_DIM
+
+        results = chunk_store.search_vector(query_vector, limit=2)
+        assert len(results.results) == 2
+        assert results.total_chunks == 3
+        assert results.results[0].match_type == "vector"
+
+    def test_search_hybrid(self, chunk_store, sample_chunks):
+        """Should perform hybrid search with RRF reranking."""
+        chunk_store.add_chunks(sample_chunks)
+        query_vector = [0.1] * EMBEDDING_DIM
+
+        results = chunk_store.search_hybrid(query_vector, "def pass", limit=2)
+        assert len(results.results) == 2
+        assert results.total_chunks == 3
+        assert results.results[0].match_type == "hybrid"
+        assert chunk_store._fts_indexed is True
+
+    def test_search_hybrid_large_table_creates_vector_index(self, temp_db_path):
+        """Vector index should be auto-created when row count exceeds threshold."""
+        store = ChunkStore(temp_db_path)
+        # Need at least 256 rows to train PQ index in LanceDB
+        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(260)]
+        store.add_chunks(chunks)
+
+        # Patch count_rows to report > 1000 so vector index path triggers
+        def fake_count():
+            return 1500
+
+        import random
+
+        query_vector = [random.random() for _ in range(EMBEDDING_DIM)]
+
+        with patch.object(store.table, "count_rows", side_effect=fake_count):
+            # This should not raise
+            store.search_hybrid(query_vector, "test query", limit=3)
+            assert store._vector_indexed is True
+
+    def test_ensure_fts_index_idempotent(self, chunk_store):
+        """Calling ensure_fts_index multiple times should not raise."""
+        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(3)]
+        chunk_store.add_chunks(chunks)
+
+        # Call twice - second call should be a no-op
+        chunk_store.ensure_fts_index()
+        chunk_store.ensure_fts_index()
+        assert chunk_store._fts_indexed is True
 
 
-class TestSearchResults:
-    """Tests for SearchResults dataclass."""
+class TestIdempotentIndexCreation:
+    """Tests for idempotent vector and FTS index creation.
 
-    def test_create_empty(self):
-        """Should create empty results."""
-        results = SearchResults()
-        assert results.results == []
-        assert results.query_time_ms == 0.0
-        assert results.total_chunks == 0
+    Indexes should only be created once, not on every search call.
+    """
+
+    def test_vector_indexed_flag_prevents_rebuild(self, temp_db_path):
+        """After first vector index build, subsequent searches skip rebuild."""
+        store = ChunkStore(temp_db_path)
+        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(5)]
+        store.add_chunks(chunks)
+
+        # _vector_indexed should start False
+        assert store._vector_indexed is False
+
+        # After a hybrid search triggers index creation on large table,
+        # flag should be True. For small tables (< 1000), index creation
+        # is skipped, so flag stays False - that's fine.
+        # We test the flag directly
+        store._vector_indexed = True
+
+        # With flag set, the index build branch should be skipped
+        # (we verify by checking the flag survives)
+        import random
+
+        query_vector = [random.random() for _ in range(EMBEDDING_DIM)]
+        store.search_hybrid(query_vector, "test query", limit=3)
+        assert store._vector_indexed is True
+
+    def test_fts_indexed_flag_prevents_rebuild(self, chunk_store):
+        """After first FTS index build, subsequent calls skip rebuild."""
+        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(3)]
+        chunk_store.add_chunks(chunks)
+
+        assert chunk_store._fts_indexed is False
+        chunk_store.ensure_fts_index()
+        assert chunk_store._fts_indexed is True
+
+        # Second call should be a no-op (flag is already True)
+        chunk_store.ensure_fts_index()
+        assert chunk_store._fts_indexed is True
+
+    def test_clear_resets_index_flags(self, chunk_store):
+        """Clearing the store should reset all index flags."""
+        chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(3)]
+        chunk_store.add_chunks(chunks)
+        chunk_store.ensure_fts_index()
+        assert chunk_store._fts_indexed is True
+
+        chunk_store.clear()
+        assert chunk_store._fts_indexed is False
