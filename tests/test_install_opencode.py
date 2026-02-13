@@ -19,6 +19,28 @@ from lgrep.install_opencode import (
 from lgrep.server import search
 
 
+class TestToolWrapperSafety:
+    """Ensure the custom tool wrapper never throws on CLI errors."""
+
+    def test_template_uses_nothrow(self):
+        """The Bun shell call must use .nothrow to avoid ShellError on non-zero exit."""
+        assert "Bun.$.nothrow" in TOOL_TEMPLATE, (
+            "TOOL_TEMPLATE must use Bun.$.nothrow to prevent ShellError "
+            "when the CLI exits non-zero (e.g. missing VOYAGE_API_KEY, no index)."
+        )
+
+    def test_template_does_not_use_throwing_shell(self):
+        """Ensure no remaining Bun.$` (throwing) shell calls exist."""
+        # Bun.$.nothrow` is fine; bare Bun.$` is not
+        import re
+
+        throwing_calls = re.findall(r"Bun\.\$`", TOOL_TEMPLATE)
+        assert not throwing_calls, (
+            f"Found {len(throwing_calls)} throwing Bun.$` call(s) in TOOL_TEMPLATE. "
+            "Use Bun.$.nothrow` instead to return errors as JSON."
+        )
+
+
 class TestSchemaContract:
     """Contract: custom tool args must match MCP search signature."""
 

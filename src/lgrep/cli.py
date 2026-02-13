@@ -164,13 +164,27 @@ def _cmd_search(args: list[str]) -> int:
     # Validate environment
     api_key = os.environ.get("VOYAGE_API_KEY")
     if not api_key:
-        print(json.dumps({"error": "VOYAGE_API_KEY not set"}))
+        print(
+            json.dumps(
+                {
+                    "error": "VOYAGE_API_KEY not set",
+                    "hint": "Set VOYAGE_API_KEY in your environment or MCP server config env section.",
+                }
+            )
+        )
         return 1
 
     # Validate index exists
     db_path = get_project_db_path(path)
     if not db_path.exists():
-        print(json.dumps({"error": f"No index found for {path}. Run 'lgrep index {path}' first."}))
+        print(
+            json.dumps(
+                {
+                    "error": f"No index found for {path}. Run 'lgrep index {path}' first.",
+                    "hint": "The lgrep MCP server auto-indexes on first search. Use the MCP tool (lgrep_search) instead of the CLI wrapper for automatic indexing.",
+                }
+            )
+        )
         return 1
 
     # Search
@@ -245,7 +259,14 @@ def _cmd_index(args: list[str]) -> int:
     # Validate environment
     api_key = os.environ.get("VOYAGE_API_KEY")
     if not api_key:
-        print(json.dumps({"error": "VOYAGE_API_KEY not set"}))
+        print(
+            json.dumps(
+                {
+                    "error": "VOYAGE_API_KEY not set",
+                    "hint": "Set VOYAGE_API_KEY in your environment or MCP server config env section.",
+                }
+            )
+        )
         return 1
 
     # Index
