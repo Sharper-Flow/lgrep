@@ -357,7 +357,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-135 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, auto-index, concurrency, CLI transport, and integration.
+150 tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, auto-index, concurrency, CLI transport, installer safety, and integration.
 
 ## License
 

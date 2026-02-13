@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-02-13
+
+### Fixed
+- **Custom tool wrapper no longer throws ShellError.** Changed `Bun.$\`` to `Bun.$.nothrow\`` so CLI errors (missing API key, no index) return structured JSON to agents instead of crashing with `ShellError: Failed with exit code 1`.
+- **CLI error responses include hints.** `search` and `index` commands now return a `"hint"` field in JSON errors with actionable remediation steps for agents.
+
+### Added
+- Regression tests ensuring the tool template uses `.nothrow` and contains no throwing shell calls.
+
 ## [0.2.0] - 2026-02-07
 
 ### Added
