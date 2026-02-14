@@ -68,8 +68,7 @@ export default tool({
   },
   async execute(args, context) {
     const projectPath = args.path || context.worktree || context.directory
-    const proc = Bun.$.nothrow`lgrep search ${args.q} ${projectPath} -m ${args.m}`
-    const result = await proc.text()
+    const result = await Bun.$`lgrep search ${args.q} ${projectPath} -m ${args.m}`.nothrow().text()
     return result.trim()
   },
 })

@@ -22,22 +22,25 @@ from lgrep.server import search
 class TestToolWrapperSafety:
     """Ensure the custom tool wrapper never throws on CLI errors."""
 
-    def test_template_uses_nothrow(self):
-        """The Bun shell call must use .nothrow to avoid ShellError on non-zero exit."""
-        assert "Bun.$.nothrow" in TOOL_TEMPLATE, (
-            "TOOL_TEMPLATE must use Bun.$.nothrow to prevent ShellError "
-            "when the CLI exits non-zero (e.g. missing VOYAGE_API_KEY, no index)."
+    def test_template_uses_nothrow_chain(self):
+        """The Bun shell call must chain .nothrow() to avoid ShellError on non-zero exit."""
+        assert ".nothrow()" in TOOL_TEMPLATE, (
+            "TOOL_TEMPLATE must chain .nothrow() on the ShellPromise to prevent "
+            "ShellError when the CLI exits non-zero (e.g. missing VOYAGE_API_KEY, no index)."
         )
 
-    def test_template_does_not_use_throwing_shell(self):
-        """Ensure no remaining Bun.$` (throwing) shell calls exist."""
-        # Bun.$.nothrow` is fine; bare Bun.$` is not
-        import re
+    def test_template_does_not_use_nothrow_as_tag(self):
+        """Ensure $.nothrow is not used as a tagged template literal.
 
-        throwing_calls = re.findall(r"Bun\.\$`", TOOL_TEMPLATE)
-        assert not throwing_calls, (
-            f"Found {len(throwing_calls)} throwing Bun.$` call(s) in TOOL_TEMPLATE. "
-            "Use Bun.$.nothrow` instead to return errors as JSON."
+        Bun.$.nothrow is a function that configures the global shell, not a
+        template tag.  Using it as ``$.nothrow`cmd` `` produces undefined
+        behavior — .text() becomes undefined on the result.  The correct
+        pattern is ``$`cmd`.nothrow().text()``.
+        """
+        bad_pattern = re.findall(r"\.nothrow`", TOOL_TEMPLATE)
+        assert not bad_pattern, (
+            f"Found {len(bad_pattern)} use(s) of .nothrow` as a tagged template. "
+            "Use $`cmd`.nothrow() (chained method) instead."
         )
 
 
