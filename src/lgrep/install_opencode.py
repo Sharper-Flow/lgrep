@@ -9,9 +9,8 @@ This writes three things:
 2. MCP entry:   ~/.config/opencode/opencode.json    (streamable-http server)
 3. Skill:       ~/.config/opencode/skills/lgrep/SKILL.md  (decision matrix)
 
-The custom tool is a pass-through to `lgrep search` CLI.  MCP stays canonical;
-the tool is a convenience that gives OpenCode a native tool definition with
-proper Zod schema and descriptions.
+The custom tool source lives in tools/opencode/lgrep.ts (a real .ts file that
+editors and Bun can check).  The installer copies it to the OpenCode config dir.
 """
 
 from __future__ import annotations
@@ -30,8 +29,10 @@ TOOL_PATH = OPENCODE_CONFIG_DIR / "tools" / "lgrep.ts"
 SKILL_DIR = OPENCODE_CONFIG_DIR / "skills" / "lgrep"
 SKILL_PATH = SKILL_DIR / "SKILL.md"
 
-# The SKILL.md lives in the lgrep package itself
-_PACKAGE_SKILL = Path(__file__).resolve().parent.parent.parent / "skills" / "lgrep" / "SKILL.md"
+# Source assets live at the repo root (alongside src/, skills/, tools/)
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_PACKAGE_SKILL = _REPO_ROOT / "skills" / "lgrep" / "SKILL.md"
+_PACKAGE_TOOL = _REPO_ROOT / "tools" / "opencode" / "lgrep.ts"
 
 
 def _config_path() -> Path:
@@ -45,34 +46,18 @@ def _config_path() -> Path:
     return json_path  # default to .json
 
 
-# ---------------------------------------------------------------------------
-# Custom tool template — thin wrapper around `lgrep search` CLI
-# ---------------------------------------------------------------------------
+def tool_source() -> str:
+    """Read the custom tool TypeScript source from the repo.
 
-TOOL_TEMPLATE = r"""import { tool } from "@opencode-ai/plugin"
-
-export default tool({
-  description:
-    "Semantic code search using Voyage Code 3 embeddings. " +
-    "Returns file paths, line ranges, and code snippets ranked by relevance. " +
-    "Use natural language queries — understands code meaning, not just text patterns.",
-  args: {
-    q: tool.schema.string().describe("Natural language search query"),
-    path: tool.schema
-      .string()
-      .describe("Absolute path to the project to search"),
-    m: tool.schema
-      .number()
-      .default(10)
-      .describe("Maximum number of results (default: 10)"),
-  },
-  async execute(args, context) {
-    const projectPath = args.path || context.worktree || context.directory
-    const result = await Bun.$`lgrep search ${args.q} ${projectPath} -m ${args.m}`.nothrow().text()
-    return result.trim()
-  },
-})
-"""
+    Returns the contents of tools/opencode/lgrep.ts.  This is the single
+    source of truth — no inline string template.
+    """
+    if not _PACKAGE_TOOL.exists():
+        raise FileNotFoundError(
+            f"Tool source not found at {_PACKAGE_TOOL}. "
+            "Are you running from a proper lgrep checkout?"
+        )
+    return _PACKAGE_TOOL.read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -84,10 +69,15 @@ def install() -> int:
     """Install lgrep into OpenCode (tool + MCP + skill)."""
     print("Installing lgrep into OpenCode...")
 
-    # 1. Write custom tool
+    # 1. Copy custom tool from repo source
     TOOL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    TOOL_PATH.write_text(TOOL_TEMPLATE)
-    print(f"  [ok] Custom tool written to {TOOL_PATH}")
+    if _PACKAGE_TOOL.resolve() == TOOL_PATH.resolve():
+        print(f"  [ok] Tool already at {TOOL_PATH} (same file)")
+    elif not _PACKAGE_TOOL.exists():
+        print(f"  [warn] Tool source not found at {_PACKAGE_TOOL}, skipping")
+    else:
+        shutil.copy2(_PACKAGE_TOOL, TOOL_PATH)
+        print(f"  [ok] Custom tool copied to {TOOL_PATH}")
 
     # 2. Copy SKILL.md (skip if source and dest resolve to the same file)
     SKILL_DIR.mkdir(parents=True, exist_ok=True)
