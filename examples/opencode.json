@@ -1,13 +1,8 @@
 {
   "mcp": {
     "lgrep": {
-      "type": "local",
-      "command": ["lgrep", "--transport", "stdio"],
-      "env": {
-        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
-        "LGREP_LOG_LEVEL": "INFO",
-        "LGREP_WARM_PATHS": "/home/user/dev/my-project:/home/user/dev/other-project"
-      },
+      "type": "remote",
+      "url": "http://localhost:6285/mcp",
       "enabled": true
     }
   }

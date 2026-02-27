@@ -118,7 +118,7 @@ The fully local options (GPU/CPU) are the cheapest and most private, but the qua
 └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
        │                │                │
        └────────────────┼────────────────┘
-                        │ MCP (stdio)
+                        │ MCP (HTTP)
                         ▼
          ┌──────────────────────────────┐
          │      lgrep MCP Server        │
@@ -169,7 +169,50 @@ pip install .
 
 Sign up at [dash.voyageai.com](https://dash.voyageai.com/) and create an API key. Voyage offers a free tier of 200M tokens (~5 full codebase indexes).
 
-### 2. Configure OpenCode
+### 2. Start lgrep as a shared server
+
+lgrep runs as a single HTTP server shared across all OpenCode sessions. This means opening 5 sessions doesn't spawn 5 lgrep processes — one ~400MB process handles everything.
+
+**Recommended: systemd user service (auto-starts on login, restarts on crash)**
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/lgrep.service << 'EOF'
+[Unit]
+Description=lgrep MCP server (semantic code search)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/path/to/lgrep --transport streamable-http --port 6285
+Restart=on-failure
+RestartSec=5
+Environment=VOYAGE_API_KEY=your-api-key-here
+Environment=LGREP_WARM_PATHS=/path/to/project-a:/path/to/project-b
+StandardOutput=append:/tmp/lgrep.log
+StandardError=append:/tmp/lgrep.log
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now lgrep.service
+```
+
+Replace `/path/to/lgrep` with the output of `which lgrep`.
+
+**Alternative: run manually**
+
+```bash
+VOYAGE_API_KEY=your-key \
+LGREP_WARM_PATHS=/path/to/project \
+lgrep --transport streamable-http --port 6285
+```
+
+Or use `lgrep install-opencode` to get the full setup printed for you.
+
+### 3. Configure OpenCode
 
 Add to `~/.config/opencode/opencode.json`:
 
@@ -177,19 +220,17 @@ Add to `~/.config/opencode/opencode.json`:
 {
   "mcp": {
     "lgrep": {
-      "type": "local",
-      "command": ["lgrep"],
-      "env": {
-        "VOYAGE_API_KEY": "your-api-key-here",
-        "LGREP_WARM_PATHS": "/path/to/project-a:/path/to/project-b"
-      },
+      "type": "remote",
+      "url": "http://localhost:6285/mcp",
       "enabled": true
     }
   }
 }
 ```
 
-### 3. Search
+Or run `lgrep install-opencode` to write this automatically.
+
+### 4. Search
 
 That's it. Just search:
 
@@ -201,7 +242,7 @@ On first search, lgrep auto-indexes the project (15-20 min for ~8k files). Subse
 
 To skip the cold-start entirely, set `LGREP_WARM_PATHS` (see step 2) to pre-load indexes at startup.
 
-### 4. Verify the setup (optional)
+### 5. Verify the setup (optional)
 
 If you want to confirm everything is working:
 
@@ -224,26 +265,23 @@ Examples:
 - "Find references to `verifyToken`" -> `Grep`
 - "Open `src/auth/jwt.ts` and explain it" -> `Read`
 
-## Transport Defaults
+## Transport
 
-- **Local default:** `stdio` transport via OpenCode MCP (`"command": ["lgrep"]`).
-- **Opt-in:** streamable HTTP for shared/multi-client deployments.
-- Use streamable HTTP only when you need a long-running shared server; keep stdio for the simplest local setup.
+lgrep uses `--transport streamable-http` as its standard deployment mode. One server process handles all OpenCode sessions concurrently — no per-session process spawning.
 
-### Streamable HTTP Security Controls
+**Why not stdio?** When OpenCode connects to an MCP server via `type: local` (stdio), it spawns a new subprocess for each session. With lgrep's ~400MB footprint, 5 open sessions means ~2GB wasted on identical idle processes. The HTTP transport eliminates this entirely.
 
-When running lgrep with `--transport streamable-http`, be aware of the following:
+### Security
 
-- **Localhost binding (default):** The server binds to `127.0.0.1` by default, preventing external network access. Do not change the `--host` to `0.0.0.0` unless you have a reverse proxy or firewall in front.
-- **No built-in authentication:** lgrep does not implement API key or token-based auth on the HTTP transport. If you expose it on a network, place it behind a reverse proxy with authentication (e.g., nginx + basic auth, or a service mesh).
-- **CORS / Origin:** lgrep does not set CORS headers. Browser-based MCP clients should not connect directly. For multi-client setups, use a proxy that handles origin validation.
-- **Explicit opt-in:** Streamable HTTP is explicitly non-default. You must pass `--transport streamable-http` to enable it. The stdio transport has no network attack surface.
+- **Localhost binding (default):** The server binds to `127.0.0.1`, preventing external network access. Do not change `--host` to `0.0.0.0` without a reverse proxy or firewall.
+- **No built-in authentication:** lgrep does not implement token-based auth on the HTTP transport. For multi-user or networked setups, place it behind a reverse proxy with authentication.
+- **CORS / Origin:** lgrep does not set CORS headers. Browser-based MCP clients should not connect directly.
 
 ```bash
-# Local-only (recommended for shared local agents):
+# Standard: local-only shared server
 lgrep --transport streamable-http --host 127.0.0.1 --port 6285
 
-# DANGER: Do NOT do this without auth/firewall:
+# DANGER: Do NOT expose without auth/firewall:
 # lgrep --transport streamable-http --host 0.0.0.0 --port 6285
 ```
 

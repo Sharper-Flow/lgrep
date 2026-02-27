@@ -6,8 +6,13 @@ Usage:
 
 This writes three things:
 1. Custom tool: ~/.config/opencode/tools/lgrep.ts  (thin CLI wrapper)
-2. MCP entry:   ~/.config/opencode/opencode.json    (streamable-http server)
+2. MCP entry:   ~/.config/opencode/opencode.json    (remote/HTTP server)
 3. Skill:       ~/.config/opencode/skills/lgrep/SKILL.md  (decision matrix)
+
+lgrep runs as a single shared HTTP server (--transport streamable-http).
+One process serves all OpenCode sessions simultaneously — opening 5 sessions
+does not spawn 5 lgrep processes.  The installer configures OpenCode to connect
+via HTTP and prints instructions for running lgrep as a persistent daemon.
 
 The custom tool source lives in tools/opencode/lgrep.ts (a real .ts file that
 editors and Bun can check).  The installer copies it to the OpenCode config dir.
@@ -61,6 +66,69 @@ def tool_source() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Daemon setup instructions
+# ---------------------------------------------------------------------------
+
+_SYSTEMD_SERVICE = """\
+[Unit]
+Description=lgrep MCP server (semantic code search)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={lgrep_bin} --transport streamable-http --port 6285
+Restart=on-failure
+RestartSec=5
+Environment=VOYAGE_API_KEY={api_key_placeholder}
+Environment=LGREP_WARM_PATHS={warm_paths_placeholder}
+StandardOutput=append:/tmp/lgrep.log
+StandardError=append:/tmp/lgrep.log
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def _print_daemon_instructions() -> None:
+    """Print post-install instructions for running lgrep as a persistent daemon."""
+    import shutil
+
+    lgrep_bin = shutil.which("lgrep") or "lgrep"
+    service_dir = Path.home() / ".config" / "systemd" / "user"
+    service_path = service_dir / "lgrep.service"
+
+    print()
+    print("Done!")
+    print()
+    print("lgrep connects to OpenCode as a shared HTTP server — one process")
+    print("serves all sessions simultaneously (no per-session RAM overhead).")
+    print()
+    print("─── Option A: systemd user service (recommended) ───────────────────")
+    print()
+    print(f"  mkdir -p {service_dir}")
+    print(f"  cat > {service_path} << 'EOF'")
+    print(
+        _SYSTEMD_SERVICE.format(
+            lgrep_bin=lgrep_bin,
+            api_key_placeholder="your-voyage-api-key-here",
+            warm_paths_placeholder="/path/to/project-a:/path/to/project-b",
+        ).rstrip()
+    )
+    print("EOF")
+    print()
+    print("  systemctl --user daemon-reload")
+    print("  systemctl --user enable --now lgrep.service")
+    print()
+    print("─── Option B: run manually ─────────────────────────────────────────")
+    print()
+    print("  VOYAGE_API_KEY=your-key \\")
+    print("  LGREP_WARM_PATHS=/path/to/project \\")
+    print(f"  {lgrep_bin} --transport streamable-http --port 6285")
+    print()
+    print("Then open OpenCode — the agent will discover lgrep automatically.")
+
+
+# ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
 
@@ -110,12 +178,7 @@ def install() -> int:
     config_path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"  [ok] MCP entry added to {config_path}")
 
-    print()
-    print("Done. Start the lgrep server with:")
-    print("  lgrep --transport streamable-http")
-    print()
-    print("Then use OpenCode normally — the agent will discover lgrep via")
-    print("the skill, MCP tools, and the custom tool automatically.")
+    _print_daemon_instructions()
 
     return 0
 
