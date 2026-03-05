@@ -4,7 +4,8 @@ export default tool({
   description:
     "Semantic code search using Voyage Code 3 embeddings. " +
     "Returns file paths, line ranges, and code snippets ranked by relevance. " +
-    "Use natural language queries — understands code meaning, not just text patterns.",
+    "Use natural language queries — understands code meaning, not just text patterns. " +
+    "This is the lgrep_search_semantic tool (v2.0 dual-engine: semantic + symbol intelligence).",
   args: {
     q: tool.schema.string().describe("Natural language search query"),
     path: tool.schema
@@ -17,7 +18,7 @@ export default tool({
   },
   async execute(args, context) {
     const projectPath = args.path || context.worktree || context.directory
-    const result = await Bun.$`lgrep search ${args.q} ${projectPath} -m ${args.m}`.nothrow().text()
+    const result = await Bun.$`lgrep search-semantic ${args.q} ${projectPath} -m ${args.m}`.nothrow().text()
     return result.trim()
   },
 })
