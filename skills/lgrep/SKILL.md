@@ -206,15 +206,16 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 
 ## Best Practices
 
-1. **Semantic search — be specific**: Instead of "auth", use "JWT authentication flow and session management".
-2. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols` or `lgrep_get_symbol`.
-3. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
-4. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
-5. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.
-6. **Re-index for freshness**: Run `lgrep_index_semantic` when files have changed and search results seem stale.
-7. **Always pass `path`**: Both engines require an explicit project path — they do not auto-detect the current project.
-8. **Use `LGREP_WARM_PATHS`**: Set this env var to a colon-separated list of project paths in your MCP config to pre-load semantic indexes at server startup.
-9. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.
+1. **Ignore large or generated files (`.lgrepignore`)**: `lgrep` respects `.gitignore` automatically. For additional exclusions, create a `.lgrepignore` file in the project root (e.g. `src/generated/`, `*.test.data`) to speed up indexing and avoid clutter.
+2. **Semantic search — be specific**: Instead of "auth", use "JWT authentication flow and session management".
+3. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols` or `lgrep_get_symbol`.
+4. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
+5. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
+6. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.
+7. **Re-index for freshness**: Run `lgrep_index_semantic` when files have changed and search results seem stale.
+8. **Always pass `path`**: Both engines require an explicit project path — they do not auto-detect the current project.
+9. **Use `LGREP_WARM_PATHS`**: Set this env var to a colon-separated list of project paths in your MCP config to pre-load semantic indexes at server startup.
+10. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.
 
 ## Supported Languages (Symbol Engine)
 
