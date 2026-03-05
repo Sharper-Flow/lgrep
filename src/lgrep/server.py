@@ -1,6 +1,7 @@
-"""lgrep MCP server - Semantic code search for OpenCode.
+"""lgrep MCP server - Dual-engine code intelligence for OpenCode.
 
-Uses Voyage Code 3 embeddings with local LanceDB storage.
+Semantic engine: Voyage Code 3 embeddings with local LanceDB storage.
+Symbol engine: tree-sitter AST parsing with JSON index storage.
 Supports multiple concurrent projects with isolated indexes.
 """
 
@@ -25,6 +26,18 @@ from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
 from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
 from lgrep.watcher import FileWatcher
+
+# Symbol tool imports
+from lgrep.tools.index_folder import index_folder as _index_folder
+from lgrep.tools.index_repo import index_repo as _index_repo
+from lgrep.tools.list_repos import list_repos as _list_repos
+from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
+from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
+from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
+from lgrep.tools.search_symbols import search_symbols as _search_symbols
+from lgrep.tools.search_text import search_text as _search_text
+from lgrep.tools.get_symbol import get_symbol as _get_symbol, get_symbols as _get_symbols
+from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -698,6 +711,229 @@ async def watch_stop_semantic(
         if _stop_watcher(state, proj_path):
             stopped.append(proj_path)
     return json.dumps({"stopped": True, "projects_stopped": stopped})
+
+
+# ============================================================================
+# Symbol Tools (11 new tools)
+# ============================================================================
+
+
+@mcp.tool()
+@time_tool
+async def index_symbols_folder(
+    path: str,
+    max_files: int = 500,
+) -> str:
+    """Index all symbols in a local folder for exact symbol lookup.
+
+    Args:
+        path: Absolute path to the repository/folder root
+        max_files: Maximum number of files to index (default: 500)
+
+    Returns:
+        JSON with files_indexed, symbols_indexed, repo_path, and _meta envelope
+    """
+    result = _index_folder(path, max_files=max_files)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def index_symbols_repo(
+    repo: str,
+    ref: str = "HEAD",
+    max_files: int = 500,
+    github_token: str | None = None,
+) -> str:
+    """Index symbols from a GitHub repository via the REST API (no git clone).
+
+    Args:
+        repo: GitHub repo in "owner/name" format (e.g. "anomalyco/lgrep")
+        ref: Branch, tag, or commit SHA to index (default: "HEAD")
+        max_files: Maximum number of files to index (default: 500)
+        github_token: Optional GitHub personal access token for private repos
+
+    Returns:
+        JSON with files_indexed, symbols_indexed, repo, and _meta envelope
+    """
+    result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def list_repos() -> str:
+    """List all repositories that have been indexed in the symbol store.
+
+    Returns:
+        JSON with repos list and _meta envelope
+    """
+    result = _list_repos()
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def get_file_tree(
+    path: str,
+    max_files: int = 500,
+) -> str:
+    """Get the file tree of a repository, respecting .gitignore.
+
+    Args:
+        path: Absolute path to the repository root
+        max_files: Maximum number of files to return (default: 500)
+
+    Returns:
+        JSON with files list (relative paths), total_files, and _meta envelope
+    """
+    result = _get_file_tree(path, max_files=max_files)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def get_file_outline(
+    path: str,
+    repo_root: str | None = None,
+) -> str:
+    """Get the symbol outline (functions, classes, methods) for a single file.
+
+    Args:
+        path: Absolute path to the source file
+        repo_root: Optional repo root for relative path computation in symbol IDs
+
+    Returns:
+        JSON with file_path, symbols list, symbol_count, and _meta envelope
+    """
+    result = _get_file_outline(path, repo_root=repo_root)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def get_repo_outline(
+    path: str,
+    max_files: int = 500,
+) -> str:
+    """Get the symbol outline across an entire repository.
+
+    Args:
+        path: Absolute path to the repository root
+        max_files: Maximum number of files to process (default: 500)
+
+    Returns:
+        JSON with repo_path, files list, total_files, total_symbols, and _meta envelope
+    """
+    result = _get_repo_outline(path, max_files=max_files)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def search_symbols(
+    query: str,
+    path: str,
+    limit: int = 20,
+    kind: str | None = None,
+) -> str:
+    """Search for symbols by name in an indexed repository.
+
+    Performs case-insensitive substring matching on symbol names.
+    Run lgrep_index_symbols_folder first to build the index.
+
+    Args:
+        query: Search query (matched against symbol names)
+        path: Absolute path to the indexed repository
+        limit: Maximum number of results to return (default: 20)
+        kind: Optional filter by symbol kind (function, class, method, etc.)
+
+    Returns:
+        JSON with results list, total_matches, and _meta envelope
+    """
+    result = _search_symbols(query, path, limit=limit, kind=kind)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def search_text(
+    query: str,
+    path: str,
+    max_results: int = 50,
+    case_sensitive: bool = False,
+) -> str:
+    """Search for literal text across all source files in a repository.
+
+    Args:
+        query: Text to search for
+        path: Absolute path to the repository root
+        max_results: Maximum number of results to return (default: 50)
+        case_sensitive: Whether to perform case-sensitive matching (default: False)
+
+    Returns:
+        JSON with results list (file_path, line_number, line) and _meta envelope
+    """
+    result = _search_text(query, path, max_results=max_results, case_sensitive=case_sensitive)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def get_symbol(
+    symbol_id: str,
+    path: str,
+) -> str:
+    """Get full metadata and source code for a single symbol by ID.
+
+    Symbol IDs use the format "file_path:kind:name" (e.g. "src/auth.py:function:authenticate").
+    Run lgrep_index_symbols_folder first to build the index.
+
+    Args:
+        symbol_id: Stable symbol ID in format "file_path:kind:name"
+        path: Absolute path to the indexed repository
+
+    Returns:
+        JSON with symbol dict (including source field) and _meta envelope
+    """
+    result = _get_symbol(symbol_id, path)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def get_symbols(
+    symbol_ids: list[str],
+    path: str,
+) -> str:
+    """Get full metadata and source code for multiple symbols in one call.
+
+    Args:
+        symbol_ids: List of stable symbol IDs (format: "file_path:kind:name")
+        path: Absolute path to the indexed repository
+
+    Returns:
+        JSON with symbols list and _meta envelope
+    """
+    result = _get_symbols(symbol_ids, path)
+    return json.dumps(result)
+
+
+@mcp.tool()
+@time_tool
+async def invalidate_cache(
+    path: str,
+) -> str:
+    """Remove the symbol index for a repository, forcing a full re-index on next use.
+
+    Args:
+        path: Absolute path to the repository root
+
+    Returns:
+        JSON with status ("deleted" or "not_found") and _meta envelope
+    """
+    result = _invalidate_cache(path)
+    return json.dumps(result)
 
 
 def remove_project(app_ctx: LgrepContext, path: str) -> dict:

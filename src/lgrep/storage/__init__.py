@@ -1,6 +1,19 @@
-"""lgrep symbol storage package.
+"""lgrep storage package.
 
-Contains:
-- token_tracker: Persistent cumulative token savings ledger
-- index_store: JSON-based symbol index with atomic writes
+Re-exports the semantic chunk store (formerly storage.py) alongside
+the new symbol storage modules (token_tracker, index_store).
+
+Existing imports like `from lgrep.storage import ChunkStore` continue to work.
 """
+
+# Re-export everything from the chunk store (semantic storage)
+from lgrep.storage._chunk_store import (  # noqa: F401
+    CHUNKS_TABLE,
+    EMBEDDING_DIM,
+    ChunkStore,
+    CodeChunk,
+    SearchResult,
+    SearchResults,
+    get_project_db_path,
+    has_disk_cache,
+)

@@ -22,7 +22,7 @@ from lgrep.install_opencode import (
     tool_source,
     uninstall,
 )
-from lgrep.server import search
+from lgrep.server import search_semantic as search
 
 
 # ---------------------------------------------------------------------------
