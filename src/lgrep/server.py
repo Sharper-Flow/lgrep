@@ -138,6 +138,17 @@ async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
         if isinstance(result, str):
             log.warning("warm_skipped", project=path_str, reason=result)
             return {"path": path_str, "status": "skipped", "detail": result}
+
+        # Start watcher if auto-watch is enabled
+        auto_watch = os.environ.get("LGREP_AUTO_WATCH", "").lower() in ("true", "1", "yes")
+        if auto_watch and not result.watching:
+            from .watcher import FileWatcher
+
+            result.watcher = FileWatcher(result.indexer)
+            result.watcher.start()
+            result.watching = True
+            log.info("auto_watch_started", project=path_str)
+
         log.info("project_warmed", project=path_str)
         return {"path": path_str, "status": "warmed"}
     except Exception as e:

@@ -1,21 +1,18 @@
-"""Install/uninstall lgrep into OpenCode as a custom tool + MCP server + skill.
+"""Install/uninstall lgrep into OpenCode as an MCP server + skill.
 
 Usage:
     lgrep install-opencode
     lgrep uninstall-opencode
 
-This writes three things:
-1. Custom tool: ~/.config/opencode/tools/lgrep.ts  (thin CLI wrapper)
-2. MCP entry:   ~/.config/opencode/opencode.json    (remote/HTTP server)
-3. Skill:       ~/.config/opencode/skills/lgrep/SKILL.md  (decision matrix)
+This writes two things:
+1. MCP entry:   ~/.config/opencode/opencode.json    (remote/HTTP server)
+2. Skill:       ~/.config/opencode/skills/lgrep/SKILL.md  (decision matrix)
 
 lgrep runs as a single shared HTTP server (--transport streamable-http).
 One process serves all OpenCode sessions simultaneously — opening 5 sessions
 does not spawn 5 lgrep processes.  The installer configures OpenCode to connect
 via HTTP and prints instructions for running lgrep as a persistent daemon.
 
-The custom tool source lives in tools/opencode/lgrep.ts (a real .ts file that
-editors and Bun can check).  The installer copies it to the OpenCode config dir.
 """
 
 from __future__ import annotations
@@ -37,7 +34,6 @@ SKILL_PATH = SKILL_DIR / "SKILL.md"
 # Source assets live at the repo root (alongside src/, skills/, tools/)
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _PACKAGE_SKILL = _REPO_ROOT / "skills" / "lgrep" / "SKILL.md"
-_PACKAGE_TOOL = _REPO_ROOT / "tools" / "opencode" / "lgrep.ts"
 
 
 def _config_path() -> Path:
@@ -51,18 +47,6 @@ def _config_path() -> Path:
     return json_path  # default to .json
 
 
-def tool_source() -> str:
-    """Read the custom tool TypeScript source from the repo.
-
-    Returns the contents of tools/opencode/lgrep.ts.  This is the single
-    source of truth — no inline string template.
-    """
-    if not _PACKAGE_TOOL.exists():
-        raise FileNotFoundError(
-            f"Tool source not found at {_PACKAGE_TOOL}. "
-            "Are you running from a proper lgrep checkout?"
-        )
-    return _PACKAGE_TOOL.read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +65,7 @@ Restart=on-failure
 RestartSec=5
 Environment=VOYAGE_API_KEY={api_key_placeholder}
 Environment=LGREP_WARM_PATHS={warm_paths_placeholder}
+Environment=LGREP_AUTO_WATCH=true
 StandardOutput=append:/tmp/lgrep.log
 StandardError=append:/tmp/lgrep.log
 
@@ -122,7 +107,8 @@ def _print_daemon_instructions() -> None:
     print("─── Option B: run manually ─────────────────────────────────────────")
     print()
     print("  VOYAGE_API_KEY=your-key \\")
-    print("  LGREP_WARM_PATHS=/path/to/project \\")
+    print("  LGREP_WARM_PATHS=/path/to/project \\
+  LGREP_AUTO_WATCH=true \\")
     print(f"  {lgrep_bin} --transport streamable-http --port 6285")
     print()
     print("Then open OpenCode — the agent will discover lgrep automatically.")
@@ -137,15 +123,6 @@ def install() -> int:
     """Install lgrep into OpenCode (tool + MCP + skill)."""
     print("Installing lgrep into OpenCode...")
 
-    # 1. Copy custom tool from repo source
-    TOOL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if _PACKAGE_TOOL.resolve() == TOOL_PATH.resolve():
-        print(f"  [ok] Tool already at {TOOL_PATH} (same file)")
-    elif not _PACKAGE_TOOL.exists():
-        print(f"  [warn] Tool source not found at {_PACKAGE_TOOL}, skipping")
-    else:
-        shutil.copy2(_PACKAGE_TOOL, TOOL_PATH)
-        print(f"  [ok] Custom tool copied to {TOOL_PATH}")
 
     # 2. Copy SKILL.md (skip if source and dest resolve to the same file)
     SKILL_DIR.mkdir(parents=True, exist_ok=True)

@@ -49,7 +49,7 @@ Use this first-action policy:
 lgrep install-opencode
 ```
 
-This installs a custom tool wrapper, MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+This installs an MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:
 ```json
