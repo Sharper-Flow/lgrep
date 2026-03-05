@@ -230,7 +230,7 @@ Examples:
 
 | Tool | Description |
 |------|-------------|
-| `lgrep_index_symbols_folder(path, max_files=500)` | Index all symbols in a local folder. Run once before using symbol search. |
+| `lgrep_index_symbols_folder(path, max_files=500, incremental=True)` | Index all symbols in a local folder. Run once before using symbol search. Incremental mode skips unchanged files (SHA-256). |
 | `lgrep_index_symbols_repo(repo, ref="HEAD")` | Index symbols from a GitHub repo via REST API (no git clone). |
 | `lgrep_list_repos()` | List all repositories that have been indexed in the symbol store. |
 | `lgrep_get_file_tree(path, max_files=500)` | Get the file tree of a repository (respects .gitignore). |
@@ -289,7 +289,13 @@ IDs are stable across re-indexes (same file, kind, name → same ID). They break
     }
   ],
   "total_matches": 1,
-  "_meta": { "timing_ms": 0.4, "tokens_saved": 150 }
+  "_meta": {
+    "timing_ms": 0.4,
+    "tokens_saved": 150,
+    "session_tokens": 1350,
+    "total_tokens": 48300,
+    "cost_avoided_usd": 0.000145
+  }
 }
 ```
 
@@ -388,7 +394,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-386+ tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, auto-index, concurrency, CLI transport, installer safety, symbol parser, symbol storage, symbol tools, and integration.
+410+ tests covering all modules: embeddings, storage, chunking, discovery, indexing, watcher, server tools, auto-index, concurrency, CLI transport, installer safety, symbol parser, symbol storage, symbol tools, and integration.
 
 ## License
 

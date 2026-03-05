@@ -723,17 +723,21 @@ async def watch_stop_semantic(
 async def index_symbols_folder(
     path: str,
     max_files: int = 500,
+    incremental: bool = True,
 ) -> str:
     """Index all symbols in a local folder for exact symbol lookup.
 
     Args:
         path: Absolute path to the repository/folder root
         max_files: Maximum number of files to index (default: 500)
+        incremental: Skip files whose content hash matches the stored index
+                     (default: True). Set to False to force a full re-index.
 
     Returns:
-        JSON with files_indexed, symbols_indexed, repo_path, and _meta envelope
+        JSON with files_indexed, files_skipped, symbols_indexed, repo_path,
+        and _meta envelope
     """
-    result = _index_folder(path, max_files=max_files)
+    result = _index_folder(path, max_files=max_files, incremental=incremental)
     return json.dumps(result)
 
 

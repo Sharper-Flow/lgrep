@@ -26,6 +26,7 @@ def index_folder(
     repo_path: str,
     storage_dir: Path | str | None = None,
     max_files: int = 500,
+    incremental: bool = True,
 ) -> dict:
     """Index all symbols in a local folder.
 
@@ -33,9 +34,13 @@ def index_folder(
         repo_path: Absolute path to the repository/folder root
         storage_dir: Optional override for the symbol index storage directory
         max_files: Maximum number of files to index (default: 500)
+        incremental: If True (default), skip files whose SHA-256 hash matches
+                     the stored index — only re-parse changed/new files.
+                     Set to False to force a full re-index.
 
     Returns:
-        Dict with files_indexed, symbols_indexed, repo_path, and _meta envelope
+        Dict with files_indexed, symbols_indexed, files_skipped, repo_path,
+        and _meta envelope
     """
     t0 = time.monotonic()
 
@@ -52,17 +57,24 @@ def index_folder(
         )
 
     store = IndexStore(storage_dir=storage_dir)
+    resolved_root = str(root.resolve())
+
+    # Load existing index for incremental comparison
+    existing_index = store.load(resolved_root) if incremental else None
+    existing_files = existing_index.files if existing_index else {}
+    existing_symbols = dict(existing_index.symbols) if existing_index else {}
 
     # Walk source files
     from lgrep.discovery import FileDiscovery
 
     discovery = FileDiscovery(root)
-    files_dict: dict[str, str] = {}  # relative_path → hash
-    symbols_dict: dict[str, dict] = {}  # symbol_id → metadata
+    files_dict: dict[str, str] = dict(existing_files)  # start from existing
+    symbols_dict: dict[str, dict] = dict(existing_symbols)
 
     files_processed = 0
+    files_skipped = 0
     for file_path in discovery.find_files():
-        if files_processed >= max_files:
+        if files_processed + files_skipped >= max_files:
             break
         if get_language_spec(file_path.suffix.lower()) is None:
             continue
@@ -74,7 +86,21 @@ def index_folder(
 
         rel_path = str(file_path.relative_to(root))
         file_hash = hashlib.sha256(content).hexdigest()
+
+        # Incremental skip: file unchanged
+        if incremental and existing_files.get(rel_path) == file_hash:
+            files_skipped += 1
+            continue
+
         files_dict[rel_path] = file_hash
+
+        # Remove old symbols for this file before re-parsing
+        if incremental:
+            symbols_dict = {
+                sid: sdata
+                for sid, sdata in symbols_dict.items()
+                if sdata.get("file_path") != rel_path
+            }
 
         symbols = _extractor.extract(file_path, repo_root=root)
         for sym in symbols:
@@ -97,7 +123,7 @@ def index_folder(
         files_processed += 1
 
     index = CodeIndex(
-        repo_path=str(root.resolve()),
+        repo_path=resolved_root,
         files=files_dict,
         symbols=symbols_dict,
     )
@@ -108,12 +134,15 @@ def index_folder(
         "index_folder_complete",
         repo=str(root),
         files=files_processed,
+        files_skipped=files_skipped,
         symbols=len(symbols_dict),
+        incremental=incremental,
     )
 
     return {
-        "repo_path": str(root.resolve()),
+        "repo_path": resolved_root,
         "files_indexed": files_processed,
+        "files_skipped": files_skipped,
         "symbols_indexed": len(symbols_dict),
         "_meta": make_meta(t0, tokens_saved=tokens_saved),
     }

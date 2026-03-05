@@ -8,7 +8,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import httpx
 import structlog
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
@@ -54,6 +53,8 @@ def _get_source_bytes(
     repo, ref = parts
     url = f"https://raw.githubusercontent.com/{repo}/{ref}/{file_path}"
     try:
+        import httpx  # lazy import — only needed for GitHub repos
+
         resp = httpx.get(url, timeout=15.0)
         resp.raise_for_status()
     except Exception as e:

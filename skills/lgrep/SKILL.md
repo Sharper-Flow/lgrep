@@ -125,6 +125,7 @@ Index all symbols in a local folder. Run once before using `lgrep_search_symbols
 
 - `path` (string, **required**): Absolute path to the repository/folder root.
 - `max_files` (int): Maximum files to index (default: 500).
+- `incremental` (bool): Skip files whose SHA-256 hash matches the stored index (default: `true`). Set to `false` to force a full re-index.
 
 ### lgrep_index_symbols_repo
 
@@ -214,6 +215,10 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 7. **Always pass `path`**: Both engines require an explicit project path — they do not auto-detect the current project.
 8. **Use `LGREP_WARM_PATHS`**: Set this env var to a colon-separated list of project paths in your MCP config to pre-load semantic indexes at server startup.
 9. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.
+
+## Supported Languages (Symbol Engine)
+
+Python, JavaScript, TypeScript, TSX, Go, Rust, Java, C, C++, C#, PHP, Ruby, Swift, Kotlin — 14 languages with full function/class/method extraction. The semantic engine supports 30+ languages via AST-aware chunking.
 
 ## Keywords
 semantic search, code search, grep, find code, search files, local search,
