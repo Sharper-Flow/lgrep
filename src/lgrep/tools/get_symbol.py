@@ -30,6 +30,11 @@ def get_symbol(
         Returns error dict if the repo is not indexed or the symbol is not found.
     """
     t0 = time.monotonic()
+
+    # Input validation
+    if not symbol_id or not symbol_id.strip():
+        return error_response("symbol_id must not be empty", _meta=make_meta(t0))
+
     store = IndexStore(storage_dir=storage_dir)
 
     resolved = str(Path(repo_path).resolve())

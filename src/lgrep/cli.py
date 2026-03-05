@@ -26,6 +26,12 @@ def main() -> int:
     if args and args[0] in ("index", "index-semantic"):
         return _cmd_index_semantic(args[1:])
 
+    if args and args[0] in ("search-symbols",):
+        return _cmd_search_symbols(args[1:])
+
+    if args and args[0] in ("index-symbols",):
+        return _cmd_index_symbols(args[1:])
+
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
@@ -347,6 +353,117 @@ def _cmd_remove(args: list[str]) -> int:
         )
 
     return 0
+
+
+def _cmd_search_symbols(args: list[str]) -> int:
+    """One-shot symbol search against an indexed project.
+
+    Usage: lgrep search-symbols <query> [path] [-m N] [--storage-dir DIR]
+    """
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep search-symbols <query> [path] [-m N] [--storage-dir DIR]")
+        print()
+        print("Search an indexed project for symbols by name.")
+        print()
+        print("arguments:")
+        print("  query                          symbol name to search for")
+        print("  path                           project path (default: current directory)")
+        print()
+        print("options:")
+        print("  -m, --limit N                  max results (default: 20)")
+        print("  --storage-dir DIR              symbol index storage directory")
+        return 0
+
+    from pathlib import Path
+    from lgrep.tools.search_symbols import search_symbols
+
+    # Parse args
+    positional = []
+    limit = 20
+    storage_dir = None
+
+    i = 0
+    while i < len(args):
+        if args[i] in ("-m", "--limit") and i + 1 < len(args):
+            limit = int(args[i + 1])
+            i += 2
+        elif args[i].startswith("--storage-dir="):
+            storage_dir = args[i].split("=", 1)[1]
+            i += 1
+        elif args[i] == "--storage-dir" and i + 1 < len(args):
+            storage_dir = args[i + 1]
+            i += 2
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            positional.append(args[i])
+            i += 1
+
+    if not positional:
+        print(
+            "Error: query is required. Usage: lgrep search-symbols <query> [path]",
+            file=sys.stderr,
+        )
+        return 1
+
+    query = positional[0]
+    path = str(Path(positional[1]).resolve()) if len(positional) > 1 else str(Path.cwd().resolve())
+
+    result = search_symbols(query, path, storage_dir=storage_dir, limit=limit)
+    print(json.dumps(result))
+    return 0 if "error" not in result else 1
+
+
+def _cmd_index_symbols(args: list[str]) -> int:
+    """Index a project directory for symbol search.
+
+    Usage: lgrep index-symbols [path] [--storage-dir DIR] [--max-files N]
+    """
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep index-symbols [path] [--storage-dir DIR] [--max-files N]")
+        print()
+        print("Index a project directory for symbol search.")
+        print()
+        print("arguments:")
+        print("  path                           project path (default: current directory)")
+        print()
+        print("options:")
+        print("  --storage-dir DIR              symbol index storage directory")
+        print("  --max-files N                  max files to index (default: 500)")
+        return 0
+
+    from pathlib import Path
+    from lgrep.tools.index_folder import index_folder
+
+    # Parse args
+    positional = []
+    storage_dir = None
+    max_files = 500
+
+    i = 0
+    while i < len(args):
+        if args[i].startswith("--storage-dir="):
+            storage_dir = args[i].split("=", 1)[1]
+            i += 1
+        elif args[i] == "--storage-dir" and i + 1 < len(args):
+            storage_dir = args[i + 1]
+            i += 2
+        elif args[i] == "--max-files" and i + 1 < len(args):
+            max_files = int(args[i + 1])
+            i += 2
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            positional.append(args[i])
+            i += 1
+
+    path = str(Path(positional[0]).resolve()) if positional else str(Path.cwd().resolve())
+
+    result = index_folder(path, storage_dir=storage_dir, max_files=max_files)
+    print(json.dumps(result))
+    return 0 if "error" not in result else 1
 
 
 if __name__ == "__main__":

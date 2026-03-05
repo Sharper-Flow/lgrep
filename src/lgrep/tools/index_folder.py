@@ -38,6 +38,11 @@ def index_folder(
         Dict with files_indexed, symbols_indexed, repo_path, and _meta envelope
     """
     t0 = time.monotonic()
+
+    # Input validation
+    if not repo_path or not repo_path.strip():
+        return error_response("repo_path must not be empty", _meta=make_meta(t0))
+
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():

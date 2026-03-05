@@ -34,6 +34,11 @@ def search_text(
         Returns error dict if the path does not exist.
     """
     t0 = time.monotonic()
+
+    # Input validation
+    if not query or not query.strip():
+        return error_response("query must not be empty", _meta=make_meta(t0))
+
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():

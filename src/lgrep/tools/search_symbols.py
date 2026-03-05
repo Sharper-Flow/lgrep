@@ -36,6 +36,13 @@ def search_symbols(
         Returns error dict if the repo has not been indexed.
     """
     t0 = time.monotonic()
+
+    # Input validation
+    if not query or not query.strip():
+        return error_response("query must not be empty", _meta=make_meta(t0))
+    if limit < 0:
+        limit = 1
+
     store = IndexStore(storage_dir=storage_dir)
 
     # Resolve repo_path to match what index_folder stores
