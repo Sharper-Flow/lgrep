@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`lgrep init-ignore` CLI command** — scaffolds a recommended `.lgrepignore` file in a project root.
+- **Default `.lgrepignore` template** with practical excludes for dependencies, build artifacts, caches, generated files, and large fixtures.
+
+### Changed
+
+- Setup docs now explicitly show where to configure `VOYAGE_API_KEY` for both Vision/open-chad and raw OpenCode setups.
+
 ## [2.0.0] - 2026-03-05
 
 ### Added
