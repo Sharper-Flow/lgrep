@@ -114,6 +114,10 @@ Sign up at [dash.voyageai.com](https://dash.voyageai.com/) and create an API key
 
 The symbol engine works without any API key.
 
+Where to set the key:
+- **Vision / open-chad setup:** `~/.config/vision/servers.yaml` under `servers.lgrep.env.VOYAGE_API_KEY`
+- **Raw OpenCode MCP setup:** `~/.config/opencode/opencode.json` under `mcp.lgrep.env.VOYAGE_API_KEY`
+
 ### 2. Start lgrep as a shared server
 
 lgrep runs as a single HTTP server shared across all OpenCode sessions. This means opening 5 sessions doesn't spawn 5 lgrep processes — one ~400MB process handles everything.
@@ -373,7 +377,7 @@ docs/site/
 
 ## Troubleshooting
 
-**"VOYAGE_API_KEY not set"** — Ensure the key is in the `env` section of your OpenCode MCP config, not just your shell environment. The symbol engine works without this key.
+**"VOYAGE_API_KEY not set"** — If using Vision (e.g. via open-chad), add the key to `~/.config/vision/servers.yaml` under `lgrep.env.VOYAGE_API_KEY`. If using OpenCode directly, add it to the `env` section of your OpenCode MCP config. The symbol engine works completely without this key.
 
 **Slow first semantic index** — Initial indexing embeds every file. Subsequent runs skip unchanged files via SHA-256 hashing. A ~8k file project takes ~15-20 minutes on first index.
 
