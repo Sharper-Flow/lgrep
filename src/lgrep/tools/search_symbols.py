@@ -6,11 +6,14 @@ Searches for symbols by name (substring/prefix match) within an indexed reposito
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def search_symbols(
@@ -56,7 +59,7 @@ def search_symbols(
     query_lower = query.lower()
     results = []
 
-    for sym_id, sym_data in index.symbols.items():
+    for _sym_id, sym_data in index.symbols.items():
         name = sym_data.get("name", "")
         if query_lower not in name.lower():
             continue

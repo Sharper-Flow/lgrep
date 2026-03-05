@@ -375,6 +375,7 @@ def _cmd_search_symbols(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
     from lgrep.tools.search_symbols import search_symbols
 
     # Parse args
@@ -434,6 +435,7 @@ def _cmd_index_symbols(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
     from lgrep.tools.index_folder import index_folder
 
     # Parse args

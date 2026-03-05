@@ -10,15 +10,10 @@ Verifies:
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-from mcp.server.fastmcp import Context
 
 from lgrep.server import mcp
-
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 
@@ -55,7 +50,7 @@ def _get_registered_tool_names() -> set[str]:
 class TestToolRegistration:
     def test_all_16_tools_registered(self):
         registered = _get_registered_tool_names()
-        assert ALL_EXPECTED_TOOLS == registered, (
+        assert registered == ALL_EXPECTED_TOOLS, (
             f"Missing: {ALL_EXPECTED_TOOLS - registered}\nExtra: {registered - ALL_EXPECTED_TOOLS}"
         )
 

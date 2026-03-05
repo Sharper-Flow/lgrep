@@ -6,11 +6,7 @@ GREEN phase: all pass after implementation.
 ≥6 adversarial scenarios required.
 """
 
-import os
-import tempfile
-from pathlib import Path
 
-import pytest
 
 
 class TestPathTraversalSecurity:

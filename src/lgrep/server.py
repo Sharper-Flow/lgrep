@@ -25,19 +25,20 @@ from mcp.server.fastmcp import Context, FastMCP
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
 from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
-from lgrep.watcher import FileWatcher
+from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
+from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
+from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
+from lgrep.tools.get_symbol import get_symbol as _get_symbol
+from lgrep.tools.get_symbol import get_symbols as _get_symbols
 
 # Symbol tool imports
 from lgrep.tools.index_folder import index_folder as _index_folder
 from lgrep.tools.index_repo import index_repo as _index_repo
+from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
-from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
-from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
-from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
 from lgrep.tools.search_symbols import search_symbols as _search_symbols
 from lgrep.tools.search_text import search_text as _search_text
-from lgrep.tools.get_symbol import get_symbol as _get_symbol, get_symbols as _get_symbols
-from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
+from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

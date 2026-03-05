@@ -14,7 +14,6 @@ from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
 
-
 log = structlog.get_logger()
 
 

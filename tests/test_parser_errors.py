@@ -11,7 +11,6 @@ Verifies graceful handling of:
 - Files that don't exist
 """
 
-from pathlib import Path
 
 import pytest
 

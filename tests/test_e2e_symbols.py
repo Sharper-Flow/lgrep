@@ -9,9 +9,6 @@ Tests the full pipeline:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 
@@ -59,8 +56,8 @@ class TestIndexSearchGetPipeline:
         assert "authenticate" in names
 
     def test_index_then_get_symbol_returns_source(self, sample_repo, store_dir):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(sample_repo), storage_dir=store_dir)
         sym_id = "src/auth.py:function:authenticate"
@@ -72,8 +69,8 @@ class TestIndexSearchGetPipeline:
         assert "authenticate" in result["symbol"]["source"]
 
     def test_index_then_get_symbols_batch(self, sample_repo, store_dir):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(sample_repo), storage_dir=store_dir)
         ids = [

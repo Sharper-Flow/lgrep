@@ -9,12 +9,7 @@ Covers:
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # ── CLI dispatch ──────────────────────────────────────────────────────────────
 
@@ -24,9 +19,11 @@ class TestCLIDispatch:
         """lgrep search-symbols dispatches to _cmd_search_symbols."""
         from lgrep.cli import main
 
-        with patch("lgrep.cli._cmd_search_symbols", return_value=0) as mock:
-            with patch("sys.argv", ["lgrep", "search-symbols", "authenticate", str(tmp_path)]):
-                result = main()
+        with (
+            patch("lgrep.cli._cmd_search_symbols", return_value=0) as mock,
+            patch("sys.argv", ["lgrep", "search-symbols", "authenticate", str(tmp_path)]),
+        ):
+            result = main()
         mock.assert_called_once()
         assert result == 0
 
@@ -34,9 +31,11 @@ class TestCLIDispatch:
         """lgrep index-symbols dispatches to _cmd_index_symbols."""
         from lgrep.cli import main
 
-        with patch("lgrep.cli._cmd_index_symbols", return_value=0) as mock:
-            with patch("sys.argv", ["lgrep", "index-symbols", str(tmp_path)]):
-                result = main()
+        with (
+            patch("lgrep.cli._cmd_index_symbols", return_value=0) as mock,
+            patch("sys.argv", ["lgrep", "index-symbols", str(tmp_path)]),
+        ):
+            result = main()
         mock.assert_called_once()
         assert result == 0
 
@@ -71,7 +70,7 @@ class TestCLISearchSymbols:
         captured = capsys.readouterr()
         # Find the JSON line (last non-empty line starting with '{')
         json_line = next(
-            (l for l in reversed(captured.out.splitlines()) if l.strip().startswith("{")),
+            (line for line in reversed(captured.out.splitlines()) if line.strip().startswith("{")),
             None,
         )
         assert json_line is not None, f"No JSON line found in output: {captured.out!r}"
@@ -85,7 +84,7 @@ class TestCLISearchSymbols:
         assert result != 0
         captured = capsys.readouterr()
         json_line = next(
-            (l for l in reversed(captured.out.splitlines()) if l.strip().startswith("{")),
+            (line for line in reversed(captured.out.splitlines()) if line.strip().startswith("{")),
             None,
         )
         assert json_line is not None
@@ -110,7 +109,7 @@ class TestCLIIndexSymbols:
         assert result == 0
         captured = capsys.readouterr()
         json_line = next(
-            (l for l in reversed(captured.out.splitlines()) if l.strip().startswith("{")),
+            (line for line in reversed(captured.out.splitlines()) if line.strip().startswith("{")),
             None,
         )
         assert json_line is not None, f"No JSON line found in output: {captured.out!r}"
@@ -134,8 +133,8 @@ class TestInputValidation:
     """Verify symbol tools validate inputs and return structured errors."""
 
     def test_search_symbols_empty_query_returns_error(self, tmp_path, tmp_path_factory):
-        from lgrep.tools.search_symbols import search_symbols
         from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
 
         store = tmp_path_factory.mktemp("store")
         (tmp_path / "auth.py").write_text("def authenticate(): pass\n")
@@ -145,8 +144,8 @@ class TestInputValidation:
         assert "error" in result
 
     def test_search_symbols_negative_limit_clamped(self, tmp_path, tmp_path_factory):
-        from lgrep.tools.search_symbols import search_symbols
         from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
 
         store = tmp_path_factory.mktemp("store")
         (tmp_path / "auth.py").write_text("def authenticate(): pass\n")

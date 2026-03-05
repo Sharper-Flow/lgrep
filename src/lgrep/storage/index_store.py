@@ -13,12 +13,11 @@ Design decisions:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
-import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -114,10 +113,8 @@ class IndexStore:
         except OSError as e:
             log.error("index_save_failed", repo=normalized_repo, error=str(e))
             # Clean up temp file if it exists
-            try:
+            with contextlib.suppress(OSError):
                 tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
             raise
 
     def load(self, repo_path: str) -> CodeIndex | None:

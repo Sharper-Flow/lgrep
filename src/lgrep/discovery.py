@@ -116,9 +116,7 @@ def _is_secret_file(path: Path) -> bool:
     if name.endswith(_SECRET_SUFFIXES):
         return True
     # Prefix match
-    if any(name.startswith(prefix) for prefix in _SECRET_PREFIXES):
-        return True
-    return False
+    return bool(any(name.startswith(prefix) for prefix in _SECRET_PREFIXES))
 
 
 def _is_binary_file(path: Path) -> bool:
@@ -204,11 +202,7 @@ class FileDiscovery:
 
         # Resolve to absolute for security checks — always resolve to eliminate
         # any .. components that could escape the root.
-        if not path.is_absolute():
-            abs_path = (self.root_path / path).resolve()
-        else:
-            # Resolve even absolute paths to eliminate .. components
-            abs_path = path.resolve()
+        abs_path = (self.root_path / path).resolve() if not path.is_absolute() else path.resolve()
 
         # 1. Path traversal: reject anything outside root
         try:

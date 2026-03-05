@@ -6,10 +6,13 @@ Removes the symbol index for a repository, forcing a full re-index on next use.
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.tools._meta import make_meta
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def invalidate_cache(

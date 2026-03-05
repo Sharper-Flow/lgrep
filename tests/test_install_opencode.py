@@ -24,7 +24,6 @@ from lgrep.install_opencode import (
 )
 from lgrep.server import search_semantic as search
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

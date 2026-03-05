@@ -11,10 +11,10 @@ from pathlib import Path
 
 import structlog
 
-from lgrep.storage.index_store import CodeIndex, IndexStore
-from lgrep.storage.token_tracker import estimate_savings
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.parser.languages import get_language_spec
+from lgrep.storage.index_store import CodeIndex, IndexStore
+from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
 
 log = structlog.get_logger()

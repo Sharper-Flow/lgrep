@@ -183,8 +183,6 @@ class TestCLISemanticRenames:
 
     def test_cli_dispatches_search_semantic(self):
         """'lgrep search-semantic' should dispatch to _cmd_search_semantic."""
-        import sys
-        from unittest.mock import patch
 
         with (
             patch("sys.argv", ["lgrep", "search-semantic", "--help"]),
@@ -198,8 +196,6 @@ class TestCLISemanticRenames:
 
     def test_cli_dispatches_index_semantic(self):
         """'lgrep index-semantic' should dispatch to _cmd_index_semantic."""
-        import sys
-        from unittest.mock import patch
 
         with (
             patch("sys.argv", ["lgrep", "index-semantic", "--help"]),

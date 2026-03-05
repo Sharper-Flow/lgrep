@@ -6,7 +6,6 @@ Used by lgrep_get_file_outline and lgrep_get_repo_outline tools.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 
 import structlog

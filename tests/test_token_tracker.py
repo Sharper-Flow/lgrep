@@ -4,11 +4,7 @@ RED phase: tests fail before token_tracker.py exists.
 GREEN phase: all pass after implementation.
 """
 
-import json
-import tempfile
-from pathlib import Path
 
-import pytest
 
 
 class TestTokenTrackerImport:
@@ -103,7 +99,7 @@ class TestTokenTrackerPersistence:
 
         path = tmp_path / "tokens.json"
 
-        for i in range(3):
+        for _i in range(3):
             t = TokenTracker(storage_path=path)
             t.record_savings(100)
             t.flush()

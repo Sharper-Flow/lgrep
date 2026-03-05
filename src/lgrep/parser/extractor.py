@@ -9,6 +9,7 @@ Uses tree-sitter-language-pack for pre-built parsers (165+ languages).
 from __future__ import annotations
 
 from pathlib import Path
+
 import structlog
 
 from lgrep.parser.languages import LanguageSpec, get_language_spec
@@ -112,9 +113,7 @@ def _is_inside_class(node) -> bool:
     if parent.type == "class_body":
         return True
     # Java/C#: parent is 'class_body'
-    if parent.type in ("class_body", "declaration_list"):
-        return True
-    return False
+    return parent.type in ("class_body", "declaration_list")
 
 
 def _get_enclosing_class_name(node, source: bytes) -> str | None:

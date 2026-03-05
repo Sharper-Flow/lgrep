@@ -14,12 +14,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import hashlib
-import json
-import tempfile
-from dataclasses import asdict
-from pathlib import Path
-
 import pytest
 
 # ── Import contracts ──────────────────────────────────────────────────────────
@@ -255,6 +249,7 @@ class TestIndexRepo:
 
         import httpx
         import tree_sitter_language_pack
+
         import lgrep.parser.extractor as extractor_mod
 
         monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
@@ -585,39 +580,39 @@ class TestSearchText:
 
 class TestGetSymbol:
     def test_returns_dict(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = f"src/auth.py:function:authenticate"
+        sym_id = "src/auth.py:function:authenticate"
         result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
         assert isinstance(result, dict)
 
     def test_has_symbol_key(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = f"src/auth.py:function:authenticate"
+        sym_id = "src/auth.py:function:authenticate"
         result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
         assert "symbol" in result
 
     def test_symbol_has_source(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = f"src/auth.py:function:authenticate"
+        sym_id = "src/auth.py:function:authenticate"
         result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
         assert "source" in result["symbol"]
         assert "authenticate" in result["symbol"]["source"]
 
     def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = f"src/auth.py:function:authenticate"
+        sym_id = "src/auth.py:function:authenticate"
         result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
         assert "_meta" in result
 
@@ -630,8 +625,8 @@ class TestGetSymbol:
         assert "error" in result
 
     def test_unknown_symbol_returns_error(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         result = get_symbol(
@@ -682,8 +677,8 @@ class TestGetSymbol:
 
 class TestGetSymbols:
     def test_returns_dict(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         ids = ["src/auth.py:function:authenticate", "src/auth.py:class:AuthManager"]
@@ -691,8 +686,8 @@ class TestGetSymbols:
         assert isinstance(result, dict)
 
     def test_has_symbols_key(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         ids = ["src/auth.py:function:authenticate"]
@@ -700,8 +695,8 @@ class TestGetSymbols:
         assert "symbols" in result
 
     def test_returns_multiple_symbols(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         ids = ["src/auth.py:function:authenticate", "src/auth.py:class:AuthManager"]
@@ -709,8 +704,8 @@ class TestGetSymbols:
         assert len(result["symbols"]) == 2
 
     def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
         from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
 
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         ids = ["src/auth.py:function:authenticate"]

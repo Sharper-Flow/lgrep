@@ -14,10 +14,6 @@ Covers:
 """
 
 import textwrap
-from pathlib import Path
-
-import pytest
-
 
 # ============================================================================
 # Symbol dataclass and ID generation
@@ -52,7 +48,7 @@ class TestSymbolDataclass:
 
     def test_symbol_id_format(self):
         """Symbol ID must be 'file_path:kind:name'."""
-        from lgrep.parser.symbols import Symbol, make_symbol_id
+        from lgrep.parser.symbols import make_symbol_id
 
         sym_id = make_symbol_id(file_path="src/auth.py", kind="function", name="authenticate")
         assert sym_id == "src/auth.py:function:authenticate"

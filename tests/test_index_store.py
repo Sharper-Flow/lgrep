@@ -13,13 +13,7 @@ Covers:
 - Path traversal safety
 """
 
-import hashlib
-import json
 import textwrap
-from pathlib import Path
-
-import pytest
-
 
 PYTHON_FIXTURE = textwrap.dedent("""\
     def authenticate(user, password):

@@ -13,13 +13,10 @@ does not exceed baseline * 1.10 (10% regression budget).
 
 from __future__ import annotations
 
-import statistics
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ── Semantic search latency ───────────────────────────────────────────────────
 
@@ -34,9 +31,10 @@ class TestSemanticSearchLatency:
     @pytest.mark.asyncio
     async def test_search_semantic_local_latency(self, tmp_path):
         """Local search latency (excluding Voyage API) must be <100ms p95 over 10 queries."""
+        from mcp.server.fastmcp import Context
+
         from lgrep.server import LgrepContext, ProjectState, search_semantic
         from lgrep.storage import SearchResult, SearchResults
-        from mcp.server.fastmcp import Context
 
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext(voyage_api_key="mock-key")
@@ -97,7 +95,7 @@ class TestSemanticSearchLatency:
 
         assert p95 < SEMANTIC_SEARCH_P95_BUDGET_MS, (
             f"Semantic search p95 latency {p95:.1f}ms exceeds budget {SEMANTIC_SEARCH_P95_BUDGET_MS}ms. "
-            f"All latencies: {[f'{l:.1f}ms' for l in latencies]}"
+            f"All latencies: {[f'{lat:.1f}ms' for lat in latencies]}"
         )
 
 
@@ -163,5 +161,5 @@ class TestSymbolSearchLatency:
 
         assert p95 < SYMBOL_SEARCH_P95_BUDGET_MS, (
             f"Symbol search p95 latency {p95:.1f}ms exceeds budget {SYMBOL_SEARCH_P95_BUDGET_MS}ms. "
-            f"All latencies: {[f'{l:.1f}ms' for l in latencies]}"
+            f"All latencies: {[f'{lat:.1f}ms' for lat in latencies]}"
         )
