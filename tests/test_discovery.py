@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from lgrep.discovery import FileDiscovery
+from lgrep.discovery import DEFAULT_LGREPIGNORE_TEMPLATE, FileDiscovery, scaffold_lgrepignore
 
 
 @pytest.fixture
@@ -76,3 +76,32 @@ class TestFileDiscovery:
         assert discovery.is_ignored(temp_project / "src" / "main.py") is False
         assert discovery.is_ignored(temp_project / "node_modules" / "index.js") is True
         assert discovery.is_ignored(temp_project / "tests" / "test_main.py") is True
+
+
+class TestLgrepignoreScaffold:
+    def test_scaffold_creates_default_file(self, tmp_path):
+        path, created = scaffold_lgrepignore(tmp_path)
+
+        assert created is True
+        assert path == tmp_path / ".lgrepignore"
+        assert path.read_text() == DEFAULT_LGREPIGNORE_TEMPLATE
+
+    def test_scaffold_does_not_overwrite_without_force(self, tmp_path):
+        existing = tmp_path / ".lgrepignore"
+        existing.write_text("custom-ignore\n")
+
+        path, created = scaffold_lgrepignore(tmp_path)
+
+        assert created is False
+        assert path == existing
+        assert existing.read_text() == "custom-ignore\n"
+
+    def test_scaffold_overwrites_with_force(self, tmp_path):
+        existing = tmp_path / ".lgrepignore"
+        existing.write_text("custom-ignore\n")
+
+        path, created = scaffold_lgrepignore(tmp_path, force=True)
+
+        assert created is True
+        assert path == existing
+        assert existing.read_text() == DEFAULT_LGREPIGNORE_TEMPLATE

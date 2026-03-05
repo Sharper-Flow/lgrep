@@ -55,6 +55,12 @@ Use this first-action policy:
 lgrep install-opencode
 ```
 
+**Recommended per-project ignore file:**
+```bash
+lgrep init-ignore /path/to/project
+```
+This creates a default `.lgrepignore` template you can customize.
+
 This installs an MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:

@@ -350,7 +350,13 @@ lgrep --transport streamable-http --host 127.0.0.1 --port 6285
 
 ### Ignoring files
 
-`lgrep` respects `.gitignore` automatically. For additional exclusions, create a `.lgrepignore` file in your project root:
+`lgrep` respects `.gitignore` automatically. For additional exclusions, generate a recommended `.lgrepignore` template:
+
+```bash
+lgrep init-ignore /path/to/project
+```
+
+Then customize it for your repo. Example entries:
 
 ```
 # Skip large generated files

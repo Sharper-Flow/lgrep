@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lgrep.cli import _cmd_index_semantic as _cmd_index
+from lgrep.cli import _cmd_init_ignore, main
 from lgrep.cli import _cmd_search_semantic as _cmd_search
-from lgrep.cli import main
 from lgrep.indexing import IndexStatus
 from lgrep.storage import SearchResult, SearchResults
 
@@ -59,6 +59,16 @@ class TestCLIDispatch:
             rc = main()
         assert rc == 0
         mock_index.assert_called_once_with(["--help"])
+
+    def test_main_dispatches_to_init_ignore(self):
+        """'lgrep init-ignore' should dispatch to _cmd_init_ignore."""
+        with (
+            patch("sys.argv", ["lgrep", "init-ignore", "--help"]),
+            patch("lgrep.cli._cmd_init_ignore", return_value=0) as mock_init,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_init.assert_called_once_with(["--help"])
 
     def test_main_server_defaults_to_stdio(self):
         """No subcommand should start MCP server with stdio defaults."""
@@ -476,3 +486,42 @@ class TestCmdIndexExecution:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "Disk full" in data["error"]
+
+
+class TestCmdInitIgnore:
+    def test_init_ignore_help(self, capsys):
+        rc = _cmd_init_ignore(["--help"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "init-ignore" in out
+        assert "--force" in out
+
+    def test_init_ignore_creates_file(self, tmp_path, capsys):
+        rc = _cmd_init_ignore([str(tmp_path)])
+        assert rc == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["created"] is True
+        assert (tmp_path / ".lgrepignore").exists()
+
+    def test_init_ignore_no_overwrite_without_force(self, tmp_path, capsys):
+        ignore_file = tmp_path / ".lgrepignore"
+        ignore_file.write_text("custom\n")
+
+        rc = _cmd_init_ignore([str(tmp_path)])
+        assert rc == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["created"] is False
+        assert ignore_file.read_text() == "custom\n"
+
+    def test_init_ignore_force_overwrites(self, tmp_path, capsys):
+        ignore_file = tmp_path / ".lgrepignore"
+        ignore_file.write_text("custom\n")
+
+        rc = _cmd_init_ignore(["--force", str(tmp_path)])
+        assert rc == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["created"] is True
+        assert ignore_file.read_text() != "custom\n"

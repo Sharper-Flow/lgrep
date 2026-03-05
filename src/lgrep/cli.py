@@ -32,6 +32,9 @@ def main() -> int:
     if args and args[0] in ("index-symbols",):
         return _cmd_index_symbols(args[1:])
 
+    if args and args[0] in ("init-ignore", "init-lgrepignore"):
+        return _cmd_init_ignore(args[1:])
+
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
@@ -91,6 +94,7 @@ def _print_help() -> None:
     print("  index-semantic [path]          index a project for semantic search")
     print("  search-symbols <query> [path]  symbol search (one-shot, no server)")
     print("  index-symbols [path]           index symbols for a project")
+    print("  init-ignore [path]             create recommended .lgrepignore")
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
@@ -213,6 +217,64 @@ def _cmd_search_semantic(args: list[str]) -> int:
         return 0
     except Exception as e:
         print(json.dumps({"error": str(e)}))
+        return 1
+
+
+def _cmd_init_ignore(args: list[str]) -> int:
+    """Create a recommended .lgrepignore file in a project.
+
+    Usage: lgrep init-ignore [path] [--force]
+    """
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep init-ignore [path] [--force]")
+        print()
+        print("Create a recommended .lgrepignore file in the project root.")
+        print()
+        print("arguments:")
+        print("  path                           project path (default: current directory)")
+        print()
+        print("options:")
+        print("  --force                        overwrite existing .lgrepignore")
+        return 0
+
+    from pathlib import Path
+
+    from lgrep.discovery import scaffold_lgrepignore
+
+    force = False
+    positional = []
+
+    i = 0
+    while i < len(args):
+        if args[i] == "--force":
+            force = True
+            i += 1
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            positional.append(args[i])
+            i += 1
+
+    path = Path(positional[0]).resolve() if positional else Path.cwd().resolve()
+    if not path.exists() or not path.is_dir():
+        print(json.dumps({"error": f"Path does not exist or is not a directory: {path}"}))
+        return 1
+
+    try:
+        lgrepignore_path, created = scaffold_lgrepignore(path, force=force)
+        print(
+            json.dumps(
+                {
+                    "path": str(lgrepignore_path),
+                    "created": created,
+                    "message": "created" if created else "already_exists",
+                }
+            )
+        )
+        return 0
+    except OSError as e:
+        print(json.dumps({"error": f"Failed to write .lgrepignore: {e}"}))
         return 1
 
 
