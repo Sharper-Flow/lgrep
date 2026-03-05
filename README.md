@@ -43,7 +43,7 @@ We wanted the best retrieval quality available, at low cost, without handing our
 | **Offline** | Yes | No | Symbol engine: Yes; Semantic: No |
 | **Web search** | No | Yes | No |
 | **Setup effort** | None | Minimal | Moderate (API key for semantic) |
-| **Maturity** | Decades | Production | v2.0.0 |
+| **Maturity** | Decades | Production | **Production (v2.0)** |
 
 ## How it works
 
