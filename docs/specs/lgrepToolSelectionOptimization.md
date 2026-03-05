@@ -1,7 +1,7 @@
 # LgrepToolSelectionOptimization
 
-> **Version:** 1.1.0
-> **Updated:** 2026-02-08
+> **Version:** 2.0.0
+> **Updated:** 2026-03-05
 
 ## Purpose
 
@@ -13,13 +13,13 @@ Capability: LgrepToolSelectionOptimization
 
 **ID:** `rq-1` | **Priority:** **[MUST]**
 
-Agents MUST prefer `lgrep_search` as the first search action for intent-based code discovery prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
+Agents MUST prefer `lgrep_search_semantic` as the first search action for intent-based code discovery prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
 
 **Tags:** `tool-selection`, `semantic-search`
 
 #### Scenarios
 
-**Semantic prompts choose lgrep first** (`rq-1.1`)
+**Semantic prompts choose lgrep_search_semantic first** (`rq-1.1`)
 
 **Given:**
 - A fixed semantic-discovery prompt fixture set
@@ -27,7 +27,7 @@ Agents MUST prefer `lgrep_search` as the first search action for intent-based co
 **When:** The tool-choice harness runs
 
 **Then:**
-- `lgrep_search` is selected as first search action in at least 90% of fixture cases
+- `lgrep_search_semantic` is selected as first search action in at least 90% of fixture cases
 
 ---
 
@@ -35,21 +35,21 @@ Agents MUST prefer `lgrep_search` as the first search action for intent-based co
 
 **ID:** `rq-2` | **Priority:** **[MUST]**
 
-Agents MUST prefer exact-match tools for exact identifier and regex prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
+Agents MUST prefer `lgrep_search_symbols` for exact symbol name lookups and exact-match tools for regex prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
 
-**Tags:** `tool-selection`, `exact-match`
+**Tags:** `tool-selection`, `exact-match`, `symbol-search`
 
 #### Scenarios
 
-**Exact prompts avoid semantic-first behavior** (`rq-2.1`)
+**Exact symbol prompts choose lgrep_search_symbols first** (`rq-2.1`)
 
 **Given:**
-- A fixed exact-identifier and regex prompt fixture set
+- A fixed exact-identifier and symbol-name prompt fixture set
 
 **When:** The tool-choice harness runs
 
 **Then:**
-- Exact-match tools are selected as first search action in at least 90% of fixture cases
+- `lgrep_search_symbols` or other exact-match tools are selected as first search action in at least 90% of fixture cases
 
 ---
 
@@ -310,5 +310,69 @@ Lifecycle operations MUST emit structured status markers and auditable artifacts
 
 **Then:**
 - Artifacts include enough context to diagnose failure and trace authorization
+
+---
+
+### Dual-engine routing decision matrix is documented and enforced
+
+**ID:** `rq-10` | **Priority:** **[MUST]**
+
+Agents MUST route search requests to the correct engine based on query intent. The dual-engine routing decision matrix MUST be documented in SKILL.md and README.md and MUST be enforced by agent tool-choice behavior.
+
+**Tags:** `tool-selection`, `dual-engine`, `routing`, `documentation`
+
+#### Routing matrix
+
+| Query intent | Engine | Tool |
+|---|---|---|
+| Intent/concept discovery | Semantic | `lgrep_search_semantic` |
+| Find symbol by name | Symbol | `lgrep_search_symbols` |
+| File structure overview | Symbol | `lgrep_get_file_outline` |
+| Repo structure overview | Symbol | `lgrep_get_repo_outline` |
+| Exact text/identifier | Symbol or Grep | `lgrep_search_text` or `Grep` |
+| Get symbol source | Symbol | `lgrep_get_symbol` |
+| Known-file review | N/A | `Read` |
+
+#### Scenarios
+
+**Semantic intent routes to lgrep_search_semantic** (`rq-10.1`)
+
+**Given:**
+- A prompt expressing intent-based discovery ("where is auth enforced?")
+
+**When:** The tool-choice harness runs
+
+**Then:**
+- `lgrep_search_semantic` is selected, not `lgrep_search_symbols` or `Grep`
+
+**Symbol name intent routes to lgrep_search_symbols** (`rq-10.2`)
+
+**Given:**
+- A prompt expressing exact symbol lookup ("find the authenticate function")
+
+**When:** The tool-choice harness runs
+
+**Then:**
+- `lgrep_search_symbols` is selected, not `lgrep_search_semantic`
+
+**File outline intent routes to lgrep_get_file_outline** (`rq-10.3`)
+
+**Given:**
+- A prompt requesting file structure ("what functions are in src/auth.py?")
+
+**When:** The tool-choice harness runs
+
+**Then:**
+- `lgrep_get_file_outline` is selected
+
+**Routing matrix is documented** (`rq-10.4`)
+
+**Given:**
+- README.md and SKILL.md
+
+**When:** Documentation is reviewed
+
+**Then:**
+- Both documents contain a tool-selection decision matrix covering all 7 routing cases
 
 ---

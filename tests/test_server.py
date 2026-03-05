@@ -211,29 +211,41 @@ class TestAcceptanceToolChoiceAndOnboarding:
     # -- Scenario Matrix (fixed denominator) --
     # (prompt, expected_tool, doc_keyword_that_steers_agent)
     SEMANTIC_SCENARIOS = [
-        ("where is auth enforced between API and service layer?", "lgrep_search", "Intent search"),
-        ("how does the rate limiter work?", "lgrep_search", "Code exploration"),
-        ("find the error handling strategy", "lgrep_search", "concept"),
-        ("what middleware runs before route handlers?", "lgrep_search", "Feature discovery"),
-        ("how are database connections pooled?", "lgrep_search", "Natural language"),
-        ("where is user input validated?", "lgrep_search", "Intent search"),
-        ("explain the caching strategy", "lgrep_search", "Code exploration"),
-        ("how are background jobs scheduled?", "lgrep_search", "find implementation"),
-        ("where are permissions checked?", "lgrep_search", "Intent search"),
-        ("how does retry logic work for failed requests?", "lgrep_search", "Natural language"),
+        (
+            "where is auth enforced between API and service layer?",
+            "lgrep_search_semantic",
+            "Intent search",
+        ),
+        ("how does the rate limiter work?", "lgrep_search_semantic", "Code exploration"),
+        ("find the error handling strategy", "lgrep_search_semantic", "concept"),
+        (
+            "what middleware runs before route handlers?",
+            "lgrep_search_semantic",
+            "find implementation",
+        ),
+        ("how are database connections pooled?", "lgrep_search_semantic", "Natural language"),
+        ("where is user input validated?", "lgrep_search_semantic", "Intent search"),
+        ("explain the caching strategy", "lgrep_search_semantic", "Code exploration"),
+        ("how are background jobs scheduled?", "lgrep_search_semantic", "find implementation"),
+        ("where are permissions checked?", "lgrep_search_semantic", "Intent search"),
+        (
+            "how does retry logic work for failed requests?",
+            "lgrep_search_semantic",
+            "Natural language",
+        ),
     ]
 
     EXACT_SCENARIOS = [
-        ("find all references to verifyToken", "grep", "Exact matches"),
-        ("grep for handleError function", "grep", "Symbol tracing"),
-        ("find all usages of UserService class", "grep", "Refactoring"),
-        ("search for imports of lodash", "grep", "Exact matches"),
-        ("find all TODO comments", "grep", "Regex patterns"),
-        ("list all files matching *.test.ts", "grep", "Exact matches"),
-        ("find where MAX_RETRIES is defined", "grep", "Symbol tracing"),
+        ("find all references to verifyToken", "grep", "exact identifier"),
+        ("grep for handleError function", "grep", "symbol search"),
+        ("find all usages of UserService class", "grep", "refactoring"),
+        ("search for imports of lodash", "grep", "exact identifier"),
+        ("find all TODO comments", "grep", "regex"),
+        ("list all files matching *.test.ts", "grep", "exact identifier"),
+        ("find where MAX_RETRIES is defined", "grep", "symbol search"),
         ("open src/auth/jwt.ts and explain line 42", "read", "read"),
         ("show me the contents of package.json", "read", "read"),
-        ("find all occurrences of console.log", "grep", "Exact matches"),
+        ("find all occurrences of console.log", "grep", "exact identifier"),
     ]
 
     PASS_THRESHOLD = 0.9  # >=90% of scenarios must have doc coverage
@@ -243,7 +255,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         skill_path = Path(__file__).resolve().parents[1] / "skills" / "lgrep" / "SKILL.md"
         content = skill_path.read_text(encoding="utf-8")
 
-        assert "call `lgrep_search` first" in content
+        assert "call `lgrep_search_semantic` first" in content
         assert "Intent search" in content
 
     def test_skill_documents_exact_match_policy(self):
