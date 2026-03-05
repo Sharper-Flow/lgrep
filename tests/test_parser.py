@@ -270,6 +270,33 @@ class TestPythonExtractor:
         assert by_name["UserService"].kind == "class"
         assert by_name["get_user"].kind == "method"
 
+    def test_method_ids_are_disambiguated_by_parent_class(self, tmp_path):
+        """Methods with same name in different classes must have unique IDs."""
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "dupe_methods.py"
+        src_file.write_text(
+            """
+class A:
+    def run(self):
+        pass
+
+class B:
+    def run(self):
+        pass
+"""
+        )
+
+        extractor = SymbolExtractor()
+        symbols = extractor.extract(src_file, repo_root=tmp_path)
+
+        run_methods = [s for s in symbols if s.name == "run" and s.kind == "method"]
+        ids = {s.id for s in run_methods}
+        assert len(run_methods) == 2
+        assert len(ids) == 2
+        assert "dupe_methods.py:method:A.run" in ids
+        assert "dupe_methods.py:method:B.run" in ids
+
     def test_byte_offsets_are_correct(self, tmp_path):
         """start_byte and end_byte must point to the actual symbol in the file."""
         from lgrep.parser.extractor import SymbolExtractor

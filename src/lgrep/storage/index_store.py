@@ -42,6 +42,17 @@ class CodeIndex:
     version: str = "2.0"
 
 
+def normalize_repo_key(repo_path: str) -> str:
+    """Normalize a repository identifier used for index storage lookup.
+
+    Local repositories are normalized to absolute resolved paths.
+    GitHub repositories use symbolic keys in the form "github:owner/name@ref".
+    """
+    if repo_path.startswith("github:"):
+        return repo_path
+    return str(Path(repo_path).resolve())
+
+
 def _repo_key(repo_path: str) -> str:
     """Generate a stable filename key for a repo path."""
     return hashlib.sha256(repo_path.encode()).hexdigest()[:16]
@@ -85,22 +96,23 @@ class IndexStore:
         Args:
             index: The CodeIndex to persist
         """
+        normalized_repo = normalize_repo_key(index.repo_path)
         self._dir.mkdir(parents=True, exist_ok=True)
-        target = self._index_path(index.repo_path)
+        target = self._index_path(normalized_repo)
         tmp = target.with_suffix(".tmp")
 
         try:
             data = {
-                "repo_path": index.repo_path,
+                "repo_path": normalized_repo,
                 "files": index.files,
                 "symbols": index.symbols,
                 "version": index.version,
             }
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.rename(target)
-            log.debug("index_saved", repo=index.repo_path, symbols=len(index.symbols))
+            log.debug("index_saved", repo=normalized_repo, symbols=len(index.symbols))
         except OSError as e:
-            log.error("index_save_failed", repo=index.repo_path, error=str(e))
+            log.error("index_save_failed", repo=normalized_repo, error=str(e))
             # Clean up temp file if it exists
             try:
                 tmp.unlink(missing_ok=True)
@@ -117,7 +129,8 @@ class IndexStore:
         Returns:
             CodeIndex if found, None if not indexed yet
         """
-        index_file = self._index_path(repo_path)
+        normalized_repo = normalize_repo_key(repo_path)
+        index_file = self._index_path(normalized_repo)
         if not index_file.exists():
             return None
 
@@ -130,7 +143,7 @@ class IndexStore:
                 version=data.get("version", "2.0"),
             )
         except (json.JSONDecodeError, KeyError, OSError) as e:
-            log.warning("index_load_failed", repo=repo_path, error=str(e))
+            log.warning("index_load_failed", repo=normalized_repo, error=str(e))
             return None
 
     def list_repos(self) -> list[str]:
@@ -158,12 +171,13 @@ class IndexStore:
         Args:
             repo_path: Absolute path to the repository root
         """
-        index_file = self._index_path(repo_path)
+        normalized_repo = normalize_repo_key(repo_path)
+        index_file = self._index_path(normalized_repo)
         try:
             index_file.unlink(missing_ok=True)
-            log.info("index_deleted", repo=repo_path)
+            log.info("index_deleted", repo=normalized_repo)
         except OSError as e:
-            log.warning("index_delete_failed", repo=repo_path, error=str(e))
+            log.warning("index_delete_failed", repo=normalized_repo, error=str(e))
 
     def detect_changes(
         self,

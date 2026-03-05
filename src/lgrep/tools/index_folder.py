@@ -78,8 +78,12 @@ def index_folder(
 
         symbols = _extractor.extract(file_path, repo_root=root)
         for sym in symbols:
-            symbols_dict[sym.id] = {
-                "id": sym.id,
+            symbol_id = sym.id
+            if symbol_id in symbols_dict:
+                symbol_id = f"{sym.id}@{sym.start_byte}"
+
+            symbols_dict[symbol_id] = {
+                "id": symbol_id,
                 "name": sym.name,
                 "kind": sym.kind,
                 "file_path": sym.file_path,

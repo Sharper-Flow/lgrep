@@ -124,6 +124,14 @@ class TestIndexFolder:
         result = index_folder(str(tmp_repo), storage_dir=tmp_store)
         assert "tokens_saved" in result["_meta"]
 
+    def test_meta_has_persistent_token_fields(self, tmp_repo, tmp_store):
+        from lgrep.tools.index_folder import index_folder
+
+        result = index_folder(str(tmp_repo), storage_dir=tmp_store)
+        assert "session_tokens" in result["_meta"]
+        assert "total_tokens" in result["_meta"]
+        assert "cost_avoided_usd" in result["_meta"]
+
     def test_reports_indexed_files(self, tmp_repo, tmp_store):
         from lgrep.tools.index_folder import index_folder
 
@@ -186,6 +194,102 @@ class TestListRepos:
 
         result = list_repos(storage_dir=tmp_store)
         assert "_meta" in result
+
+
+# ── index_repo ────────────────────────────────────────────────────────────────
+
+
+class TestIndexRepo:
+    @pytest.mark.asyncio
+    async def test_remote_repo_round_trip_queryable(self, tmp_store, monkeypatch):
+        from lgrep.parser.symbols import Symbol
+        from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.index_repo import index_repo
+        from lgrep.tools.invalidate_cache import invalidate_cache
+        from lgrep.tools.search_symbols import search_symbols
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                del args, kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={
+                            "truncated": False,
+                            "tree": [{"type": "blob", "path": "src/auth.py"}],
+                        }
+                    )
+                return _FakeResponse(content=b"def authenticate(user):\n    return True\n")
+
+        class _FakeTree:
+            root_node = object()
+
+        class _FakeParser:
+            def parse(self, _content):
+                return _FakeTree()
+
+        import httpx
+        import tree_sitter_language_pack
+        import lgrep.parser.extractor as extractor_mod
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.setattr(tree_sitter_language_pack, "get_parser", lambda _name: _FakeParser())
+        monkeypatch.setattr(
+            extractor_mod,
+            "_extract_symbols_from_tree",
+            lambda *_args, **_kwargs: [
+                Symbol(
+                    id="src/auth.py:function:authenticate",
+                    name="authenticate",
+                    kind="function",
+                    file_path="src/auth.py",
+                    start_byte=0,
+                    end_byte=24,
+                )
+            ],
+        )
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+        assert "error" not in result
+        assert result["symbols_indexed"] == 1
+
+        repo_key = "github:owner/repo@main"
+        search = search_symbols("authenticate", repo_key, storage_dir=tmp_store)
+        assert "error" not in search
+        assert search["total_matches"] == 1
+
+        symbol_id = search["results"][0]["id"]
+        lookup = get_symbol(symbol_id, repo_key, storage_dir=tmp_store)
+        assert "error" not in lookup
+        assert lookup["symbol"]["name"] == "authenticate"
+
+        invalidated = invalidate_cache(repo_key, storage_dir=tmp_store)
+        assert invalidated["status"] == "deleted"
 
 
 # ── get_file_tree ─────────────────────────────────────────────────────────────
@@ -287,6 +391,27 @@ class TestGetFileOutline:
         result = get_file_outline("/nonexistent/file.py")
         assert "error" in result
 
+    def test_duplicate_method_names_get_unique_ids(self, tmp_repo):
+        from lgrep.tools.get_file_outline import get_file_outline
+
+        dupes = tmp_repo / "src" / "dupes.py"
+        dupes.write_text(
+            """
+class A:
+    def run(self):
+        pass
+
+class B:
+    def run(self):
+        pass
+"""
+        )
+
+        result = get_file_outline(str(dupes), repo_root=str(tmp_repo))
+        run_ids = [s["id"] for s in result["symbols"] if s.get("name") == "run"]
+        assert len(run_ids) == 2
+        assert len(set(run_ids)) == 2
+
 
 # ── get_repo_outline ──────────────────────────────────────────────────────────
 
@@ -387,6 +512,22 @@ class TestSearchSymbols:
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         result = search_symbols("zzz_no_such_symbol_xyz", str(tmp_repo), storage_dir=tmp_store)
         assert result["results"] == []
+
+    def test_overloaded_symbols_get_unique_ids(self, tmp_repo, tmp_store):
+        from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
+
+        py_file = tmp_repo / "src" / "overloads.py"
+        py_file.write_text(
+            "def parse(value: str):\n    return value\n\ndef parse(value: int):\n    return value\n"
+        )
+
+        index_folder(str(tmp_repo), storage_dir=tmp_store)
+        result = search_symbols("parse", str(tmp_repo), storage_dir=tmp_store)
+        ids = [row["id"] for row in result["results"] if row.get("name") == "parse"]
+
+        assert len(ids) >= 2
+        assert len(set(ids)) == len(ids)
 
 
 # ── search_text ───────────────────────────────────────────────────────────────
@@ -497,6 +638,43 @@ class TestGetSymbol:
             "src/auth.py:function:nonexistent_xyz", str(tmp_repo), storage_dir=tmp_store
         )
         assert "error" in result
+
+    def test_github_index_symbol_fetches_source(self, tmp_store, monkeypatch):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+        from lgrep.tools.get_symbol import get_symbol
+
+        class _FakeResponse:
+            content = b"def authenticate(user):\n    return True\n"
+
+            def raise_for_status(self):
+                return None
+
+        import httpx
+
+        monkeypatch.setattr(httpx, "get", lambda *_args, **_kwargs: _FakeResponse())
+
+        repo_key = "github:owner/repo@main"
+        store = IndexStore(storage_dir=tmp_store)
+        store.save(
+            CodeIndex(
+                repo_path=repo_key,
+                files={"src/auth.py": "hash"},
+                symbols={
+                    "src/auth.py:function:authenticate": {
+                        "id": "src/auth.py:function:authenticate",
+                        "name": "authenticate",
+                        "kind": "function",
+                        "file_path": "src/auth.py",
+                        "start_byte": 0,
+                        "end_byte": 16,
+                    }
+                },
+            )
+        )
+
+        result = get_symbol("src/auth.py:function:authenticate", repo_key, storage_dir=tmp_store)
+        assert "error" not in result
+        assert result["symbol"]["source"] == "def authenticate"
 
 
 # ── get_symbols (batch) ───────────────────────────────────────────────────────

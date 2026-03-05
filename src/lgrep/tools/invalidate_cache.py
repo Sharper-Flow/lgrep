@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from lgrep.storage.index_store import IndexStore
+from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.tools._meta import make_meta
 
 
@@ -31,19 +31,19 @@ def invalidate_cache(
     t0 = time.monotonic()
     store = IndexStore(storage_dir=storage_dir)
 
-    resolved = str(Path(repo_path).resolve())
-    existing = store.load(resolved)
+    repo_key = normalize_repo_key(repo_path)
+    existing = store.load(repo_key)
 
     if existing is None:
         return {
             "status": "not_found",
-            "repo_path": resolved,
+            "repo_path": repo_key,
             "_meta": make_meta(t0),
         }
 
-    store.delete_index(resolved)
+    store.delete_index(repo_key)
     return {
         "status": "deleted",
-        "repo_path": resolved,
+        "repo_path": repo_key,
         "_meta": make_meta(t0),
     }

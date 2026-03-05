@@ -15,17 +15,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-def make_symbol_id(file_path: str, kind: str, name: str) -> str:
+def make_symbol_id(file_path: str, kind: str, name: str, parent: str | None = None) -> str:
     """Generate a deterministic, stable symbol ID.
 
     Args:
         file_path: Relative or absolute path to the source file
         kind: Symbol kind (function, class, method, interface, etc.)
         name: Symbol name
+        parent: Optional parent symbol name (e.g. class name for methods)
 
     Returns:
-        Stable string ID in format "file_path:kind:name"
+        Stable string ID in format "file_path:kind:name".
+        Methods include parent context when available:
+        "file_path:method:Parent.name"
     """
+    if parent:
+        return f"{file_path}:{kind}:{parent}.{name}"
     return f"{file_path}:{kind}:{name}"
 
 
@@ -52,5 +57,5 @@ class Symbol:
     start_byte: int
     end_byte: int
     docstring: str | None = None
-    decorators: list[str] = field(default_factory=list)
+    decorators: list[str] | None = field(default_factory=list)
     parent: str | None = None

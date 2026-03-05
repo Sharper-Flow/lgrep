@@ -50,7 +50,7 @@ def test_pathspec_gitignore_pattern():
     """pathspec must correctly match gitignore-style patterns."""
     import pathspec
 
-    spec = pathspec.PathSpec.from_lines("gitwildmatch", ["*.pyc", "node_modules/", "__pycache__/"])
+    spec = pathspec.PathSpec.from_lines("gitignore", ["*.pyc", "node_modules/", "__pycache__/"])
     assert spec.match_file("foo.pyc")
     assert spec.match_file("node_modules/lodash/index.js")
     assert not spec.match_file("src/main.py")

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
-from typing import Any
+
+from lgrep.storage.token_tracker import TokenTracker
+
+_TRACKER = TokenTracker()
 
 
 def make_meta(start_time: float, tokens_saved: int = 0) -> dict:
@@ -15,12 +17,19 @@ def make_meta(start_time: float, tokens_saved: int = 0) -> dict:
         tokens_saved: estimated tokens saved by this operation
 
     Returns:
-        Dict with timing_ms and tokens_saved fields
+        Dict with timing and token-savings fields, including persistent totals
     """
     elapsed_ms = (time.monotonic() - start_time) * 1000
+    _TRACKER.record_savings(tokens_saved)
+    _TRACKER.flush()
+
+    tracker_meta = _TRACKER.meta()
     return {
         "timing_ms": round(elapsed_ms, 2),
         "tokens_saved": tokens_saved,
+        "session_tokens": tracker_meta["session_tokens"],
+        "total_tokens": tracker_meta["total_tokens"],
+        "cost_avoided_usd": tracker_meta["cost_avoided_usd"],
     }
 
 

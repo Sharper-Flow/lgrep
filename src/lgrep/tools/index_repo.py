@@ -125,12 +125,14 @@ async def index_repo(
             try:
                 parser = get_parser(spec.name)
                 tree = parser.parse(content)
-                from lgrep.parser.symbols import make_symbol_id
-
                 syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
                 for sym in syms:
-                    symbols_dict[sym.id] = {
-                        "id": sym.id,
+                    symbol_id = sym.id
+                    if symbol_id in symbols_dict:
+                        symbol_id = f"{sym.id}@{sym.start_byte}"
+
+                    symbols_dict[symbol_id] = {
+                        "id": symbol_id,
                         "name": sym.name,
                         "kind": sym.kind,
                         "file_path": sym.file_path,

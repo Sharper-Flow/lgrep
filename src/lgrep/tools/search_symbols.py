@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from lgrep.storage.index_store import IndexStore
+from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
 
@@ -45,12 +45,8 @@ def search_symbols(
 
     store = IndexStore(storage_dir=storage_dir)
 
-    # Resolve repo_path to match what index_folder stores
-    from pathlib import Path as _Path
-
-    resolved = str(_Path(repo_path).resolve())
-
-    index = store.load(resolved)
+    repo_key = normalize_repo_key(repo_path)
+    index = store.load(repo_key)
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",

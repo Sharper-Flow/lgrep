@@ -35,20 +35,29 @@ def build_file_outline(file_path: Path | str, repo_root: Path | None = None) -> 
     file_path = Path(file_path)
     symbols = _extractor.extract(file_path, repo_root=repo_root)
 
-    return {
-        "file_path": str(file_path),
-        "symbols": [
+    seen_ids: set[str] = set()
+    serialized_symbols = []
+    for s in symbols:
+        symbol_id = s.id
+        if symbol_id in seen_ids:
+            symbol_id = f"{s.id}@{s.start_byte}"
+        seen_ids.add(symbol_id)
+        serialized_symbols.append(
             {
-                "id": s.id,
+                "id": symbol_id,
                 "name": s.name,
                 "kind": s.kind,
                 "start_byte": s.start_byte,
                 "end_byte": s.end_byte,
                 "docstring": s.docstring,
                 "decorators": s.decorators,
+                "parent": s.parent,
             }
-            for s in symbols
-        ],
+        )
+
+    return {
+        "file_path": str(file_path),
+        "symbols": serialized_symbols,
         "symbol_count": len(symbols),
     }
 

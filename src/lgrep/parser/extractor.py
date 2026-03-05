@@ -9,15 +9,10 @@ Uses tree-sitter-language-pack for pre-built parsers (165+ languages).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 import structlog
 
 from lgrep.parser.languages import LanguageSpec, get_language_spec
 from lgrep.parser.symbols import Symbol, make_symbol_id
-
-if TYPE_CHECKING:
-    pass
 
 log = structlog.get_logger()
 
@@ -122,6 +117,16 @@ def _is_inside_class(node) -> bool:
     return False
 
 
+def _get_enclosing_class_name(node, source: bytes) -> str | None:
+    """Return enclosing class name for class methods, if present."""
+    current = node.parent
+    while current is not None:
+        if current.type in ("class_definition", "class_declaration"):
+            return _get_node_name(current, source)
+        current = current.parent
+    return None
+
+
 def _extract_symbols_from_tree(
     root_node,
     source: bytes,
@@ -155,7 +160,8 @@ def _extract_symbols_from_tree(
                 else:
                     kind = "symbol"
 
-                sym_id = make_symbol_id(file_path, kind, name)
+                parent_name = _get_enclosing_class_name(node, source) if kind == "method" else None
+                sym_id = make_symbol_id(file_path, kind, name, parent=parent_name)
 
                 # Extract docstring (Python only for now)
                 docstring = None
@@ -180,6 +186,7 @@ def _extract_symbols_from_tree(
                         end_byte=node.end_byte,
                         docstring=docstring,
                         decorators=decorators if decorators else None,
+                        parent=parent_name,
                     )
                 )
 
