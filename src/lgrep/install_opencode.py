@@ -107,8 +107,8 @@ def _print_daemon_instructions() -> None:
     print("─── Option B: run manually ─────────────────────────────────────────")
     print()
     print("  VOYAGE_API_KEY=your-key \\")
-    print("  LGREP_WARM_PATHS=/path/to/project \\
-  LGREP_AUTO_WATCH=true \\")
+    print("  LGREP_WARM_PATHS=/path/to/project \\")
+    print("  LGREP_AUTO_WATCH=true \\")
     print(f"  {lgrep_bin} --transport streamable-http --port 6285")
     print()
     print("Then open OpenCode — the agent will discover lgrep automatically.")
