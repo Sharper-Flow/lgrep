@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lgrep.cli import _cmd_index, _cmd_search, main
+from lgrep.cli import _cmd_index_semantic as _cmd_index
+from lgrep.cli import _cmd_search_semantic as _cmd_search
+from lgrep.cli import main
 from lgrep.indexing import IndexStatus
 from lgrep.storage import SearchResult, SearchResults
 
@@ -26,8 +28,8 @@ class TestCLIDispatch:
             rc = main()
         assert rc == 0
         out = capsys.readouterr().out
-        assert "search" in out
-        assert "index" in out
+        assert "search-semantic" in out
+        assert "index-semantic" in out
         assert "remove" in out
 
     def test_main_unknown_arg(self, capsys):
@@ -39,20 +41,20 @@ class TestCLIDispatch:
         assert "Unknown" in err
 
     def test_main_dispatches_to_search(self):
-        """'lgrep search' should dispatch to _cmd_search."""
+        """'lgrep search-semantic' should dispatch to _cmd_search_semantic."""
         with (
-            patch("sys.argv", ["lgrep", "search", "--help"]),
-            patch("lgrep.cli._cmd_search", return_value=0) as mock_search,
+            patch("sys.argv", ["lgrep", "search-semantic", "--help"]),
+            patch("lgrep.cli._cmd_search_semantic", return_value=0) as mock_search,
         ):
             rc = main()
         assert rc == 0
         mock_search.assert_called_once_with(["--help"])
 
     def test_main_dispatches_to_index(self):
-        """'lgrep index' should dispatch to _cmd_index."""
+        """'lgrep index-semantic' should dispatch to _cmd_index_semantic."""
         with (
-            patch("sys.argv", ["lgrep", "index", "--help"]),
-            patch("lgrep.cli._cmd_index", return_value=0) as mock_index,
+            patch("sys.argv", ["lgrep", "index-semantic", "--help"]),
+            patch("lgrep.cli._cmd_index_semantic", return_value=0) as mock_index,
         ):
             rc = main()
         assert rc == 0
@@ -105,7 +107,7 @@ class TestCmdSearchArgParsing:
     """Tests for _cmd_search argument parsing."""
 
     def test_search_help(self, capsys):
-        """search --help should print search-specific help and exit 0."""
+        """search-semantic --help should print search-specific help and exit 0."""
         rc = _cmd_search(["--help"])
         assert rc == 0
         out = capsys.readouterr().out

@@ -20,11 +20,11 @@ def main() -> int:
     args = sys.argv[1:]
 
     # Subcommand dispatch
-    if args and args[0] == "search":
-        return _cmd_search(args[1:])
+    if args and args[0] in ("search", "search-semantic"):
+        return _cmd_search_semantic(args[1:])
 
-    if args and args[0] == "index":
-        return _cmd_index(args[1:])
+    if args and args[0] in ("index", "index-semantic"):
+        return _cmd_index_semantic(args[1:])
 
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
@@ -77,21 +77,23 @@ def _print_help() -> None:
     """Print CLI help text."""
     print("usage: lgrep [command] [options]")
     print()
-    print("Semantic code search MCP server.")
+    print("Dual-engine code intelligence MCP server (semantic search + symbol intelligence).")
     print()
     print("commands:")
     print("  (default)                      start MCP server")
-    print("  search <query> [path]          search indexed project (one-shot, no server)")
-    print("  index [path]                   index a project for semantic search")
+    print("  search-semantic <query> [path] semantic search (one-shot, no server)")
+    print("  index-semantic [path]          index a project for semantic search")
+    print("  search-symbols <query> [path]  symbol search (one-shot, no server)")
+    print("  index-symbols [path]           index symbols for a project")
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
     print()
-    print("search options:")
+    print("search-semantic options:")
     print("  -m, --limit N                  max results (default: 10)")
     print("  --no-hybrid                    vector-only search (skip keyword matching)")
     print()
-    print("index options:")
+    print("index-semantic options:")
     print("  --chunk-size N                 token size per chunk (default: 500)")
     print()
     print("server options:")
@@ -103,16 +105,16 @@ def _print_help() -> None:
     print("  --host HOST                    host for HTTP transport (default: 127.0.0.1)")
 
 
-def _cmd_search(args: list[str]) -> int:
+def _cmd_search_semantic(args: list[str]) -> int:
     """One-shot semantic search against an already-indexed project.
 
     Bypasses the MCP server entirely — creates an embedder and ChunkStore
     directly, embeds the query, runs hybrid search, and prints JSON to stdout.
 
-    Usage: lgrep search <query> [path] [-m N] [--no-hybrid]
+    Usage: lgrep search-semantic <query> [path] [-m N] [--no-hybrid]
     """
     if "--help" in args or "-h" in args:
-        print("usage: lgrep search <query> [path] [-m N] [--no-hybrid]")
+        print("usage: lgrep search-semantic <query> [path] [-m N] [--no-hybrid]")
         print()
         print("Search an indexed project using semantic code search.")
         print()
@@ -155,7 +157,9 @@ def _cmd_search(args: list[str]) -> int:
             i += 1
 
     if not positional:
-        print("Error: query is required. Usage: lgrep search <query> [path]", file=sys.stderr)
+        print(
+            "Error: query is required. Usage: lgrep search-semantic <query> [path]", file=sys.stderr
+        )
         return 1
 
     query = positional[0]
@@ -180,8 +184,8 @@ def _cmd_search(args: list[str]) -> int:
         print(
             json.dumps(
                 {
-                    "error": f"No index found for {path}. Run 'lgrep index {path}' first.",
-                    "hint": "The lgrep MCP server auto-indexes on first search. Use the MCP tool (lgrep_search) instead of the CLI wrapper for automatic indexing.",
+                    "error": f"No index found for {path}. Run 'lgrep index-semantic {path}' first.",
+                    "hint": "The lgrep MCP server auto-indexes on first search. Use the MCP tool (lgrep_search_semantic) instead of the CLI wrapper for automatic indexing.",
                 }
             )
         )
@@ -206,16 +210,16 @@ def _cmd_search(args: list[str]) -> int:
         return 1
 
 
-def _cmd_index(args: list[str]) -> int:
+def _cmd_index_semantic(args: list[str]) -> int:
     """Index a project directory for semantic search.
 
     Creates an embedder and ChunkStore directly, performs a full index,
     and prints JSON status to stdout. Bypasses the MCP server entirely.
 
-    Usage: lgrep index [path] [--chunk-size N]
+    Usage: lgrep index-semantic [path] [--chunk-size N]
     """
     if "--help" in args or "-h" in args:
-        print("usage: lgrep index [path] [--chunk-size N]")
+        print("usage: lgrep index-semantic [path] [--chunk-size N]")
         print()
         print("Index a project directory for semantic code search.")
         print()

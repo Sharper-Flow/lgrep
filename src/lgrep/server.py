@@ -455,7 +455,7 @@ async def _execute_search(
 
 @mcp.tool()
 @time_tool
-async def search(
+async def search_semantic(
     query: str | None = None,
     path: str = "",
     limit: int = 10,
@@ -477,7 +477,7 @@ async def search(
     query = query or q
     limit = m if m is not None else limit
 
-    log.info("lgrep_search", query=query, project=path, limit=limit, hybrid=hybrid)
+    log.info("lgrep_search_semantic", query=query, project=path, limit=limit, hybrid=hybrid)
 
     if not query:
         return _error_response("Internal error: query or q is required")
@@ -498,7 +498,7 @@ async def search(
 
 @mcp.tool()
 @time_tool
-async def index(
+async def index_semantic(
     path: str,
     ctx: Context | None = None,
 ) -> str:
@@ -510,7 +510,7 @@ async def index(
     Returns:
         JSON with indexing status including file count, chunk count, and duration.
     """
-    log.info("lgrep_index", project=path)
+    log.info("lgrep_index_semantic", project=path)
 
     if not ctx:
         return _error_response("Internal error: Context missing")
@@ -546,7 +546,7 @@ async def index(
 
 @mcp.tool()
 @time_tool
-async def status(
+async def status_semantic(
     path: str = "",
     ctx: Context | None = None,
 ) -> str:
@@ -558,7 +558,7 @@ async def status(
     Returns:
         JSON with index stats: files, chunks, watching status.
     """
-    log.info("lgrep_status", project=path or "(all)")
+    log.info("lgrep_status_semantic", project=path or "(all)")
 
     if not ctx:
         return _error_response("Internal error: Context missing")
@@ -608,7 +608,7 @@ async def status(
 
 @mcp.tool()
 @time_tool
-async def watch_start(
+async def watch_start_semantic(
     path: str,
     ctx: Context | None = None,
 ) -> str:
@@ -620,7 +620,7 @@ async def watch_start(
     Returns:
         JSON with watching status.
     """
-    log.info("lgrep_watch_start", project=path)
+    log.info("lgrep_watch_start_semantic", project=path)
 
     if not ctx:
         return _error_response("Internal error: Context missing")
@@ -663,7 +663,7 @@ async def watch_start(
 
 @mcp.tool()
 @time_tool
-async def watch_stop(
+async def watch_stop_semantic(
     path: str = "",
     ctx: Context | None = None,
 ) -> str:
@@ -675,7 +675,7 @@ async def watch_stop(
     Returns:
         JSON with stopped status.
     """
-    log.info("lgrep_watch_stop", project=path or "(all)")
+    log.info("lgrep_watch_stop_semantic", project=path or "(all)")
 
     if not ctx:
         return _error_response("Internal error: Context missing")

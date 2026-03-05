@@ -1,7 +1,7 @@
 [project]
 name = "lgrep"
-version = "0.2.1"
-description = "Semantic code search MCP server using Voyage Code 3 embeddings and LanceDB"
+version = "2.0.0"
+description = "Dual-engine code intelligence MCP server: semantic search (Voyage Code 3 + LanceDB) and symbol intelligence (tree-sitter AST parsing)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -27,6 +27,8 @@ dependencies = [
     "gitignorefile>=1.1.0",
     "pydantic>=2.0.0",
     "structlog>=24.0.0",
+    "tree-sitter-language-pack>=0.7.0",
+    "pathspec>=0.12.0",
 ]
 
 [project.optional-dependencies]

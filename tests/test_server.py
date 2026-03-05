@@ -21,19 +21,19 @@ from lgrep.server import (
     remove_project,
 )
 from lgrep.server import (
-    index as lgrep_index,
+    index_semantic as lgrep_index,
 )
 from lgrep.server import (
-    search as lgrep_search,
+    search_semantic as lgrep_search,
 )
 from lgrep.server import (
-    status as lgrep_status,
+    status_semantic as lgrep_status,
 )
 from lgrep.server import (
-    watch_start as lgrep_watch_start,
+    watch_start_semantic as lgrep_watch_start,
 )
 from lgrep.server import (
-    watch_stop as lgrep_watch_stop,
+    watch_stop_semantic as lgrep_watch_stop,
 )
 from lgrep.storage import SearchResult, SearchResults
 
