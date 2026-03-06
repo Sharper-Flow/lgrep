@@ -543,10 +543,20 @@ async def search_semantic(
     return await _execute_search(app_ctx, state, query, limit, hybrid, project_path)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Build or refresh the semantic index for a local repository. "
+        "Use when semantic search results are stale or before first-time warmup in new environments. "
+        "Requires an absolute local path. MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+)
 @time_tool
 async def index_semantic(
-    path: str,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root to index."),
+    ],
     ctx: Context | None = None,
 ) -> str:
     """Index a directory for semantic search.
@@ -591,10 +601,20 @@ async def index_semantic(
         return _error_response("Indexing failed. Check server logs for details.")
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Return semantic index status and stats (files, chunks, watcher state). "
+        "Use with a path for one repo, or omit path for all loaded repos. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def status_semantic(
-    path: str = "",
+    path: Annotated[
+        str,
+        Field(description="Optional absolute repository path; omit to list all loaded projects."),
+    ] = "",
     ctx: Context | None = None,
 ) -> str:
     """Get index status and statistics.
@@ -653,10 +673,22 @@ async def status_semantic(
     return json.dumps({"projects": list(projects_status)})
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Start semantic file watching for a local repository to keep index data fresh on edits. "
+        "Use for long-running sessions where code changes during analysis. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    ),
+)
 @time_tool
 async def watch_start_semantic(
-    path: str,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root to watch."),
+    ],
     ctx: Context | None = None,
 ) -> str:
     """Start watching a directory for changes.
@@ -708,10 +740,22 @@ async def watch_start_semantic(
         return _error_response("Failed to start watcher. Check server logs for details.")
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Stop semantic file watching for one repository or all repositories. "
+        "Use to release watcher resources when active syncing is no longer needed. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    ),
+)
 @time_tool
 async def watch_stop_semantic(
-    path: str = "",
+    path: Annotated[
+        str,
+        Field(description="Optional absolute repository path; omit to stop all active watchers."),
+    ] = "",
     ctx: Context | None = None,
 ) -> str:
     """Stop watching for file changes.
@@ -752,12 +796,28 @@ async def watch_stop_semantic(
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Index symbols from a local repository for exact symbol lookup tools. "
+        "Run before symbol search/get operations, then refresh after major code changes. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False),
+)
 @time_tool
 async def index_symbols_folder(
-    path: str,
-    max_files: int = 500,
-    incremental: bool = True,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root for symbol indexing."),
+    ],
+    max_files: Annotated[
+        int,
+        Field(description="Maximum files to parse during this indexing run."),
+    ] = 500,
+    incremental: Annotated[
+        bool,
+        Field(description="Skip unchanged files when true; set false to force full rebuild."),
+    ] = True,
 ) -> str:
     """Index all symbols in a local folder for exact symbol lookup.
 
@@ -775,13 +835,32 @@ async def index_symbols_folder(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Index symbols directly from a GitHub repository via API without cloning locally. "
+        "Use for remote code exploration when a local checkout is unavailable. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
+)
 @time_tool
 async def index_symbols_repo(
-    repo: str,
-    ref: str = "HEAD",
-    max_files: int = 500,
-    github_token: str | None = None,
+    repo: Annotated[
+        str,
+        Field(description="GitHub repository in owner/name format (for example: anomalyco/lgrep)."),
+    ],
+    ref: Annotated[
+        str,
+        Field(description="Branch, tag, or commit SHA to index."),
+    ] = "HEAD",
+    max_files: Annotated[
+        int,
+        Field(description="Maximum files to fetch and parse from the remote repository."),
+    ] = 500,
+    github_token: Annotated[
+        str | None,
+        Field(description="Optional token for private repos or higher GitHub API limits."),
+    ] = None,
 ) -> str:
     """Index symbols from a GitHub repository via the REST API (no git clone).
 
@@ -798,7 +877,14 @@ async def index_symbols_repo(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "List repositories currently indexed in the symbol store. "
+        "Use to discover available repository keys before symbol queries. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def list_repos() -> str:
     """List all repositories that have been indexed in the symbol store.
@@ -810,11 +896,24 @@ async def list_repos() -> str:
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Return repository file tree with ignore rules applied. "
+        "Use for quick structural navigation before deeper symbol or semantic queries. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def get_file_tree(
-    path: str,
-    max_files: int = 500,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root."),
+    ],
+    max_files: Annotated[
+        int,
+        Field(description="Maximum file paths to return in the tree response."),
+    ] = 500,
 ) -> str:
     """Get the file tree of a repository, respecting .gitignore.
 
@@ -829,11 +928,24 @@ async def get_file_tree(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Return symbol outline for a single source file (functions, classes, methods). "
+        "Works without prior indexing and is ideal for file-level orientation. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def get_file_outline(
-    path: str,
-    repo_root: str | None = None,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the source file to outline."),
+    ],
+    repo_root: Annotated[
+        str | None,
+        Field(description="Optional repository root for stable relative symbol identifiers."),
+    ] = None,
 ) -> str:
     """Get the symbol outline (functions, classes, methods) for a single file.
 
@@ -848,11 +960,24 @@ async def get_file_outline(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Return symbol outlines across a repository for structural understanding. "
+        "Use this for architecture mapping or broad navigation of code entities. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def get_repo_outline(
-    path: str,
-    max_files: int = 500,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root."),
+    ],
+    max_files: Annotated[
+        int,
+        Field(description="Maximum number of files to scan while building outlines."),
+    ] = 500,
 ) -> str:
     """Get the symbol outline across an entire repository.
 
@@ -886,8 +1011,14 @@ async def search_symbols(
         str,
         Field(description="Absolute path to the indexed repository root."),
     ],
-    limit: int = 20,
-    kind: str | None = None,
+    limit: Annotated[
+        int,
+        Field(description="Maximum number of symbol matches to return."),
+    ] = 20,
+    kind: Annotated[
+        str | None,
+        Field(description="Optional symbol kind filter (for example: function, class, method)."),
+    ] = None,
 ) -> str:
     """Search for symbols by name in an indexed repository.
 
@@ -910,13 +1041,32 @@ async def search_symbols(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Search literal text occurrences across local source files. "
+        "Use for exact token/identifier matching when semantic intent is not required. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def search_text(
-    query: str,
-    path: str,
-    max_results: int = 50,
-    case_sensitive: bool = False,
+    query: Annotated[
+        str,
+        Field(description="Literal text to search for."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root."),
+    ],
+    max_results: Annotated[
+        int,
+        Field(description="Maximum number of text matches to return."),
+    ] = 50,
+    case_sensitive: Annotated[
+        bool,
+        Field(description="When true, match text with case sensitivity."),
+    ] = False,
 ) -> str:
     """Search for literal text across all source files in a repository.
 
@@ -933,11 +1083,24 @@ async def search_text(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Get full metadata and source for one symbol ID from the symbol index. "
+        "Use after symbol search to inspect a specific implementation body. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def get_symbol(
-    symbol_id: str,
-    path: str,
+    symbol_id: Annotated[
+        str,
+        Field(description="Stable symbol ID in file_path:kind:name format."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the indexed local repository root."),
+    ],
 ) -> str:
     """Get full metadata and source code for a single symbol by ID.
 
@@ -955,11 +1118,24 @@ async def get_symbol(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Batch-get metadata and source for multiple symbol IDs in a single request. "
+        "Use to reduce round-trips after search results provide several relevant IDs. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def get_symbols(
-    symbol_ids: list[str],
-    path: str,
+    symbol_ids: Annotated[
+        list[str],
+        Field(description="List of symbol IDs in file_path:kind:name format."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the indexed local repository root."),
+    ],
 ) -> str:
     """Get full metadata and source code for multiple symbols in one call.
 
@@ -974,10 +1150,27 @@ async def get_symbols(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Delete a repository symbol index cache entry to force a full symbol re-index. "
+        "Use when index corruption or schema drift is suspected. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 @time_tool
 async def invalidate_cache(
-    path: str,
+    path: Annotated[
+        str,
+        Field(
+            description="Absolute path to the local repository root whose symbol cache should be removed."
+        ),
+    ],
 ) -> str:
     """Remove the symbol index for a repository, forcing a full re-index on next use.
 
