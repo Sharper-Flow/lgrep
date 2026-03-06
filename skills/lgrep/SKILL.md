@@ -22,6 +22,46 @@ Use this first-action policy:
 - For exact identifier/regex lookups, use built-in `Grep` first.
 - For known-file inspection, read the file directly.
 
+## CRITICAL: Execution Environment (MCP, Not Shell)
+
+`lgrep_*` functions are **MCP tool calls**, not terminal commands.
+
+- Call `lgrep_*` directly through the tool system.
+- Never run `lgrep_*` through `bash` or any shell command runner.
+- If you need shell access, use it for terminal tasks only (git, tests, builds), not MCP invocations.
+
+Correct pattern (MCP tool call):
+
+```json
+{
+  "tool": "lgrep_search_semantic",
+  "arguments": {
+    "q": "JWT verification and token handling",
+    "path": "/home/user/dev/project",
+    "m": 5
+  }
+}
+```
+
+Incorrect pattern (do not do this):
+
+```bash
+lgrep_search_semantic "JWT verification and token handling" /home/user/dev/project
+```
+
+Correct symbol lookup pattern (MCP tool call):
+
+```json
+{
+  "tool": "lgrep_search_symbols",
+  "arguments": {
+    "query": "authenticate",
+    "path": "/home/user/dev/project",
+    "limit": 20
+  }
+}
+```
+
 ### Decision Matrix
 
 | Use case | Best tool | Notes |
@@ -85,13 +125,27 @@ Searches a project semantically.
 - `m` (int): Maximum results (default 10). Alias: `limit`.
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
 
-**Example usage:**
-```python
-# Short form (preferred by agents)
-lgrep_search_semantic(q="JWT verification and token handling", path="/home/user/dev/project", m=5)
+**Example usage (MCP calls):**
+```json
+{
+  "tool": "lgrep_search_semantic",
+  "arguments": {
+    "q": "JWT verification and token handling",
+    "path": "/home/user/dev/project",
+    "m": 5
+  }
+}
+```
 
-# Long form (also accepted)
-lgrep_search_semantic(query="JWT verification and token handling", path="/home/user/dev/project", limit=5)
+```json
+{
+  "tool": "lgrep_search_semantic",
+  "arguments": {
+    "query": "JWT verification and token handling",
+    "path": "/home/user/dev/project",
+    "limit": 5
+  }
+}
 ```
 
 ### lgrep_index_semantic
@@ -162,9 +216,14 @@ Get the symbol outline (functions, classes, methods) for a single file. **No ind
 
 - `path` (string, **required**): Absolute path to the source file.
 
-**Example usage:**
-```python
-lgrep_get_file_outline(path="/home/user/dev/project/src/auth.py")
+**Example usage (MCP call):**
+```json
+{
+  "tool": "lgrep_get_file_outline",
+  "arguments": {
+    "path": "/home/user/dev/project/src/auth.py"
+  }
+}
 ```
 
 ### lgrep_get_repo_outline
@@ -182,9 +241,15 @@ Search for symbols by name (case-insensitive substring match). Requires prior in
 - `limit` (int): Maximum results (default: 20).
 - `kind` (string, optional): Filter by kind (`function`, `class`, `method`, `interface`).
 
-**Example usage:**
-```python
-lgrep_search_symbols(query="authenticate", path="/home/user/dev/project")
+**Example usage (MCP call):**
+```json
+{
+  "tool": "lgrep_search_symbols",
+  "arguments": {
+    "query": "authenticate",
+    "path": "/home/user/dev/project"
+  }
+}
 ```
 
 ### lgrep_search_text

@@ -17,10 +17,12 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 import structlog
+from mcp.types import ToolAnnotations
 from mcp.server.fastmcp import Context, FastMCP
+from pydantic import Field
 
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
@@ -478,18 +480,38 @@ async def _execute_search(
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Search the local codebase semantically using natural-language intent. "
+        "Use this first for concept discovery (for example: auth flow, retry logic, "
+        "error handling path). Requires an absolute repository path and returns ranked matches. "
+        "MCP tool call only: do not execute `lgrep_search_semantic` in bash or any shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def search_semantic(
-    query: str | None = None,
-    path: str = "",
-    limit: int = 10,
+    query: Annotated[
+        str | None,
+        Field(description="Natural-language intent query (for example: 'JWT verification path')."),
+    ] = None,
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the local repository root to search."),
+    ] = "",
+    limit: Annotated[
+        int,
+        Field(description="Maximum number of ranked matches to return."),
+    ] = 10,
     hybrid: bool = True,
     q: str | None = None,
     m: int | None = None,
     ctx: Context | None = None,
 ) -> str:
     """Search code semantically using natural language.
+
+    MCP invocation only: call this as a native MCP tool (`lgrep_search_semantic`).
+    Do not run `lgrep_search_semantic` as a shell/CLI command via bash.
 
     Args:
         query: Natural language search query (e.g. "authentication flow", "error handling")
@@ -845,15 +867,32 @@ async def get_repo_outline(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    description=(
+        "Search indexed code symbols by name (functions, classes, methods, interfaces). "
+        "Use this for exact symbol lookup after indexing with `lgrep_index_symbols_folder`. "
+        "Requires an absolute repository path and supports optional symbol-kind filtering. "
+        "MCP tool call only: do not execute `lgrep_search_symbols` in bash or any shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
 @time_tool
 async def search_symbols(
-    query: str,
-    path: str,
+    query: Annotated[
+        str,
+        Field(description="Symbol name query (case-insensitive substring match)."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the indexed repository root."),
+    ],
     limit: int = 20,
     kind: str | None = None,
 ) -> str:
     """Search for symbols by name in an indexed repository.
+
+    MCP invocation only: call this as a native MCP tool (`lgrep_search_symbols`).
+    Do not run `lgrep_search_symbols` as a shell/CLI command via bash.
 
     Performs case-insensitive substring matching on symbol names.
     Run lgrep_index_symbols_folder first to build the index.
