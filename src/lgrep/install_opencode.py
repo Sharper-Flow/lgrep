@@ -205,7 +205,7 @@ def install() -> int:
         print(f"         Check the 'instructions' array in {config_path} and ensure it includes")
         print("         ~/.config/opencode/instructions/lgrep-tools.md")
     else:
-        print(f"  [ok] lgrep routing policy found in always-loaded instructions")
+        print("  [ok] lgrep routing policy found in always-loaded instructions")
 
     _print_daemon_instructions()
 

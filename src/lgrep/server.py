@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import structlog
-from mcp.types import ToolAnnotations
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from lgrep.embeddings import VoyageEmbedder
