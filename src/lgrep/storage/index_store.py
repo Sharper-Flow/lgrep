@@ -18,6 +18,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 import structlog
 
@@ -71,6 +72,8 @@ class IndexStore:
         store.delete_index("/path/to/repo")
     """
 
+    _cache: ClassVar[dict[Path, tuple[int, int, CodeIndex]]] = {}
+
     def __init__(self, storage_dir: Path | str | None = None) -> None:
         """Initialize the index store.
 
@@ -109,6 +112,8 @@ class IndexStore:
             }
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.rename(target)
+            stat = target.stat()
+            self._cache[target] = (stat.st_mtime_ns, stat.st_size, index)
             log.debug("index_saved", repo=normalized_repo, symbols=len(index.symbols))
         except OSError as e:
             log.error("index_save_failed", repo=normalized_repo, error=str(e))
@@ -132,13 +137,22 @@ class IndexStore:
             return None
 
         try:
+            stat = index_file.stat()
+            cached = self._cache.get(index_file)
+            if cached is not None:
+                cached_mtime_ns, cached_size, cached_index = cached
+                if cached_mtime_ns == stat.st_mtime_ns and cached_size == stat.st_size:
+                    return cached_index
+
             data = json.loads(index_file.read_text(encoding="utf-8"))
-            return CodeIndex(
+            index = CodeIndex(
                 repo_path=data["repo_path"],
                 files=data.get("files", {}),
                 symbols=data.get("symbols", {}),
                 version=data.get("version", "2.0"),
             )
+            self._cache[index_file] = (stat.st_mtime_ns, stat.st_size, index)
+            return index
         except (json.JSONDecodeError, KeyError, OSError) as e:
             log.warning("index_load_failed", repo=normalized_repo, error=str(e))
             return None
@@ -172,6 +186,7 @@ class IndexStore:
         index_file = self._index_path(normalized_repo)
         try:
             index_file.unlink(missing_ok=True)
+            self._cache.pop(index_file, None)
             log.info("index_deleted", repo=normalized_repo)
         except OSError as e:
             log.warning("index_delete_failed", repo=normalized_repo, error=str(e))
