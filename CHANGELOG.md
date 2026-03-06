@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-03-06
+
+### Added
+
+- **Packaged always-on instruction** — `instructions/lgrep-tools.md` now ships with the project and can be loaded through OpenCode's `instructions` array for reliable lgrep-first tool selection.
+- **Installer policy wiring** — `lgrep install-opencode` now installs the always-on lgrep instruction and appends it to OpenCode config automatically.
+- **Tool-routing policy tests** — added policy and installer regression coverage for lgrep-first routing and anti-pattern detection.
+
+### Changed
+
+- **OpenCode setup docs** now document always-on instruction wiring in README, example config, and installer output.
+- **Skill positioning** — `SKILL.md` now acts as supplemental reference while always-loaded instructions carry the canonical routing policy.
+
 ### Added
 
 - **`lgrep init-ignore` CLI command** — scaffolds a recommended `.lgrepignore` file in a project root.

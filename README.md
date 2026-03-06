@@ -167,6 +167,9 @@ Add to `~/.config/opencode/opencode.json`:
 
 ```json
 {
+  "instructions": [
+    "~/.config/opencode/instructions/lgrep-tools.md"
+  ],
   "mcp": {
     "lgrep": {
       "type": "remote",
@@ -177,7 +180,9 @@ Add to `~/.config/opencode/opencode.json`:
 }
 ```
 
-Or run `lgrep install-opencode` to write this automatically.
+Or run `lgrep install-opencode` to write this automatically. The installer also
+copies `instructions/lgrep-tools.md` into your OpenCode config and appends it to
+the `instructions` array so agents get always-on lgrep routing guidance.
 
 ### 4. Search
 

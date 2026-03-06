@@ -1,4 +1,7 @@
 {
+  "instructions": [
+    "~/.config/opencode/instructions/lgrep-tools.md"
+  ],
   "mcp": {
     "lgrep": {
       "type": "remote",

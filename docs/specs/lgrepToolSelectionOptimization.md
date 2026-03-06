@@ -1,7 +1,7 @@
 # LgrepToolSelectionOptimization
 
-> **Version:** 2.0.0
-> **Updated:** 2026-03-05
+> **Version:** 2.1.0
+> **Updated:** 2026-03-06
 
 ## Purpose
 
@@ -313,9 +313,54 @@ Lifecycle operations MUST emit structured status markers and auditable artifacts
 
 ---
 
-### Dual-engine routing decision matrix is documented and enforced
+### Routing policy lives in always-loaded instructions
 
 **ID:** `rq-10` | **Priority:** **[MUST]**
+
+The lgrep routing policy MUST be enforced via always-loaded instruction files (for example `lgrep-tools.md` or `mcp-tools.md`), not solely via skill files or documentation. Agent-specific prompts (e.g. `explore.md`) MUST NOT contradict the canonical routing policy. The installer MUST install or verify an always-loaded instruction path that includes lgrep routing guidance.
+
+**Tags:** `tool-selection`, `policy-enforcement`, `instructions`, `installer`
+
+#### Scenarios
+
+**Always-loaded instructions contain lgrep routing** (`rq-10.1`)
+
+**Given:**
+- The OpenCode config `instructions` array
+
+**When:** The installer or test harness checks for lgrep routing policy
+
+**Then:**
+- At least one always-loaded instruction file contains lgrep first-action routing guidance
+- The guidance routes intent queries to `lgrep_search_semantic` and symbol queries to `lgrep_search_symbols`
+
+**Agent prompts do not contradict routing policy** (`rq-10.2`)
+
+**Given:**
+- Agent-specific prompt files (e.g. `explore.md`, `general.md`)
+
+**When:** The test harness checks for anti-patterns
+
+**Then:**
+- No agent prompt says "glob first" or lists grep before lgrep for concept queries
+- Agent research strategies align with the canonical lgrep-first routing policy
+
+**Installer verifies policy wiring** (`rq-10.3`)
+
+**Given:**
+- A fresh `lgrep install-opencode` run
+
+**When:** The installer completes
+
+**Then:**
+- The installer checks the `instructions` array for lgrep routing policy
+- If missing, the installer emits a warning with remediation guidance
+
+---
+
+### Dual-engine routing decision matrix is documented and enforced
+
+**ID:** `rq-11` | **Priority:** **[MUST]**
 
 Agents MUST route search requests to the correct engine based on query intent. The dual-engine routing decision matrix MUST be documented in SKILL.md and README.md and MUST be enforced by agent tool-choice behavior.
 
@@ -335,7 +380,7 @@ Agents MUST route search requests to the correct engine based on query intent. T
 
 #### Scenarios
 
-**Semantic intent routes to lgrep_search_semantic** (`rq-10.1`)
+**Semantic intent routes to lgrep_search_semantic** (`rq-11.1`)
 
 **Given:**
 - A prompt expressing intent-based discovery ("where is auth enforced?")
@@ -345,7 +390,7 @@ Agents MUST route search requests to the correct engine based on query intent. T
 **Then:**
 - `lgrep_search_semantic` is selected, not `lgrep_search_symbols` or `Grep`
 
-**Symbol name intent routes to lgrep_search_symbols** (`rq-10.2`)
+**Symbol name intent routes to lgrep_search_symbols** (`rq-11.2`)
 
 **Given:**
 - A prompt expressing exact symbol lookup ("find the authenticate function")
@@ -355,7 +400,7 @@ Agents MUST route search requests to the correct engine based on query intent. T
 **Then:**
 - `lgrep_search_symbols` is selected, not `lgrep_search_semantic`
 
-**File outline intent routes to lgrep_get_file_outline** (`rq-10.3`)
+**File outline intent routes to lgrep_get_file_outline** (`rq-11.3`)
 
 **Given:**
 - A prompt requesting file structure ("what functions are in src/auth.py?")
@@ -365,7 +410,7 @@ Agents MUST route search requests to the correct engine based on query intent. T
 **Then:**
 - `lgrep_get_file_outline` is selected
 
-**Routing matrix is documented** (`rq-10.4`)
+**Routing matrix is documented** (`rq-11.4`)
 
 **Given:**
 - README.md and SKILL.md

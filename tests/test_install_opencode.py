@@ -19,8 +19,6 @@ from lgrep.install_opencode import (
 # ---------------------------------------------------------------------------
 
 
-
-
 # ---------------------------------------------------------------------------
 # Install / uninstall lifecycle
 # ---------------------------------------------------------------------------
@@ -30,13 +28,16 @@ class TestInstallUninstall:
     """Tests for install/uninstall lifecycle."""
 
     def test_install_creates_all_artifacts(self, tmp_path):
-        """install() should create tool, skill, and MCP config."""
+        """install() should create instruction, skill, and MCP config."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
         skill_path = config_dir / "skills" / "lgrep" / "SKILL.md"
         config_path = config_dir / "opencode.json"
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_path.parent),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._config_path", return_value=config_path),
@@ -46,19 +47,24 @@ class TestInstallUninstall:
         assert result == 0
 
         assert config_path.exists()
+        assert instruction_path.exists()
         config = json.loads(config_path.read_text())
         assert "lgrep" in config["mcp"]
         assert config["mcp"]["lgrep"]["url"] == "http://localhost:6285/mcp"
-
+        assert "~/.config/opencode/instructions/lgrep-tools.md" in config["instructions"]
 
     def test_uninstall_removes_all_artifacts(self, tmp_path):
-        """uninstall() should remove tool, skill, and MCP entry."""
+        """uninstall() should remove instruction, skill, and MCP entry."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_dir = config_dir / "instructions"
+        instruction_path = instruction_dir / "lgrep-tools.md"
         skill_dir = config_dir / "skills" / "lgrep"
         skill_path = skill_dir / "SKILL.md"
         config_path = config_dir / "opencode.json"
 
         # Pre-create artifacts
+        instruction_dir.mkdir(parents=True)
+        instruction_path.write_text("policy")
         skill_dir.mkdir(parents=True)
         skill_path.write_text("placeholder")
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,6 +72,7 @@ class TestInstallUninstall:
             json.dumps(
                 {
                     "$schema": "https://opencode.ai/config.json",
+                    "instructions": ["~/.config/opencode/instructions/lgrep-tools.md"],
                     "mcp": {"lgrep": {"type": "remote", "url": "http://localhost:6285/mcp"}},
                 }
             )
@@ -73,6 +80,8 @@ class TestInstallUninstall:
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_dir),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._config_path", return_value=config_path),
@@ -80,19 +89,28 @@ class TestInstallUninstall:
             result = uninstall()
 
         assert result == 0
+        assert not instruction_path.exists()
         assert not skill_path.exists()
 
         config = json.loads(config_path.read_text())
         assert "lgrep" not in config.get("mcp", {})
+        assert (
+            "instructions" not in config
+            or "~/.config/opencode/instructions/lgrep-tools.md"
+            not in config.get("instructions", [])
+        )
 
     def test_install_idempotent(self, tmp_path):
         """Running install() twice should not error."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
         skill_path = config_dir / "skills" / "lgrep" / "SKILL.md"
         config_path = config_dir / "opencode.json"
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_path.parent),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._config_path", return_value=config_path),
@@ -103,11 +121,14 @@ class TestInstallUninstall:
     def test_uninstall_idempotent(self, tmp_path):
         """Running uninstall() when nothing is installed should not error."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
         skill_path = config_dir / "skills" / "lgrep" / "SKILL.md"
         config_path = config_dir / "opencode.json"
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_path.parent),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._config_path", return_value=config_path),
@@ -117,6 +138,7 @@ class TestInstallUninstall:
     def test_install_preserves_existing_config(self, tmp_path):
         """install() should not clobber existing MCP entries."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
         skill_path = config_dir / "skills" / "lgrep" / "SKILL.md"
         config_path = config_dir / "opencode.json"
 
@@ -126,6 +148,7 @@ class TestInstallUninstall:
             json.dumps(
                 {
                     "$schema": "https://opencode.ai/config.json",
+                    "instructions": ["~/.config/opencode/instructions/identity.md"],
                     "mcp": {"sentry": {"type": "remote", "url": "https://mcp.sentry.dev/mcp"}},
                 }
             )
@@ -133,6 +156,8 @@ class TestInstallUninstall:
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_path.parent),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._config_path", return_value=config_path),
@@ -142,10 +167,13 @@ class TestInstallUninstall:
         config = json.loads(config_path.read_text())
         assert "sentry" in config["mcp"]
         assert "lgrep" in config["mcp"]
+        assert "~/.config/opencode/instructions/identity.md" in config["instructions"]
+        assert "~/.config/opencode/instructions/lgrep-tools.md" in config["instructions"]
 
     def test_install_same_file_skill_does_not_crash(self, tmp_path):
         """install() should not crash when SKILL source and dest are the same file."""
         config_dir = tmp_path / ".config" / "opencode"
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
         skill_dir = config_dir / "skills" / "lgrep"
         skill_path = skill_dir / "SKILL.md"
         config_path = config_dir / "opencode.json"
@@ -156,6 +184,8 @@ class TestInstallUninstall:
 
         with (
             patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
             patch("lgrep.install_opencode.SKILL_DIR", skill_dir),
             patch("lgrep.install_opencode.SKILL_PATH", skill_path),
             patch("lgrep.install_opencode._PACKAGE_SKILL", skill_path),
@@ -166,4 +196,3 @@ class TestInstallUninstall:
         assert result == 0
         # Skill content should be unchanged (not corrupted by same-file copy)
         assert skill_path.read_text() == "existing skill content"
-

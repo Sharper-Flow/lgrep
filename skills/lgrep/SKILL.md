@@ -9,6 +9,8 @@ metadata:
 
 ## CRITICAL: Tool Priority
 
+> **Canonical policy location:** The lgrep first-action routing policy is enforced via an always-loaded instruction file such as `lgrep-tools.md` or `mcp-tools.md`. This skill provides supplemental reference and examples. If you are seeing this via skill load, the policy should already be active in your system prompt.
+
 lgrep provides **two complementary search engines**:
 
 1. **Semantic engine** (`lgrep_search_semantic`) — understands code *meaning*. Uses Voyage Code 3 embeddings (92% retrieval quality) with local LanceDB storage.
@@ -29,38 +31,6 @@ Use this first-action policy:
 - Call `lgrep_*` directly through the tool system.
 - Never run `lgrep_*` through `bash` or any shell command runner.
 - If you need shell access, use it for terminal tasks only (git, tests, builds), not MCP invocations.
-
-Correct pattern (MCP tool call):
-
-```json
-{
-  "tool": "lgrep_search_semantic",
-  "arguments": {
-    "q": "JWT verification and token handling",
-    "path": "/home/user/dev/project",
-    "m": 5
-  }
-}
-```
-
-Incorrect pattern (do not do this):
-
-```bash
-lgrep_search_semantic "JWT verification and token handling" /home/user/dev/project
-```
-
-Correct symbol lookup pattern (MCP tool call):
-
-```json
-{
-  "tool": "lgrep_search_symbols",
-  "arguments": {
-    "query": "authenticate",
-    "path": "/home/user/dev/project",
-    "limit": 20
-  }
-}
-```
 
 ### Decision Matrix
 
@@ -101,11 +71,14 @@ lgrep init-ignore /path/to/project
 ```
 This creates a default `.lgrepignore` template you can customize.
 
-This installs an MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+This installs an MCP server entry, an always-loaded instruction file, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:
 ```json
 {
+  "instructions": [
+    "~/.config/opencode/instructions/lgrep-tools.md"
+  ],
   "mcp": {
     "lgrep": { "type": "remote", "url": "http://localhost:6285/mcp" }
   }
@@ -125,27 +98,13 @@ Searches a project semantically.
 - `m` (int): Maximum results (default 10). Alias: `limit`.
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
 
-**Example usage (MCP calls):**
-```json
-{
-  "tool": "lgrep_search_semantic",
-  "arguments": {
-    "q": "JWT verification and token handling",
-    "path": "/home/user/dev/project",
-    "m": 5
-  }
-}
-```
+**Example usage:**
+```python
+# Short form (preferred by agents)
+lgrep_search_semantic(q="JWT verification and token handling", path="/home/user/dev/project", m=5)
 
-```json
-{
-  "tool": "lgrep_search_semantic",
-  "arguments": {
-    "query": "JWT verification and token handling",
-    "path": "/home/user/dev/project",
-    "limit": 5
-  }
-}
+# Long form (also accepted)
+lgrep_search_semantic(query="JWT verification and token handling", path="/home/user/dev/project", limit=5)
 ```
 
 ### lgrep_index_semantic
@@ -216,14 +175,9 @@ Get the symbol outline (functions, classes, methods) for a single file. **No ind
 
 - `path` (string, **required**): Absolute path to the source file.
 
-**Example usage (MCP call):**
-```json
-{
-  "tool": "lgrep_get_file_outline",
-  "arguments": {
-    "path": "/home/user/dev/project/src/auth.py"
-  }
-}
+**Example usage:**
+```python
+lgrep_get_file_outline(path="/home/user/dev/project/src/auth.py")
 ```
 
 ### lgrep_get_repo_outline
@@ -241,15 +195,9 @@ Search for symbols by name (case-insensitive substring match). Requires prior in
 - `limit` (int): Maximum results (default: 20).
 - `kind` (string, optional): Filter by kind (`function`, `class`, `method`, `interface`).
 
-**Example usage (MCP call):**
-```json
-{
-  "tool": "lgrep_search_symbols",
-  "arguments": {
-    "query": "authenticate",
-    "path": "/home/user/dev/project"
-  }
-}
+**Example usage:**
+```python
+lgrep_search_symbols(query="authenticate", path="/home/user/dev/project")
 ```
 
 ### lgrep_search_text
