@@ -2,12 +2,37 @@
 
 **Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode).**
 
+The fastest way to make AI agents stop fumbling around your repo with `glob`, `grep`, and blind file reads.
+
+`lgrep` gives OpenCode a real code search stack:
+
+- **Semantic search** for concept-level questions like "where is auth enforced?"
+- **Symbol intelligence** for exact function/class/method lookup
+- **Local-first indexes** so your code stays on disk
+- **Shared warm server** so multiple agents can query the same project without duplicating work
+
 Two complementary search engines in one MCP server:
 
 - **Semantic engine** — Find code by *meaning*. "Authentication flow" → `jwt.verify()`. Uses Voyage Code 3 embeddings (92% retrieval quality) with local LanceDB storage.
 - **Symbol engine** — Find code by *structure*. Exact function/class/method lookup by name, file outline, repo outline, text search. Uses tree-sitter AST parsing with local JSON index. No API key required.
 
-Your code never leaves your machine — only semantic search queries hit the Voyage API.
+Your code never leaves your machine — only short semantic queries hit the Voyage API.
+
+## Why this plugin matters
+
+AI coding agents are only as good as their first search. If they start with the
+wrong tool, everything downstream gets worse: more file reads, more context
+waste, more hallucinated edits, more missed implementations.
+
+`lgrep` fixes that by giving agents the right primitive for the job:
+
+- ask by **meaning** when you do not know the symbol yet
+- ask by **symbol** when you know the name
+- inspect **structure** before reading entire files
+- keep the index **local and reusable** across sessions
+
+If you use OpenCode heavily, this is not a minor quality-of-life tool. It is a
+search infrastructure upgrade.
 
 ## Inspiration
 
@@ -28,6 +53,13 @@ The existing options all have tradeoffs we didn't want to accept:
 - **Local embedding models** — fully private, but quality drops to 78% with CPU inference. The gap between 78% and 92% is the difference between useful results and noise.
 
 We wanted the best retrieval quality available, at low cost, without handing our codebase to a third party.
+
+### What makes it feel different
+
+- **Agents get unstuck faster** — concept queries stop collapsing into `grep` misses
+- **You read less code to learn more** — repo and file outlines answer structure questions instantly
+- **It scales with parallel agents** — one warm MCP server, one shared index, no repeated cold starts
+- **It is actually economical** — semantic quality where it matters, free symbol lookups everywhere else
 
 ### lgrep vs mgrep vs grep
 
@@ -94,6 +126,15 @@ We wanted the best retrieval quality available, at low cost, without handing our
 
 ## Installation
 
+### Quick pitch
+
+If you already run OpenCode with multiple agents, `lgrep` is one of the highest-leverage plugins you can add.
+
+- It makes code exploration noticeably smarter
+- It reduces wasted context reads
+- It turns "search by hunch" into "search by intent"
+- It gives you symbol tools that are useful even without an API key
+
 ```bash
 pip install git+https://github.com/Sharper-Flow/lgrep.git
 ```
@@ -121,6 +162,8 @@ Where to set the key:
 ### 2. Start lgrep as a shared server
 
 lgrep runs as a single HTTP server shared across all OpenCode sessions. This means opening 5 sessions doesn't spawn 5 lgrep processes — one ~400MB process handles everything.
+
+That is the key architecture win: one warm process, one set of indexes, many agents.
 
 **Recommended: systemd user service (auto-starts on login, restarts on crash)**
 
@@ -198,6 +241,14 @@ lgrep_search_symbols(query="authenticate", path="/path/to/your/project")
 lgrep_get_file_outline(path="/path/to/your/project/src/auth.py")
 ```
 
+Typical high-value prompts:
+
+- "Where do we enforce auth between route and service?"
+- "Find the `authenticate` function"
+- "What are the main symbols in `src/auth.py`?"
+- "Show me the repo structure around billing"
+- "Find references to `verifyToken`"
+
 ### 5. Verify the setup (optional)
 
 1. `lgrep_status_semantic(path="/path/to/your/project")` — returns project stats or disk cache info.
@@ -222,6 +273,17 @@ Examples:
 - "What functions are in `src/auth.py`?" → `lgrep_get_file_outline`
 - "Find references to `verifyToken`" → `lgrep_search_text` or `Grep`
 - "Open `src/auth/jwt.ts` and explain it" → `Read`
+
+## Why agents choose it
+
+With the packaged always-on instruction (`instructions/lgrep-tools.md`), OpenCode agents get explicit first-action guidance:
+
+- concept search -> `lgrep_search_semantic`
+- symbol lookup -> `lgrep_search_symbols`
+- structure questions -> `lgrep_get_file_outline` / `lgrep_get_repo_outline`
+- exact text -> `lgrep_search_text` or `Grep`
+
+That means fewer bad first moves and much better repo exploration behavior in real sessions.
 
 ## MCP Tools
 
@@ -399,6 +461,20 @@ docs/site/
 **Stale semantic results** — Call `lgrep_index_semantic` to refresh, or use `lgrep_watch_start_semantic` for automatic incremental updates.
 
 **Symbol search returns "not indexed"** — Run `lgrep_index_symbols_folder(path=...)` first to build the symbol index.
+
+## Changelog
+
+### v2.1.0
+
+- **Packaged always-on instruction** - `instructions/lgrep-tools.md` now ships with the project so OpenCode can load reliable lgrep-first routing through the `instructions` array
+- **Installer policy wiring** - `lgrep install-opencode` now installs the always-on lgrep instruction and appends it to OpenCode config automatically
+- **Tool-routing coverage** - policy and installer regression tests now protect the lgrep-first setup path
+
+### v2.0.0
+
+- **Symbol engine** - exact symbol lookup, file outlines, repo outlines, and text search landed in the same MCP server
+- **Semantic tool rename** - semantic tools were renamed to the explicit `*_semantic` form
+- **Production-ready dual-engine release** - lgrep became a true semantic + symbol code intelligence plugin for OpenCode
 
 ## Development
 
