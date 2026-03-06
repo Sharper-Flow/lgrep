@@ -309,7 +309,9 @@ Security notes:
 
 - default host is `127.0.0.1`
 - there is no built-in auth layer on the HTTP transport
-- do not expose `0.0.0.0` directly without a reverse proxy or firewall
+- `lgrep` does not set CORS headers, and browser-based clients should not connect directly to the streamable HTTP endpoint
+- if you do put it behind a proxy, enforce your own authentication and origin controls there
+- exposing `0.0.0.0` is a non-default, explicit opt-in; do not do it without a reverse proxy or firewall
 
 ## Configuration
 
