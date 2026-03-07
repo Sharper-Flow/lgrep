@@ -273,6 +273,24 @@ class TestPackagedInstructionRouting:
         )
 
 
+class TestToolExposureDocumentation:
+    """Verify docs explain that agent tool manifests must expose lgrep tools."""
+
+    def test_packaged_instruction_mentions_tool_exposure_requirement(self):
+        """Always-on instruction must explain that policy alone is insufficient."""
+        content = _PACKAGE_INSTRUCTION.read_text(encoding="utf-8")
+        assert "Tool Exposure Requirement" in content
+        assert "tool manifest" in content.lower()
+        assert "lgrep_search_semantic: true" in content
+
+    def test_skill_mentions_tool_exposure_requirement(self):
+        """SKILL.md must explain that agent manifests need lgrep_* tool defs."""
+        content = _SKILL_PATH.read_text(encoding="utf-8")
+        assert "Tool Exposure Requirement" in content
+        assert "tool definitions" in content.lower() or "tool manifest" in content.lower()
+        assert "lgrep_search_symbols: true" in content
+
+
 # ---------------------------------------------------------------------------
 # Test: Installer verifies policy wiring
 # ---------------------------------------------------------------------------

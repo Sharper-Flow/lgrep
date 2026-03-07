@@ -42,3 +42,18 @@ the question:
 These rules apply even if an agent-specific prompt suggests a more generic
 search order. For local code exploration, this instruction overrides defaults
 like "glob first" or "grep first".
+
+### Tool Exposure Requirement
+
+Instruction policy is necessary but not sufficient. The active agent or
+sub-agent must also expose the `lgrep_*` tool definitions in its tool manifest.
+
+- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`, or
+  related `lgrep_*` tools, the model cannot follow this policy and will fall
+  back to `glob`/`grep`/`read`.
+- In agent frontmatter, explicitly allow the lgrep tools you expect the agent to
+  use (for example `lgrep_search_semantic: true`,
+  `lgrep_search_symbols: true`, `lgrep_get_file_outline: true`,
+  `lgrep_search_text: true`).
+- Do not assume that having `mcp.lgrep` configured in `opencode.json` is enough
+  for every agent profile; agent-level tool allowlists can still hide the tools.
