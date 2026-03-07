@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-03-07
+
+### Changed
+
+- **Simplified SKILL.md** — removed redundant sections that duplicated the always-on instruction policy (`lgrep-tools.md`). The skill now focuses on being a concise decision matrix and tool reference rather than repeating canonical routing rules.
+- **Removed SKILL.md manual config `instructions` example** — the manual setup snippet now shows only the `mcp` block, since the instruction file is handled by `lgrep install-opencode` or the user's own global config.
+
+### Fixed
+
+- **SKILL.md setup description** now correctly documents all three installer artifacts (MCP entry, instruction file, and skill) instead of omitting the instruction file.
+
 ## [2.1.0] - 2026-03-06
 
 ### Added

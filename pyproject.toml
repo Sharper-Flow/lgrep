@@ -1,6 +1,6 @@
 [project]
 name = "lgrep"
-version = "2.1.0"
+version = "2.1.1"
 description = "Dual-engine code intelligence MCP server: semantic search (Voyage Code 3 + LanceDB) and symbol intelligence (tree-sitter AST parsing)"
 readme = "README.md"
 license = "MIT"

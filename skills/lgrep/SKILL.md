@@ -9,10 +9,6 @@ metadata:
 
 ## CRITICAL: Tool Priority
 
-> **Canonical policy location:** The lgrep first-action routing policy is
-> enforced via an always-loaded instruction file such as `lgrep-tools.md` or
-> `mcp-tools.md`. This skill is supplemental reference and examples.
-
 lgrep provides **two complementary search engines**:
 
 1. **Semantic engine** (`lgrep_search_semantic`) — understands code *meaning*. Uses Voyage Code 3 embeddings (92% retrieval quality) with local LanceDB storage.
@@ -25,27 +21,6 @@ Use this first-action policy:
 - For file structure overview, **call `lgrep_get_file_outline`** (no index needed).
 - For exact identifier/regex lookups, use built-in `Grep` first.
 - For known-file inspection, read the file directly.
-
-## CRITICAL: Tool Exposure Requirement
-
-Instruction policy only works if the active agent or sub-agent actually exposes
-the `lgrep_*` tool definitions.
-
-- Ensure the agent manifest includes the lgrep tools it should use, such as
-  `lgrep_search_semantic: true`, `lgrep_search_symbols: true`,
-  `lgrep_get_file_outline: true`, and `lgrep_search_text: true`.
-- MCP registration alone is not enough; agent-level tool allowlists can still
-  hide lgrep from the model.
-- If the manifest omits `lgrep_*`, the model will fall back to `glob`/`grep`/
-  `read` even when the routing policy says to prefer lgrep.
-
-## CRITICAL: Execution Environment (MCP, Not Shell)
-
-`lgrep_*` functions are **MCP tool calls**, not terminal commands.
-
-- Call `lgrep_*` directly through the tool system.
-- Never run `lgrep_*` through `bash` or any shell command runner.
-- Use shell only for terminal tasks like git, tests, or builds.
 
 ### Decision Matrix
 
@@ -86,15 +61,11 @@ lgrep init-ignore /path/to/project
 ```
 This creates a default `.lgrepignore` template you can customize.
 
-This installs an MCP server entry, an always-loaded instruction file, and this
-skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+This installs an MCP server entry, an always-on instruction file (`lgrep-tools.md`), and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:
 ```json
 {
-  "instructions": [
-    "~/.config/opencode/instructions/lgrep-tools.md"
-  ],
   "mcp": {
     "lgrep": { "type": "remote", "url": "http://localhost:6285/mcp" }
   }
