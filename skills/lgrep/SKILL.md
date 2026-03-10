@@ -42,6 +42,20 @@ Use this first-action policy:
 - **Use `Grep` first:** "find all references to `verifyToken`"
 - **Use file read first:** "open `src/auth/jwt.ts` and explain line 42"
 
+### Tool Exposure Requirement
+
+Instruction text alone is not enough. The active agent or sub-agent also needs
+the `lgrep_*` tool definitions in its tool manifest.
+
+- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`, or
+  related `lgrep_*` tools, the model cannot follow this routing policy and will
+  fall back to `glob`/`grep`/`read`.
+- In agent frontmatter, explicitly allow the tools you expect to use (for
+  example `lgrep_search_semantic: true`, `lgrep_search_symbols: true`,
+  `lgrep_get_file_outline: true`, `lgrep_search_text: true`).
+- Do not assume `mcp.lgrep` in `opencode.json` is enough for every agent
+  profile; agent-level tool allowlists can still hide the tools.
+
 ## Setup
 
 **API key (semantic engine only):**
@@ -61,7 +75,7 @@ lgrep init-ignore /path/to/project
 ```
 This creates a default `.lgrepignore` template you can customize.
 
-This installs an MCP server entry, an always-on instruction file (`lgrep-tools.md`), and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+This installs an MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:
 ```json
