@@ -290,6 +290,13 @@ class TestToolExposureDocumentation:
         assert "tool definitions" in content.lower() or "tool manifest" in content.lower()
         assert "lgrep_search_symbols: true" in content
 
+    def test_skill_setup_mentions_all_installed_artifacts(self):
+        """SKILL.md setup text must match installer behavior."""
+        content = _SKILL_PATH.read_text(encoding="utf-8")
+        assert "MCP server entry" in content
+        assert "instructions/lgrep-tools.md" in content
+        assert "skill file" in content.lower()
+
 
 # ---------------------------------------------------------------------------
 # Test: Installer verifies policy wiring

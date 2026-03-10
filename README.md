@@ -207,12 +207,18 @@ That installer can:
 
 - add the MCP entry
 - copy the packaged `lgrep-tools.md` instruction into your OpenCode config
+- copy the packaged `skills/lgrep/SKILL.md` reference file into your OpenCode config
 - append it to the `instructions` array so agents prefer `lgrep` first
 
 Important: the active agent must also expose `lgrep_*` tool definitions in its
 tool manifest. If an agent profile only allows `read`/`glob`/`grep`, the model
 cannot choose lgrep even when the MCP server is configured and the instruction
 policy is present.
+
+The installed files land at:
+
+- `~/.config/opencode/instructions/lgrep-tools.md`
+- `~/.config/opencode/skills/lgrep/SKILL.md`
 
 ### 4. Optional: generate a `.lgrepignore`
 

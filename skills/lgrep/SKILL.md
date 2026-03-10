@@ -75,7 +75,9 @@ lgrep init-ignore /path/to/project
 ```
 This creates a default `.lgrepignore` template you can customize.
 
-This installs an MCP server entry, and this skill file into `~/.config/opencode/`. To remove: `lgrep uninstall-opencode`.
+This installs three artifacts into `~/.config/opencode/`: the MCP server entry,
+the always-on `instructions/lgrep-tools.md` policy file, and this skill file.
+To remove them: `lgrep uninstall-opencode`.
 
 **Manual** — add to `~/.config/opencode/opencode.json`:
 ```json

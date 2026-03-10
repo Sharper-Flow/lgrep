@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored the SKILL.md `Tool Exposure Requirement` guidance so the packaged skill matches the routing-policy tests and current agent manifest requirements.
+- Corrected install docs in `SKILL.md` and `README.md` so they describe all installer artifacts consistently: MCP entry, always-on instruction, and skill file.
+
 ## [2.1.1] - 2026-03-07
 
 ### Changed
