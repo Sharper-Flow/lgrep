@@ -1,4 +1,4 @@
-"""Tests to verify new v2.0.0 dependencies are installed and importable.
+"""Tests to verify the packaged dependencies and version metadata.
 
 These tests serve as the TDD red phase for tk-jD3Lki16:
 - Write failing tests first (deps not yet in pyproject.toml)
@@ -25,11 +25,11 @@ def test_pathspec_importable():
     assert hasattr(pathspec, "patterns")
 
 
-def test_version_is_2_0_0():
-    """lgrep version must be bumped to 2.0.0."""
+def test_version_is_2_1_1():
+    """lgrep package version should match the current release."""
     from lgrep import __version__
 
-    assert __version__ == "2.0.0", f"Expected 2.0.0, got {__version__}"
+    assert __version__ == "2.1.1", f"Expected 2.1.1, got {__version__}"
 
 
 def test_tree_sitter_language_pack_python_parser():

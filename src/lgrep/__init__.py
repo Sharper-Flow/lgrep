@@ -7,4 +7,4 @@ Symbol engine: tree-sitter AST parsing for exact symbol lookup, file outlines,
 and structural code navigation across 165+ languages.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.1"
