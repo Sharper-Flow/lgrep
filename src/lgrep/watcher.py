@@ -61,12 +61,12 @@ class IndexingHandler(FileSystemEventHandler):
         """Handle file deletion."""
         if event.is_directory:
             return
-        # Remove from index
         path = Path(event.src_path)
         log.info("file_deleted", path=str(path))
 
-        # We need to run this in the loop
-        self.loop.call_soon_threadsafe(self._delete_file, path)
+        # Schedule async delete so the sync storage I/O runs in a thread,
+        # not on the event loop.
+        self.loop.call_soon_threadsafe(lambda: self.loop.create_task(self._async_delete_file(path)))
 
     def _schedule_index(self, path: Path):
         """Schedule a file for re-indexing (called from watchdog thread)."""
@@ -107,11 +107,11 @@ class IndexingHandler(FileSystemEventHandler):
         except Exception as e:
             log.error("incremental_index_failed", file=str(path), error=str(e))
 
-    def _delete_file(self, path: Path):
-        """Delete file from index."""
+    async def _async_delete_file(self, path: Path):
+        """Delete file from index in a worker thread."""
         try:
             rel_path = str(path.relative_to(self.indexer.project_path))
-            self.indexer.storage.delete_by_file(rel_path)
+            await self.loop.run_in_executor(None, self.indexer.storage.delete_by_file, rel_path)
         except Exception as e:
             log.error("delete_from_index_failed", file=str(path), error=str(e))
 
