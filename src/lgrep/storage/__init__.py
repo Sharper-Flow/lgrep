@@ -14,6 +14,8 @@ from lgrep.storage._chunk_store import (  # noqa: F401
     CodeChunk,
     SearchResult,
     SearchResults,
+    discover_cached_projects,
     get_project_db_path,
     has_disk_cache,
+    write_project_meta,
 )

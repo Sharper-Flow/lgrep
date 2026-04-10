@@ -26,7 +26,13 @@ from pydantic import Field
 
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
-from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
+from lgrep.storage import (
+    ChunkStore,
+    discover_cached_projects,
+    get_project_db_path,
+    has_disk_cache,
+    write_project_meta,
+)
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
@@ -160,38 +166,50 @@ async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
 
 
 async def _warm_projects(app_ctx: LgrepContext) -> None:
-    """Eagerly load cached indexes listed in ``LGREP_WARM_PATHS``.
+    """Eagerly load cached indexes at startup.
 
-    Parses the env var as an ``os.pathsep``-separated list of project
-    directories, filters to those that have an existing disk cache, and
-    calls ``_ensure_project_initialized`` for each — concurrently.
+    Checks two sources in order:
+
+    1. ``LGREP_WARM_PATHS`` env var — explicit ``os.pathsep``-separated
+       list of project directories.
+    2. Auto-discover from disk — scans ``~/.cache/lgrep/*/project_meta.json``
+       for projects that were previously indexed, sorted by most recently
+       used.  Controlled by ``LGREP_AUTO_WARM_DISK`` env var (default: true).
 
     Errors in individual projects are logged and skipped; warming never
     blocks server startup.
     """
     raw = os.environ.get("LGREP_WARM_PATHS", "")
-    if not raw:
-        return
 
-    # Parse, expand, resolve, deduplicate
-    seen: set[str] = set()
     paths: list[Path] = []
-    for entry in raw.split(os.pathsep):
-        entry = entry.strip()
-        if not entry:
-            continue
-        resolved = Path(entry).expanduser().resolve()
-        key = str(resolved)
-        if key in seen:
-            continue
-        seen.add(key)
-        if not resolved.is_dir():
-            log.warning("warm_path_not_directory", path=key)
-            continue
-        if not has_disk_cache(key):
-            log.info("warm_no_disk_cache", path=key)
-            continue
-        paths.append(resolved)
+    if raw:
+        # Parse, expand, resolve, deduplicate
+        seen: set[str] = set()
+        for entry in raw.split(os.pathsep):
+            entry = entry.strip()
+            if not entry:
+                continue
+            resolved = Path(entry).expanduser().resolve()
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            if not resolved.is_dir():
+                log.warning("warm_path_not_directory", path=key)
+                continue
+            if not has_disk_cache(key):
+                log.info("warm_no_disk_cache", path=key)
+                continue
+            paths.append(resolved)
+        log.info("warm_source", source="env", candidates=len(paths))
+    else:
+        # Auto-discover from disk caches that have project_meta.json
+        auto_warm = os.environ.get("LGREP_AUTO_WARM_DISK", "true").lower()
+        if auto_warm in ("true", "1", "yes"):
+            discovered = discover_cached_projects(max_results=MAX_PROJECTS)
+            paths = [Path(p) for p in discovered]
+            if paths:
+                log.info("warm_source", source="disk_discovery", candidates=len(paths))
 
     if not paths:
         return
@@ -319,6 +337,7 @@ async def _ensure_project_initialized(
             )
             state = ProjectState(db=db, indexer=indexer)
             app_ctx.projects[path_key] = state
+            write_project_meta(path_key)
             log.info("project_initialized", project=path_key)
             return state
         except Exception as e:

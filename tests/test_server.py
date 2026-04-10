@@ -949,14 +949,15 @@ class TestEagerWarmUp:
         mock_init.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_warm_noop_when_env_unset(self):
-        """No warming should happen when LGREP_WARM_PATHS is not set."""
+    async def test_warm_noop_when_env_unset_and_no_disk_cache(self):
+        """No warming when LGREP_WARM_PATHS is unset and no disk caches exist."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
         with (
             patch.dict(os.environ, {}, clear=False),
             patch("lgrep.server.has_disk_cache") as mock_cache,
             patch("lgrep.server._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.discover_cached_projects", return_value=[]),
         ):
             # Ensure env var is absent
             os.environ.pop("LGREP_WARM_PATHS", None)
@@ -966,17 +967,40 @@ class TestEagerWarmUp:
         mock_init.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_warm_noop_when_env_empty(self):
-        """No warming should happen when LGREP_WARM_PATHS is empty string."""
+    async def test_warm_noop_when_env_empty_and_no_disk_cache(self):
+        """No warming when LGREP_WARM_PATHS is empty and no disk caches exist."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": ""}),
             patch("lgrep.server.has_disk_cache") as mock_cache,
             patch("lgrep.server._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.discover_cached_projects", return_value=[]),
         ):
             await _warm_projects(app_ctx)
 
+        mock_cache.assert_not_called()
+        mock_init.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_warm_noop_when_auto_warm_disabled(self):
+        """No warming when LGREP_WARM_PATHS is unset and auto-warm is disabled."""
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+
+        with (
+            patch.dict(
+                os.environ,
+                {"LGREP_AUTO_WARM_DISK": "false"},
+                clear=False,
+            ),
+            patch("lgrep.server.has_disk_cache") as mock_cache,
+            patch("lgrep.server._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.discover_cached_projects") as mock_discover,
+        ):
+            os.environ.pop("LGREP_WARM_PATHS", None)
+            await _warm_projects(app_ctx)
+
+        mock_discover.assert_not_called()
         mock_cache.assert_not_called()
         mock_init.assert_not_called()
 

@@ -7,6 +7,7 @@ Supports hybrid search (vector + FTS) with RRF reranking.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -116,6 +117,83 @@ def has_disk_cache(project_path: str | Path) -> bool:
     """
     db_path = get_project_db_path(project_path)
     return (db_path / (CHUNKS_TABLE + ".lance")).is_dir()
+
+
+# Project metadata — maps cache hash dirs back to original project paths
+_META_FILENAME = "project_meta.json"
+
+
+def write_project_meta(project_path: str | Path) -> None:
+    """Write a metadata file alongside the LanceDB cache for reverse-mapping.
+
+    Stores the original project path so ``discover_cached_projects`` can
+    reconstruct which hash dir belongs to which project.  The write is
+    atomic (write-to-tmp then rename) to avoid partial reads.
+    """
+    project_path = str(Path(project_path).resolve())
+    db_path = get_project_db_path(project_path)
+    meta_path = db_path / _META_FILENAME
+    tmp_path = meta_path.with_suffix(".tmp")
+    db_path.mkdir(parents=True, exist_ok=True)
+    payload = {"project_path": project_path, "updated_at": time.time()}
+    try:
+        tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+        tmp_path.rename(meta_path)
+    except OSError:
+        # Best-effort — never block startup
+        log.warning("write_project_meta_failed", project=project_path)
+
+
+def read_project_meta(db_path: Path) -> dict | None:
+    """Read project metadata from a cache directory.
+
+    Returns the parsed dict or None if the file is missing/corrupt.
+    """
+    meta_path = db_path / _META_FILENAME
+    if not meta_path.is_file():
+        return None
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def discover_cached_projects(max_results: int = 20) -> list[str]:
+    """Scan the lgrep cache directory for projects with existing disk caches.
+
+    Returns a list of original project paths, sorted by most recently
+    updated (newest first), capped at *max_results*.
+
+    Only returns projects whose directory still exists on the filesystem,
+    filtering out stale/deleted projects.
+    """
+    cache_dir = Path(os.environ.get("LGREP_CACHE_DIR", DEFAULT_CACHE_DIR))
+    if not cache_dir.is_dir():
+        return []
+
+    entries: list[tuple[float, str]] = []
+    try:
+        for child in cache_dir.iterdir():
+            if not child.is_dir():
+                continue
+            # Must have a valid LanceDB cache
+            if not (child / (CHUNKS_TABLE + ".lance")).is_dir():
+                continue
+            meta = read_project_meta(child)
+            if meta is None:
+                continue
+            project_path = meta.get("project_path", "")
+            if not project_path or not Path(project_path).is_dir():
+                continue
+            updated_at = meta.get("updated_at", 0.0)
+            entries.append((updated_at, project_path))
+    except OSError:
+        log.warning("discover_cached_projects_scan_failed")
+        return []
+
+    # Sort by most recent first
+    entries.sort(key=lambda x: x[0], reverse=True)
+    return [path for _, path in entries[:max_results]]
 
 
 class ChunkStore:
