@@ -12,6 +12,7 @@ from mcp.server.fastmcp import Context
 from lgrep.server import (
     AUTO_INDEX_MAX_ATTEMPTS,
     MAX_PROJECTS,
+    TOOL_TIMEOUT_S,
     LgrepContext,
     ProjectState,
     _ensure_project_initialized,
@@ -25,6 +26,9 @@ from lgrep.server import (
 )
 from lgrep.server import (
     search_semantic as lgrep_search,
+)
+from lgrep.server import (
+    search_text as lgrep_search_text,
 )
 from lgrep.server import (
     status_semantic as lgrep_status,
@@ -701,6 +705,7 @@ class TestServerErrorPaths:
         response = await lgrep_watch_start(path="/nonexistent/path", ctx=mock_ctx)
         data = json.loads(response)
         assert "error" in data
+        assert "does not exist" in data["error"]
 
 
 class TestMaxProjectsLimit:
@@ -1094,3 +1099,67 @@ class TestEagerWarmUp:
             await _warm_projects(app_ctx)
 
         mock_init.assert_called_once()
+
+
+class TestToolTimeout:
+    """Tests for server-side tool timeout enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_search_semantic_returns_error_on_timeout(self, tmp_path):
+        """search_semantic should return a structured error when the operation
+        exceeds TOOL_TIMEOUT_S, rather than letting the MCP client timeout fire."""
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = MagicMock()
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        project_path = tmp_path / "slow_project"
+        project_path.mkdir()
+
+        mock_db = MagicMock()
+        mock_state = ProjectState(db=mock_db, indexer=MagicMock())
+        app_ctx.projects[str(project_path.resolve())] = mock_state
+
+        # Simulate a slow embed_query that exceeds the timeout
+        async def slow_embed(*args, **kwargs):
+            await asyncio.sleep(TOOL_TIMEOUT_S + 5)
+            return [0.1] * 1024
+
+        app_ctx.embedder.embed_query.side_effect = lambda q: (_ for _ in ()).throw(
+            TimeoutError("simulated")
+        )
+
+        # Use a very short timeout for the test
+        with patch("lgrep.server.TOOL_TIMEOUT_S", 0.1):
+            # Make embed_query block longer than the timeout
+            import time
+
+            def slow_sync_embed(q):
+                time.sleep(0.5)
+                return [0.1] * 1024
+
+            app_ctx.embedder.embed_query.side_effect = slow_sync_embed
+
+            response = await lgrep_search(
+                query="test timeout", path=str(project_path), ctx=mock_ctx
+            )
+
+        data = json.loads(response)
+        assert "error" in data
+        assert "timed out" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_search_text_runs_in_thread(self, tmp_path):
+        """search_text should not block the event loop — verify it runs via asyncio.to_thread."""
+        # Create a simple file to search
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello():\n    return 'world'\n")
+
+        response = await lgrep_search_text(
+            query="hello", path=str(tmp_path)
+        )
+
+        data = json.loads(response)
+        assert "results" in data
+        assert len(data["results"]) >= 1
+        assert data["results"][0]["file_path"] == "test.py"

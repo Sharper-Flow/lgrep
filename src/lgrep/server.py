@@ -59,19 +59,43 @@ MAX_PROJECTS = 20
 AUTO_INDEX_MAX_ATTEMPTS = 2
 AUTO_INDEX_RETRY_BASE_DELAY_S = 0.1
 
+# Server-side timeout for tool operations.
+# Must be shorter than the MCP client timeout (default 60s) to return
+# a meaningful error instead of the client seeing a generic timeout.
+TOOL_TIMEOUT_S = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
+
 
 def time_tool(func):
-    """Decorator to time tool execution and log results."""
+    """Decorator to time tool execution, log results, and enforce a server-side timeout.
+
+    Wraps tool calls in asyncio.wait_for() so the server returns a structured
+    error before the MCP client's transport-level timeout fires.
+    """
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         start = time.perf_counter()
         tool_name = func.__name__
         try:
-            result = await func(*args, **kwargs)
+            result = await asyncio.wait_for(
+                func(*args, **kwargs),
+                timeout=TOOL_TIMEOUT_S,
+            )
             duration = round((time.perf_counter() - start) * 1000, 2)
             log.info(f"{tool_name}_completed", duration_ms=duration)
             return result
+        except TimeoutError:
+            duration = round((time.perf_counter() - start) * 1000, 2)
+            log.error(
+                f"{tool_name}_timeout",
+                duration_ms=duration,
+                timeout_s=TOOL_TIMEOUT_S,
+            )
+            return _error_response(
+                f"Operation timed out after {TOOL_TIMEOUT_S}s. "
+                "The project may need re-indexing or the Voyage API may be slow. "
+                "Try again or use a non-semantic search tool."
+            )
         except Exception as e:
             duration = round((time.perf_counter() - start) * 1000, 2)
             log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))
@@ -1098,7 +1122,9 @@ async def search_text(
     Returns:
         JSON with results list (file_path, line_number, line) and _meta envelope
     """
-    result = _search_text(query, path, max_results=max_results, case_sensitive=case_sensitive)
+    result = await asyncio.to_thread(
+        _search_text, query, path, max_results=max_results, case_sensitive=case_sensitive
+    )
     return json.dumps(result)
 
 

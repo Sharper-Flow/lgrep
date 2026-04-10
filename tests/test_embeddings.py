@@ -220,7 +220,11 @@ class TestVoyageEmbedder:
                 assert mock_client.embed.call_count == 2
 
     def test_embed_query_permanent_failure(self) -> None:
-        """Should raise after exhausting retries on embed_query."""
+        """Should raise after exhausting fast retries on embed_query.
+
+        embed_query uses QUERY_MAX_RETRIES (2) for interactive responsiveness,
+        not the full MAX_RETRIES (5) used for document indexing.
+        """
         with patch("voyageai.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.embed.side_effect = RuntimeError("permanent")
@@ -231,7 +235,8 @@ class TestVoyageEmbedder:
                 with pytest.raises(RuntimeError, match="permanent"):
                     embedder.embed_query("test query")
 
-                assert mock_client.embed.call_count == 5
+                # Fast retry: QUERY_MAX_RETRIES = 2
+                assert mock_client.embed.call_count == 2
 
 
 class TestEmbeddingResult:

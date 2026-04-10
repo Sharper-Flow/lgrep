@@ -23,6 +23,11 @@ MAX_BATCH_TOKENS = 100_000  # Voyage limit is 120k; use 100k for safety margin
 MAX_RETRIES = 5
 BASE_DELAY = 1.0
 
+# Query-specific retry budget: interactive queries should fail fast
+# rather than blocking for 30+ seconds of retries.
+QUERY_MAX_RETRIES = 2
+QUERY_BASE_DELAY = 0.5
+
 # Voyage Code 3 pricing: $0.18 per 1M tokens
 COST_PER_MILLION_TOKENS = 0.18
 COST_THRESHOLD_5 = 5.0
@@ -147,6 +152,55 @@ class VoyageEmbedder:
         # Unreachable: the loop always returns or raises on the last attempt
         raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
 
+    def _embed_query_with_fast_retry(
+        self, text: str
+    ) -> tuple[list[float], int]:
+        """Embed a single query with reduced retry budget for interactive use.
+
+        Uses QUERY_MAX_RETRIES (2) and QUERY_BASE_DELAY (0.5s) instead of
+        the document-indexing retry strategy (5 retries, 1s base delay).
+        Total worst-case delay: ~2s vs ~31s for document retries.
+
+        Args:
+            text: Query text to embed
+
+        Returns:
+            Tuple of (embedding_vector, token_usage)
+
+        Raises:
+            Exception: After QUERY_MAX_RETRIES failed attempts
+        """
+        for attempt in range(QUERY_MAX_RETRIES):
+            try:
+                result = self.client.embed(
+                    texts=[text],
+                    model=self.model,
+                    input_type="query",
+                )
+                return result.embeddings[0], result.total_tokens
+            except Exception as e:
+                error_msg = str(e)
+
+                if attempt == QUERY_MAX_RETRIES - 1:
+                    log.error(
+                        "voyage_query_failed_permanent",
+                        error=error_msg,
+                        attempts=QUERY_MAX_RETRIES,
+                    )
+                    raise
+
+                delay = QUERY_BASE_DELAY * (2**attempt) + random.uniform(0, 0.5)
+                log.warning(
+                    "voyage_query_failed_retrying",
+                    attempt=attempt + 1,
+                    max_attempts=QUERY_MAX_RETRIES,
+                    delay=round(delay, 2),
+                    error=error_msg,
+                )
+                time.sleep(delay)
+
+        raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
+
     @staticmethod
     def _estimate_tokens(text: str) -> int:
         """Rough token estimate: ~4 chars per token for code."""
@@ -227,7 +281,10 @@ class VoyageEmbedder:
         )
 
     def embed_query(self, query: str) -> list[float]:
-        """Embed a search query with retry logic.
+        """Embed a search query with fast retry logic.
+
+        Uses a reduced retry budget (2 attempts, 0.5s base delay) compared
+        to document embedding to keep interactive searches responsive.
 
         Args:
             query: Search query string
@@ -237,8 +294,8 @@ class VoyageEmbedder:
         """
         log.debug("voyage_embed_query", query_len=len(query))
 
-        embeddings, tokens = self._embed_batch_with_retry([query], "query")
+        embedding, tokens = self._embed_query_with_fast_retry(query)
         self.total_tokens_used += tokens
         self._check_cost_thresholds()
         log.debug("voyage_query_embedded", tokens=tokens)
-        return embeddings[0]
+        return embedding
