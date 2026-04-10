@@ -281,10 +281,14 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
         await _shutdown(ctx)
 
 
-# Create the MCP server with lifespan
+# Create the MCP server with lifespan.
+# stateless_http=True: all lgrep tools are idempotent — no session state needed.
+# This prevents "No valid session ID provided" errors when the server restarts
+# and clients still hold stale session IDs from the previous process.
 mcp = FastMCP(
     "lgrep",
     lifespan=app_lifespan,
+    stateless_http=True,
 )
 
 
