@@ -510,6 +510,8 @@ async def _execute_search(
     project_path: str,
 ) -> str:
     """Run embedding + storage search and return JSON output."""
+    if app_ctx.embedder is None:
+        return _error_response("VOYAGE_API_KEY not set. Cannot perform semantic search.")
     try:
         query_vector = await asyncio.to_thread(app_ctx.embedder.embed_query, query)
         if hybrid:
@@ -689,14 +691,19 @@ async def status_semantic(
             if has_disk_cache(project_path):
                 log.info("status_reading_disk_cache", project=project_path)
                 try:
-                    db_path = get_project_db_path(project_path)
-                    store = ChunkStore(db_path)
-                    chunks = store.count_chunks()
-                    files_set = store.get_indexed_files()
+
+                    def _read_disk_stats():
+                        db_path = get_project_db_path(project_path)
+                        store = ChunkStore(db_path)
+                        chunks = store.count_chunks()
+                        files_set = store.get_indexed_files()
+                        return len(files_set), chunks
+
+                    file_count, chunk_count = await asyncio.to_thread(_read_disk_stats)
                     return json.dumps(
                         {
-                            "files": len(files_set),
-                            "chunks": chunks,
+                            "files": file_count,
+                            "chunks": chunk_count,
                             "watching": False,
                             "project": project_path,
                             "disk_cache": True,
@@ -878,7 +885,9 @@ async def index_symbols_folder(
         JSON with files_indexed, files_skipped, symbols_indexed, repo_path,
         and _meta envelope
     """
-    result = _index_folder(path, max_files=max_files, incremental=incremental)
+    result = await asyncio.to_thread(
+        _index_folder, path, max_files=max_files, incremental=incremental
+    )
     return json.dumps(result)
 
 
@@ -939,7 +948,7 @@ async def list_repos() -> str:
     Returns:
         JSON with repos list and _meta envelope
     """
-    result = _list_repos()
+    result = await asyncio.to_thread(_list_repos)
     return json.dumps(result)
 
 
@@ -971,7 +980,7 @@ async def get_file_tree(
     Returns:
         JSON with files list (relative paths), total_files, and _meta envelope
     """
-    result = _get_file_tree(path, max_files=max_files)
+    result = await asyncio.to_thread(_get_file_tree, path, max_files=max_files)
     return json.dumps(result)
 
 
@@ -1003,7 +1012,7 @@ async def get_file_outline(
     Returns:
         JSON with file_path, symbols list, symbol_count, and _meta envelope
     """
-    result = _get_file_outline(path, repo_root=repo_root)
+    result = await asyncio.to_thread(_get_file_outline, path, repo_root=repo_root)
     return json.dumps(result)
 
 
@@ -1035,7 +1044,7 @@ async def get_repo_outline(
     Returns:
         JSON with repo_path, files list, total_files, total_symbols, and _meta envelope
     """
-    result = _get_repo_outline(path, max_files=max_files)
+    result = await asyncio.to_thread(_get_repo_outline, path, max_files=max_files)
     return json.dumps(result)
 
 
@@ -1084,7 +1093,7 @@ async def search_symbols(
     Returns:
         JSON with results list, total_matches, and _meta envelope
     """
-    result = _search_symbols(query, path, limit=limit, kind=kind)
+    result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
     return json.dumps(result)
 
 
@@ -1163,7 +1172,7 @@ async def get_symbol(
     Returns:
         JSON with symbol dict (including source field) and _meta envelope
     """
-    result = _get_symbol(symbol_id, path)
+    result = await asyncio.to_thread(_get_symbol, symbol_id, path)
     return json.dumps(result)
 
 
@@ -1195,7 +1204,7 @@ async def get_symbols(
     Returns:
         JSON with symbols list and _meta envelope
     """
-    result = _get_symbols(symbol_ids, path)
+    result = await asyncio.to_thread(_get_symbols, symbol_ids, path)
     return json.dumps(result)
 
 
@@ -1229,7 +1238,7 @@ async def invalidate_cache(
     Returns:
         JSON with status ("deleted" or "not_found") and _meta envelope
     """
-    result = _invalidate_cache(path)
+    result = await asyncio.to_thread(_invalidate_cache, path)
     return json.dumps(result)
 
 
