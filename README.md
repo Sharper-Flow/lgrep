@@ -1,12 +1,16 @@
 <div align="center">
 
-<a href="https://sharperflow.com/projects/lgrep">
-  <img src="https://sharperflow.com/og/lgrep-preview.png" alt="lgrep" width="720" />
-</a>
-
-<br />
+# lgrep
 
 **Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode)**
+
+<a href="https://sharperflow.com/projects/lgrep">
+  <img
+    src="https://sharperflow.com/og/lgrep-preview.png"
+    alt="lgrep preview banner showing semantic search and symbol lookup for OpenCode"
+    width="680"
+  />
+</a>
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
