@@ -1,24 +1,28 @@
-<div align="center">
+<h1 align="center">lgrep</h1>
 
-# lgrep
+<p align="center">
+  <strong>Dual-engine code intelligence for <a href="https://github.com/opencode-ai/opencode">OpenCode</a></strong>
+</p>
 
-**Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode)**
+<p align="center">
+  <a href="https://sharperflow.com/projects/lgrep">
+    <img src="https://sharperflow.com/og/lgrep-preview.png" alt="lgrep preview banner showing semantic search and symbol lookup for OpenCode" width="640" />
+  </a>
+</p>
 
-<a href="https://sharperflow.com/projects/lgrep">
-  <img
-    src="https://sharperflow.com/og/lgrep-preview.png"
-    alt="lgrep preview banner showing semantic search and symbol lookup for OpenCode"
-    width="680"
-  />
-</a>
+<p align="center">
+  <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white" alt="Python 3.11+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/Sharper-Flow/lgrep"><img src="https://img.shields.io/github/stars/Sharper-Flow/lgrep?style=social" alt="GitHub stars" /></a>
+</p>
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white)](https://www.python.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![GitHub](https://img.shields.io/github/stars/Sharper-Flow/lgrep?style=social)](https://github.com/Sharper-Flow/lgrep)
-
-[Project Page](https://sharperflow.com/projects/lgrep) &middot; [GitHub](https://github.com/Sharper-Flow/lgrep) &middot; [Changelog](CHANGELOG.md)
-
-</div>
+<p align="center">
+  <a href="https://sharperflow.com/projects/lgrep">Project Page</a>
+  &middot;
+  <a href="https://github.com/Sharper-Flow/lgrep">GitHub</a>
+  &middot;
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 ---
 
