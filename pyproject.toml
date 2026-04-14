@@ -18,6 +18,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
+[project.urls]
+Homepage = "https://sharperflow.com/projects/lgrep"
+Repository = "https://github.com/Sharper-Flow/lgrep"
+Changelog = "https://github.com/Sharper-Flow/lgrep/blob/main/CHANGELOG.md"
+
 dependencies = [
     "lancedb>=0.5.0",
     "voyageai>=0.3.0",

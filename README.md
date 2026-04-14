@@ -2,6 +2,8 @@
 
 **Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode).**
 
+[Project Page](https://sharperflow.com/projects/lgrep) | [GitHub](https://github.com/Sharper-Flow/lgrep) | [Changelog](CHANGELOG.md)
+
 `lgrep` gives AI agents a better first move.
 
 Instead of starting with `glob`, `grep`, and random file reads, agents can:
@@ -410,3 +412,7 @@ pytest -v
 ## License
 
 MIT - see `LICENSE`.
+
+---
+
+[sharperflow.com/projects/lgrep](https://sharperflow.com/projects/lgrep)

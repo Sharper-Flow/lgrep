@@ -4,8 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Project URLs in pyproject.toml** — Homepage, Repository, and Changelog links now included in package metadata.
+- **Project page link in README** — header nav bar and footer link to [sharperflow.com/projects/lgrep](https://sharperflow.com/projects/lgrep).
+
 ### Fixed
 
+- **Flaky `test_has_disk_cache_check`** — monkeypatches `LGREP_CACHE_DIR` to isolate from global cache, preventing hash collisions with leftover data from prior pytest sessions.
+- **Ruff formatting** — applied `ruff format` to 5 files that had drifted from the project style.
 - Restored the SKILL.md `Tool Exposure Requirement` guidance so the packaged skill matches the routing-policy tests and current agent manifest requirements.
 - Corrected install docs in `SKILL.md` and `README.md` so they describe all installer artifacts consistently: MCP entry, always-on instruction, and skill file.
 
