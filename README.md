@@ -1,8 +1,22 @@
-# lgrep
+<div align="center">
 
-**Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode).**
+<a href="https://sharperflow.com/projects/lgrep">
+  <img src="https://sharperflow.com/og/lgrep-preview.png" alt="lgrep" width="720" />
+</a>
 
-[Project Page](https://sharperflow.com/projects/lgrep) | [GitHub](https://github.com/Sharper-Flow/lgrep) | [Changelog](CHANGELOG.md)
+<br />
+
+**Dual-engine code intelligence for [OpenCode](https://github.com/opencode-ai/opencode)**
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![GitHub](https://img.shields.io/github/stars/Sharper-Flow/lgrep?style=social)](https://github.com/Sharper-Flow/lgrep)
+
+[Project Page](https://sharperflow.com/projects/lgrep) &middot; [GitHub](https://github.com/Sharper-Flow/lgrep) &middot; [Changelog](CHANGELOG.md)
+
+</div>
+
+---
 
 `lgrep` gives AI agents a better first move.
 
