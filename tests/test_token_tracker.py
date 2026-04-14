@@ -5,8 +5,6 @@ GREEN phase: all pass after implementation.
 """
 
 
-
-
 class TestTokenTrackerImport:
     """Verify the module is importable with the expected API."""
 

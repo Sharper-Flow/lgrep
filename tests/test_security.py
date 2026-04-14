@@ -7,8 +7,6 @@ GREEN phase: all pass after implementation.
 """
 
 
-
-
 class TestPathTraversalSecurity:
     """Path traversal attacks must be rejected."""
 

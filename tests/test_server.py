@@ -1155,9 +1155,7 @@ class TestToolTimeout:
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello():\n    return 'world'\n")
 
-        response = await lgrep_search_text(
-            query="hello", path=str(tmp_path)
-        )
+        response = await lgrep_search_text(query="hello", path=str(tmp_path))
 
         data = json.loads(response)
         assert "results" in data

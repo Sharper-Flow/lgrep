@@ -152,9 +152,7 @@ class VoyageEmbedder:
         # Unreachable: the loop always returns or raises on the last attempt
         raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
 
-    def _embed_query_with_fast_retry(
-        self, text: str
-    ) -> tuple[list[float], int]:
+    def _embed_query_with_fast_retry(self, text: str) -> tuple[list[float], int]:
         """Embed a single query with reduced retry budget for interactive use.
 
         Uses QUERY_MAX_RETRIES (2) and QUERY_BASE_DELAY (0.5s) instead of

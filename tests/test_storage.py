@@ -98,8 +98,11 @@ class TestDbPathResolution:
         db2 = get_project_db_path("/path/b")
         assert db1 != db2
 
-    def test_has_disk_cache_check(self, tmp_path):
+    def test_has_disk_cache_check(self, tmp_path, monkeypatch):
         """Should detect if lance files exist on disk."""
+        # Isolate from global cache to avoid collisions with prior runs
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
         project_path = tmp_path / "my_project"
         project_path.mkdir()
 
