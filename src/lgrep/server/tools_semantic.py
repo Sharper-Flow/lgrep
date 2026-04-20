@@ -25,6 +25,7 @@ from lgrep.server.responses import (
     SearchSemanticResult,
     StatusAllProjectsResult,
     StatusSemanticResult,
+    ToolError,
     WatchStartResult,
     WatchStopAllResult,
     WatchStopResult,
@@ -45,7 +46,7 @@ async def _execute_search(
     limit: int,
     hybrid: bool,
     project_path: str,
-) -> SearchSemanticResult:
+) -> SearchSemanticResult | ToolError:
     """Run embedding + storage search and return structured result."""
     if app_ctx.embedder is None:
         return error_response("VOYAGE_API_KEY not set. Cannot perform semantic search.")
@@ -100,7 +101,7 @@ async def search_semantic(
     q: str | None = None,
     m: int | None = None,
     ctx: Context | None = None,
-) -> SearchSemanticResult:
+) -> SearchSemanticResult | ToolError:
     """Search code semantically using natural language.
 
     MCP invocation only: call this as a native MCP tool (`lgrep_search_semantic`).
@@ -152,7 +153,7 @@ async def index_semantic(
         Field(description="Absolute path to the local repository root to index."),
     ],
     ctx: Context | None = None,
-) -> IndexSemanticResult:
+) -> IndexSemanticResult | ToolError:
     """Index a directory for semantic search.
 
     Args:
@@ -208,7 +209,7 @@ async def status_semantic(
         Field(description="Optional absolute repository path; omit to list all loaded projects."),
     ] = "",
     ctx: Context | None = None,
-) -> StatusSemanticResult | StatusAllProjectsResult:
+) -> StatusSemanticResult | StatusAllProjectsResult | ToolError:
     """Get index status and statistics.
 
     Args:
@@ -295,7 +296,7 @@ async def watch_start_semantic(
         Field(description="Absolute path to the local repository root to watch."),
     ],
     ctx: Context | None = None,
-) -> WatchStartResult:
+) -> WatchStartResult | ToolError:
     """Start watching a directory for changes.
 
     Args:
@@ -356,7 +357,7 @@ async def watch_stop_semantic(
         Field(description="Optional absolute repository path; omit to stop all active watchers."),
     ] = "",
     ctx: Context | None = None,
-) -> WatchStopResult | WatchStopAllResult:
+) -> WatchStopResult | WatchStopAllResult | ToolError:
     """Stop watching for file changes.
 
     Args:

@@ -21,6 +21,7 @@ from lgrep.server.responses import (
     ListReposResult,
     SearchSymbolsResult,
     SearchTextResult,
+    ToolError,
     error_response,
 )
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
@@ -293,7 +294,7 @@ async def search_symbols(
         str | None,
         Field(description="Optional symbol kind filter (for example: function, class, method)."),
     ] = None,
-) -> SearchSymbolsResult:
+) -> SearchSymbolsResult | ToolError:
     """Search for symbols by name in an indexed repository.
 
     MCP invocation only: call this as a native MCP tool (`lgrep_search_symbols`).
@@ -387,7 +388,7 @@ async def get_symbol(
         str,
         Field(description="Absolute path to the indexed local repository root."),
     ],
-) -> GetSymbolResult:
+) -> GetSymbolResult | ToolError:
     """Get full metadata and source code for a single symbol by ID.
 
     Symbol IDs use the format "file_path:kind:name" (e.g. "src/auth.py:function:authenticate").
@@ -427,7 +428,7 @@ async def get_symbols(
         str,
         Field(description="Absolute path to the indexed local repository root."),
     ],
-) -> GetSymbolsResult:
+) -> GetSymbolsResult | ToolError:
     """Get full metadata and source code for multiple symbols in one call.
 
     Args:
@@ -481,6 +482,5 @@ async def invalidate_cache(
         status=result["status"],
         _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
     )
-
 
 
