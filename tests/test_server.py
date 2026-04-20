@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp import Context
@@ -12,7 +12,6 @@ from mcp.server.fastmcp import Context
 from lgrep.server import (
     AUTO_INDEX_MAX_ATTEMPTS,
     MAX_PROJECTS,
-    TOOL_TIMEOUT_S,
     LgrepContext,
     ProjectState,
     _ensure_project_initialized,
@@ -68,17 +67,18 @@ class TestDiskCacheAutoLoad:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
             response = await lgrep_search(query="test", path=str(project_path), ctx=mock_ctx)
 
-        data = json.loads(response)
+        data = response
         assert "results" in data
         assert len(data["results"]) == 1
         # _ensure_project_initialized should have been called
@@ -106,10 +106,11 @@ class TestDiskCacheAutoLoad:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=True),
-            patch("lgrep.server._ensure_project_initialized", return_value=mock_state),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", return_value=mock_state),
         ):
             await lgrep_search(query="find auth", path=str(project_path), ctx=mock_ctx)
 
@@ -125,10 +126,10 @@ class TestDiskCacheAutoLoad:
 
         project_path = tmp_path / "noproject"
 
-        with patch("lgrep.server.has_disk_cache", return_value=False):
+        with patch("lgrep.server.lifecycle.has_disk_cache", return_value=False):
             response = await lgrep_search(query="test", path=str(project_path), ctx=mock_ctx)
 
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "does not exist" in data["error"]
 
@@ -145,12 +146,12 @@ class TestDiskCacheAutoLoad:
 
         error_msg = json.dumps({"error": "VOYAGE_API_KEY not set."})
         with (
-            patch("lgrep.server.has_disk_cache", return_value=True),
-            patch("lgrep.server._ensure_project_initialized", return_value=error_msg),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", return_value=error_msg),
         ):
             response = await lgrep_search(query="test", path=str(project_path), ctx=mock_ctx)
 
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "VOYAGE_API_KEY" in data["error"]
 
@@ -170,12 +171,12 @@ class TestDiskCacheAutoLoad:
         mock_store.get_indexed_files.return_value = {"a.py", "b.py", "c.py"}
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=True),
-            patch("lgrep.server.ChunkStore", return_value=mock_store),
+            patch("lgrep.server.tools_semantic.has_disk_cache", return_value=True),
+            patch("lgrep.server.tools_semantic.ChunkStore", return_value=mock_store),
         ):
             response = await lgrep_status(path=str(project_path), ctx=mock_ctx)
 
-        data = json.loads(response)
+        data = response
         assert data["files"] == 3
         assert data["chunks"] == 500
         assert data["watching"] is False
@@ -192,10 +193,10 @@ class TestDiskCacheAutoLoad:
         project_path = tmp_path / "nope"
         project_path.mkdir()
 
-        with patch("lgrep.server.has_disk_cache", return_value=False):
+        with patch("lgrep.server.tools_semantic.has_disk_cache", return_value=False):
             response = await lgrep_status(path=str(project_path), ctx=mock_ctx)
 
-        data = json.loads(response)
+        data = response
         assert data["files"] == 0
         assert data["chunks"] == 0
 
@@ -313,6 +314,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
         assert (
             "non-default" in content or "opt-in" in content.lower() or "explicit" in content.lower()
         )
+        # rq-4.2.2: stdio is the local default
+        assert "local default" in content.lower()
+        assert "stdio" in content.lower()
 
     @pytest.mark.asyncio
     async def test_search_auto_indexes_when_project_not_cached(self, tmp_path):
@@ -335,11 +339,12 @@ class TestAcceptanceToolChoiceAndOnboarding:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
@@ -349,7 +354,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
                 ctx=mock_ctx,
             )
 
-        data = json.loads(response)
+        data = response
         assert "results" in data
         mock_init.assert_called_once()
 
@@ -374,6 +379,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         call_counter = {"count": 0}
 
@@ -392,8 +398,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
             return mock_state
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=False),
-            patch("lgrep.server._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
         ):
             response_a, response_b = await asyncio.gather(
                 lgrep_search(
@@ -408,8 +414,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
                 ),
             )
 
-        data_a = json.loads(response_a)
-        data_b = json.loads(response_b)
+        data_a = response_a
+        data_b = response_b
         assert "results" in data_a
         assert "results" in data_b
         assert call_counter["count"] == 1
@@ -424,14 +430,14 @@ class TestAcceptanceToolChoiceAndOnboarding:
         project_path = tmp_path / "no_key_project"
         project_path.mkdir()
 
-        with patch("lgrep.server.has_disk_cache", return_value=False):
+        with patch("lgrep.server.lifecycle.has_disk_cache", return_value=False):
             response = await lgrep_search(
                 query="find auth logic",
                 path=str(project_path),
                 ctx=mock_ctx,
             )
 
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "VOYAGE_API_KEY" in data["error"]
         # Must NOT tell user to run lgrep_index manually
@@ -458,8 +464,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
             return mock_state
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=False),
-            patch("lgrep.server._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
         ):
             response = await lgrep_search(
                 query="find auth logic",
@@ -467,7 +473,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
                 ctx=mock_ctx,
             )
 
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "Failed to auto-index" in data["error"]
         assert mock_state.indexer.index_all.call_count == AUTO_INDEX_MAX_ATTEMPTS
@@ -483,6 +489,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         app_ctx = LgrepContext(voyage_api_key="mock-key")
         app_ctx.embedder = MagicMock()
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
         mock_ctx.request_context.lifespan_context = app_ctx
 
         project_path = tmp_path / "retry_success_project"
@@ -513,9 +520,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
             return mock_state
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=False),
-            patch("lgrep.server._ensure_project_initialized", side_effect=fake_ensure_init),
-            patch("lgrep.server.AUTO_INDEX_RETRY_BASE_DELAY_S", 0),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch("lgrep.server.lifecycle.AUTO_INDEX_RETRY_BASE_DELAY_S", 0),
         ):
             response = await lgrep_search(
                 query="find auth logic",
@@ -523,7 +530,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
                 ctx=mock_ctx,
             )
 
-        data = json.loads(response)
+        data = response
         assert "results" in data
         assert attempts["count"] == 2
 
@@ -534,6 +541,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         app_ctx = LgrepContext(voyage_api_key="mock-key")
         app_ctx.embedder = MagicMock()
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
         mock_ctx.request_context.lifespan_context = app_ctx
 
         project_path = tmp_path / "leader_fails_project"
@@ -547,8 +555,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
             return mock_state
 
         with (
-            patch("lgrep.server.has_disk_cache", return_value=False),
-            patch("lgrep.server._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
         ):
             response_a, response_b = await asyncio.gather(
                 lgrep_search(
@@ -564,8 +572,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
             )
 
         # Both should get error responses (not crashes)
-        data_a = json.loads(response_a)
-        data_b = json.loads(response_b)
+        data_a = response_a
+        data_b = response_b
         assert "error" in data_a or "error" in data_b
 
 
@@ -593,14 +601,16 @@ class TestServerTools:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         response = await lgrep_search(query="test", path="/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert "results" in data
         assert len(data["results"]) == 1
         assert data["results"][0]["file_path"] == "a.py"
-        assert data["query_time_ms"] == 10.0
+        # query_time_ms is no longer in the response TypedDict (SearchSemanticResult)
+        # — it was an internal storage metric, not part of the MCP contract
 
     @pytest.mark.asyncio
     async def test_lgrep_status_format(self):
@@ -618,7 +628,7 @@ class TestServerTools:
         mock_db.get_indexed_files.return_value = {"a.py", "b.py"}
 
         response = await lgrep_status(path="/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert data["files"] == 2
         assert data["chunks"] == 500
@@ -637,7 +647,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_search(query="test", path="/some/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "does not exist" in data["error"]
 
@@ -645,7 +655,7 @@ class TestServerErrorPaths:
     async def test_lgrep_search_no_context(self):
         """Should return error when context is missing."""
         response = await lgrep_search(query="test", path="/some/path", ctx=None)
-        data = json.loads(response)
+        data = response
         assert "error" in data
 
     @pytest.mark.asyncio
@@ -656,7 +666,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_index(path="/nonexistent/path/xyz", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "does not exist" in data["error"]
 
@@ -668,7 +678,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_index(path=str(tmp_path), ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "VOYAGE_API_KEY" in data["error"]
 
@@ -680,7 +690,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_status(ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert data["projects"] == []
 
     @pytest.mark.asyncio
@@ -691,7 +701,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_watch_stop(ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert data["stopped"] is True
         assert data["projects_stopped"] == []
 
@@ -703,7 +713,7 @@ class TestServerErrorPaths:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_watch_start(path="/nonexistent/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "does not exist" in data["error"]
 
@@ -729,9 +739,9 @@ class TestMaxProjectsLimit:
         new_path.mkdir()
         result = await _ensure_project_initialized(app_ctx, new_path)
 
-        # Should return error string, not ProjectState
-        assert isinstance(result, str)
-        data = json.loads(result)
+        # Should return error dict, not ProjectState
+        assert isinstance(result, dict)
+        data = result
         assert "error" in data
         assert "Maximum project limit" in data["error"]
         assert "Restart the server" in data["error"]
@@ -750,7 +760,7 @@ class TestMaxProjectsLimit:
         new_path = tmp_path / "ok_project"
         new_path.mkdir()
 
-        with patch("lgrep.server.VoyageEmbedder"):
+        with patch("lgrep.server.lifecycle.VoyageEmbedder"):
             result = await _ensure_project_initialized(app_ctx, new_path)
 
         assert isinstance(result, ProjectState)
@@ -778,7 +788,7 @@ class TestWatcherBehavior:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await lgrep_watch_start(path=str(tmp_path), ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert data["watching"] is True
         assert data["message"] == "Already watching"
@@ -895,9 +905,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": warm_paths}),
-            patch("lgrep.server.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
@@ -915,9 +925,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": str(project)}),
-            patch("lgrep.server.has_disk_cache", return_value=False),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
             ) as mock_init,
         ):
             await _warm_projects(app_ctx)
@@ -942,9 +952,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": warm_paths}),
-            patch("lgrep.server.has_disk_cache", side_effect=selective_cache),
+            patch("lgrep.server.lifecycle.has_disk_cache", side_effect=selective_cache),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
@@ -960,9 +970,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {}, clear=False),
-            patch("lgrep.server.has_disk_cache") as mock_cache,
-            patch("lgrep.server._ensure_project_initialized") as mock_init,
-            patch("lgrep.server.discover_cached_projects", return_value=[]),
+            patch("lgrep.server.lifecycle.has_disk_cache") as mock_cache,
+            patch("lgrep.server.lifecycle._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.lifecycle.discover_cached_projects", return_value=[]),
         ):
             # Ensure env var is absent
             os.environ.pop("LGREP_WARM_PATHS", None)
@@ -978,9 +988,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": ""}),
-            patch("lgrep.server.has_disk_cache") as mock_cache,
-            patch("lgrep.server._ensure_project_initialized") as mock_init,
-            patch("lgrep.server.discover_cached_projects", return_value=[]),
+            patch("lgrep.server.lifecycle.has_disk_cache") as mock_cache,
+            patch("lgrep.server.lifecycle._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.lifecycle.discover_cached_projects", return_value=[]),
         ):
             await _warm_projects(app_ctx)
 
@@ -998,9 +1008,9 @@ class TestEagerWarmUp:
                 {"LGREP_AUTO_WARM_DISK": "false"},
                 clear=False,
             ),
-            patch("lgrep.server.has_disk_cache") as mock_cache,
-            patch("lgrep.server._ensure_project_initialized") as mock_init,
-            patch("lgrep.server.discover_cached_projects") as mock_discover,
+            patch("lgrep.server.lifecycle.has_disk_cache") as mock_cache,
+            patch("lgrep.server.lifecycle._ensure_project_initialized") as mock_init,
+            patch("lgrep.server.lifecycle.discover_cached_projects") as mock_discover,
         ):
             os.environ.pop("LGREP_WARM_PATHS", None)
             await _warm_projects(app_ctx)
@@ -1030,9 +1040,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": warm_paths}),
-            patch("lgrep.server.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
@@ -1065,9 +1075,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": warm_paths}),
-            patch("lgrep.server.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 side_effect=selective_init,
             ),
         ):
@@ -1090,9 +1100,9 @@ class TestEagerWarmUp:
 
         with (
             patch.dict(os.environ, {"LGREP_WARM_PATHS": warm_paths}),
-            patch("lgrep.server.has_disk_cache", return_value=True),
+            patch("lgrep.server.lifecycle.has_disk_cache", return_value=True),
             patch(
-                "lgrep.server._ensure_project_initialized",
+                "lgrep.server.lifecycle._ensure_project_initialized",
                 return_value=mock_state,
             ) as mock_init,
         ):
@@ -1120,31 +1130,20 @@ class TestToolTimeout:
         mock_state = ProjectState(db=mock_db, indexer=MagicMock())
         app_ctx.projects[str(project_path.resolve())] = mock_state
 
-        # Simulate a slow embed_query that exceeds the timeout
-        async def slow_embed(*args, **kwargs):
-            await asyncio.sleep(TOOL_TIMEOUT_S + 5)
+        # Simulate a slow embed_query_async that exceeds the timeout
+        async def slow_async_embed(q):
+            await asyncio.sleep(0.5)
             return [0.1] * 1024
 
-        app_ctx.embedder.embed_query.side_effect = lambda q: (_ for _ in ()).throw(
-            TimeoutError("simulated")
-        )
+        app_ctx.embedder.embed_query_async = AsyncMock(side_effect=slow_async_embed)
 
         # Use a very short timeout for the test
         with patch("lgrep.server.TOOL_TIMEOUT_S", 0.1):
-            # Make embed_query block longer than the timeout
-            import time
-
-            def slow_sync_embed(q):
-                time.sleep(0.5)
-                return [0.1] * 1024
-
-            app_ctx.embedder.embed_query.side_effect = slow_sync_embed
-
             response = await lgrep_search(
                 query="test timeout", path=str(project_path), ctx=mock_ctx
             )
 
-        data = json.loads(response)
+        data = response
         assert "error" in data
         assert "timed out" in data["error"]
 
@@ -1157,7 +1156,7 @@ class TestToolTimeout:
 
         response = await lgrep_search_text(query="hello", path=str(tmp_path))
 
-        data = json.loads(response)
+        data = response
         assert "results" in data
         assert len(data["results"]) >= 1
         assert data["results"][0]["file_path"] == "test.py"

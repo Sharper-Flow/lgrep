@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-04-20
+
+### Upgrade from 2.x
+
+`3.0.0` is a deliberate, atomic migration — there is no compat shim. Clients that invoke lgrep MCP tools must be ready for dict responses before upgrading.
+
+1. **MCP response shape changed.** Tools used to return JSON strings. They now return TypedDict-shaped dicts directly. Example:
+   - Before (`2.x`): `search_semantic(...)` → `'{"results": [...], "query": "..."}'`
+   - After (`3.0.0`): `search_semantic(...)` → `{"results": [...], "query": "..."}`
+   If your integration does `json.loads(response)` on tool output, remove that step after upgrading.
+2. **Indexes are compatible.** Existing LanceDB semantic indexes and symbol indexes from 2.x do not need to be rebuilt. If a project returns unexpected errors, re-run `lgrep_index_semantic` or `lgrep_index_symbols_folder` to refresh.
+3. **Log path moved.** Systemd deployments now log to `~/.cache/lgrep/lgrep.log` instead of `/tmp/lgrep.log`. The installer now creates `~/.cache/lgrep/` automatically; older service files should be regenerated with `lgrep install-opencode` to pick up the new path.
+4. **Legacy `src/lgrep/storage.py` is gone.** If you imported from that module path, switch to the `lgrep.storage` package (public surface unchanged).
+
+Rollback: if 3.0.0 integration is not feasible yet, pin to `lgrep==2.1.1`.
+
+### Changed
+
+- **BREAKING: MCP response contract is now structured dicts** — server tools now return TypedDict-shaped dictionaries instead of `json.dumps(...)` strings. This aligns the MCP wire contract with native object responses and removes double-serialization.
+- **Server package split** — `src/lgrep/server.py` was split into `src/lgrep/server/` modules (`__init__.py`, `lifecycle.py`, `tools_semantic.py`, `tools_symbols.py`, `bootstrap.py`, `responses.py`) to isolate lifecycle, semantic tools, symbol tools, and response contracts.
+- **Transport docs now frame stdio as local default** — README and packaged SKILL docs now say stdio is the default for single-session / single-user local setups, while preserving shared HTTP guidance for scale-up deployments.
+
+### Added
+
+- **Centralized MCP response contracts** — `src/lgrep/server/responses.py` defines `ToolError`, per-tool TypedDict response shapes, and shared timeout/error helpers.
+- **JSONC installer support** — `install_opencode.py` now reads and writes `.jsonc` OpenCode configs with comment- and trailing-comma-safe parsing via `src/lgrep/_jsonc.py`.
+- **Async query retry path** — semantic query embedding now uses `embed_query_async()` with `asyncio.sleep(...)` backoff, avoiding thread hops and blocking sleeps on interactive search retries.
+
+### Fixed
+
+- **Installer log path is user-scoped** — systemd setup now uses `~/.cache/lgrep/lgrep.log` instead of `/tmp/lgrep.log`, and setup instructions create the cache directory explicitly.
+- **Tool error handling is consistent** — error paths now return structured `{ "error": ... }` responses across semantic and symbol tools.
+- **JSONC config install/uninstall edge cases** — installer now handles `//` comments, `/* ... */` blocks, trailing commas, and adversarial string literals in `.jsonc` files.
+
+### Removed
+
+- **Legacy duplicate storage module** — deleted `src/lgrep/storage.py`; all consumers now use the `lgrep.storage` package re-exporting from `storage/_chunk_store.py`.
+
 ### Added
 
 - **Project URLs in pyproject.toml** — Homepage, Repository, and Changelog links now included in package metadata.

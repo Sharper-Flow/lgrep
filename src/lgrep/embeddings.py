@@ -5,6 +5,7 @@ Uses voyage-code-3 model for code-optimized embeddings.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import random
 import time
@@ -296,4 +297,71 @@ class VoyageEmbedder:
         self.total_tokens_used += tokens
         self._check_cost_thresholds()
         log.debug("voyage_query_embedded", tokens=tokens)
+        return embedding
+
+    async def _embed_query_with_fast_retry_async(self, text: str) -> tuple[list[float], int]:
+        """Async version of _embed_query_with_fast_retry using asyncio.sleep.
+
+        Same retry logic as the sync path but uses asyncio.sleep instead of
+        time.sleep, so the event loop is not blocked during retries.
+
+        Args:
+            text: Query text to embed
+
+        Returns:
+            Tuple of (embedding_vector, token_usage)
+
+        Raises:
+            Exception: After QUERY_MAX_RETRIES failed attempts
+        """
+        for attempt in range(QUERY_MAX_RETRIES):
+            try:
+                result = self.client.embed(
+                    texts=[text],
+                    model=self.model,
+                    input_type="query",
+                )
+                return result.embeddings[0], result.total_tokens
+            except Exception as e:
+                error_msg = str(e)
+
+                if attempt == QUERY_MAX_RETRIES - 1:
+                    log.error(
+                        "voyage_query_failed_permanent",
+                        error=error_msg,
+                        attempts=QUERY_MAX_RETRIES,
+                    )
+                    raise
+
+                delay = QUERY_BASE_DELAY * (2**attempt) + random.uniform(0, 0.5)
+                log.warning(
+                    "voyage_query_failed_retrying",
+                    attempt=attempt + 1,
+                    max_attempts=QUERY_MAX_RETRIES,
+                    delay=round(delay, 2),
+                    error=error_msg,
+                )
+                await asyncio.sleep(delay)
+
+        raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
+
+    async def embed_query_async(self, query: str) -> list[float]:
+        """Async version of embed_query for use in async MCP tool handlers.
+
+        Uses asyncio.sleep for retries instead of time.sleep, keeping
+        the event loop responsive during backoff. Same reduced retry budget
+        as the sync path (2 attempts, 0.5s base delay).
+
+        Args:
+            query: Search query string
+
+        Returns:
+            Embedding vector (1024 dimensions)
+        """
+        log.debug("voyage_embed_query_async", query_len=len(query))
+
+        embedding, tokens = await self._embed_query_with_fast_retry_async(query)
+        self.total_tokens_used += tokens
+        self._check_cost_thresholds()
+        log.debug("voyage_query_embedded_async", tokens=tokens)
         return embedding

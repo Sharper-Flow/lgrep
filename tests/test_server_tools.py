@@ -9,8 +9,6 @@ Verifies:
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from lgrep.server import mcp
@@ -91,15 +89,15 @@ class TestSymbolToolResponses:
         # Create a minimal Python file
         (tmp_path / "hello.py").write_text("def greet(): pass\n")
         result = await fn(path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
-        assert "timing_ms" in data["_meta"]
+        assert "duration_ms" in data["_meta"]
 
     @pytest.mark.asyncio
     async def test_list_repos_returns_json_with_meta(self, tmp_path):
         fn = self._get_tool_fn("list_repos")
         result = await fn()
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "repos" in data
 
@@ -108,7 +106,7 @@ class TestSymbolToolResponses:
         fn = self._get_tool_fn("get_file_tree")
         (tmp_path / "hello.py").write_text("def greet(): pass\n")
         result = await fn(path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "files" in data
 
@@ -118,7 +116,7 @@ class TestSymbolToolResponses:
         f = tmp_path / "hello.py"
         f.write_text("def greet(): pass\n")
         result = await fn(path=str(f))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "symbols" in data
 
@@ -127,7 +125,7 @@ class TestSymbolToolResponses:
         fn = self._get_tool_fn("get_repo_outline")
         (tmp_path / "hello.py").write_text("def greet(): pass\n")
         result = await fn(path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "files" in data
 
@@ -135,7 +133,7 @@ class TestSymbolToolResponses:
     async def test_search_symbols_missing_index_returns_error(self, tmp_path):
         fn = self._get_tool_fn("search_symbols")
         result = await fn(query="greet", path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "error" in data
 
     @pytest.mark.asyncio
@@ -143,7 +141,7 @@ class TestSymbolToolResponses:
         fn = self._get_tool_fn("search_text")
         (tmp_path / "hello.py").write_text("def greet(): pass\n")
         result = await fn(query="greet", path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "results" in data
 
@@ -151,20 +149,20 @@ class TestSymbolToolResponses:
     async def test_get_symbol_missing_index_returns_error(self, tmp_path):
         fn = self._get_tool_fn("get_symbol")
         result = await fn(symbol_id="hello.py:function:greet", path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "error" in data
 
     @pytest.mark.asyncio
     async def test_get_symbols_missing_index_returns_error(self, tmp_path):
         fn = self._get_tool_fn("get_symbols")
         result = await fn(symbol_ids=["hello.py:function:greet"], path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "error" in data
 
     @pytest.mark.asyncio
     async def test_invalidate_cache_returns_json_with_meta(self, tmp_path):
         fn = self._get_tool_fn("invalidate_cache")
         result = await fn(path=str(tmp_path))
-        data = json.loads(result)
+        data = result
         assert "_meta" in data
         assert "status" in data

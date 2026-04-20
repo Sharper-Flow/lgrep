@@ -1,9 +1,8 @@
 """Integration tests for indexing and search."""
 
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp import Context
@@ -72,19 +71,24 @@ async def test_full_flow_integration(sample_project):
         val = hash(query) % 1000 / 1000.0
         return [val] * 1024
 
+    async def mock_embed_query_async(query, **kwargs):
+        val = hash(query) % 1000 / 1000.0
+        return [val] * 1024
+
     mock_ctx = MagicMock(spec=Context)
     app_ctx = LgrepContext(voyage_api_key="mock-key")
     mock_ctx.request_context.lifespan_context = app_ctx
 
-    with patch("lgrep.server.VoyageEmbedder") as mock_embedder_class:
+    with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder_class:
         mock_embedder = MagicMock()
         mock_embedder.embed_documents.side_effect = mock_embed_docs
         mock_embedder.embed_query.side_effect = mock_embed_query
+        mock_embedder.embed_query_async = AsyncMock(side_effect=mock_embed_query_async)
         mock_embedder_class.return_value = mock_embedder
 
         # 1. Search first (cold start): should auto-index and return results
         response = await lgrep_search("login", path=str(sample_project), ctx=mock_ctx)
-        search_data = json.loads(response)
+        search_data = response
         assert "results" in search_data
         assert len(search_data["results"]) > 0
 
@@ -96,24 +100,24 @@ async def test_full_flow_integration(sample_project):
 
         # 1.1 Search using q and m aliases
         response = await lgrep_search(q="database", m=5, path=str(sample_project), ctx=mock_ctx)
-        search_data = json.loads(response)
+        search_data = response
         assert "results" in search_data
         assert len(search_data["results"]) > 0
 
         # 2. Check status reflects indexed project
         response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)
-        status_data = json.loads(response)
+        status_data = response
         assert status_data["files"] == 2
         assert status_data["project"] == str(sample_project.resolve())
 
     # 4. Test Watcher
     response = await lgrep_watch_start(str(sample_project), ctx=mock_ctx)
-    watch_data = json.loads(response)
+    watch_data = response
     assert watch_data["watching"] is True
 
     # 5. Stop Watcher
     response = await lgrep_watch_stop(ctx=mock_ctx)
-    stop_data = json.loads(response)
+    stop_data = response
     assert stop_data["stopped"] is True
 
 
@@ -131,6 +135,10 @@ async def test_multi_project_isolation():
         return EmbeddingResult(embeddings, len(texts) * 5, "mock")
 
     def mock_embed_query(query, **kwargs):
+        val = hash(query) % 1000 / 1000.0
+        return [val] * 1024
+
+    async def mock_embed_query_async(query, **kwargs):
         val = hash(query) % 1000 / 1000.0
         return [val] * 1024
 
@@ -160,52 +168,49 @@ def charge_card(card_number, amount):
         app_ctx = LgrepContext(voyage_api_key="mock-key")
         mock_ctx.request_context.lifespan_context = app_ctx
 
-        with patch("lgrep.server.VoyageEmbedder") as mock_embedder_class:
+        with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder_class:
             mock_embedder = MagicMock()
             mock_embedder.embed_documents.side_effect = mock_embed_docs
             mock_embedder.embed_query.side_effect = mock_embed_query
+            mock_embedder.embed_query_async = AsyncMock(side_effect=mock_embed_query_async)
             mock_embedder_class.return_value = mock_embedder
 
             # 1. Index project A
-            resp_a = json.loads(await lgrep_index(str(project_a), ctx=mock_ctx))
+            resp_a = await lgrep_index(str(project_a), ctx=mock_ctx)
             assert resp_a["file_count"] == 1
 
             # 2. Index project B
-            resp_b = json.loads(await lgrep_index(str(project_b), ctx=mock_ctx))
+            resp_b = await lgrep_index(str(project_b), ctx=mock_ctx)
             assert resp_b["file_count"] == 1
 
             # 3. Both projects are in the context dict
             assert len(app_ctx.projects) == 2
 
             # 4. Status without path returns both projects
-            resp_all = json.loads(await lgrep_status(ctx=mock_ctx))
+            resp_all = await lgrep_status(ctx=mock_ctx)
             assert len(resp_all["projects"]) == 2
             project_paths = {p["project"] for p in resp_all["projects"]}
             assert str(project_a.resolve()) in project_paths
             assert str(project_b.resolve()) in project_paths
 
             # 5. Status with path returns only that project
-            resp_one = json.loads(await lgrep_status(path=str(project_a), ctx=mock_ctx))
+            resp_one = await lgrep_status(path=str(project_a), ctx=mock_ctx)
             assert resp_one["project"] == str(project_a.resolve())
             assert resp_one["files"] == 1
 
             # 6. Search project A — results should only contain files from A
-            resp_search_a = json.loads(
-                await lgrep_search("login", path=str(project_a), ctx=mock_ctx)
-            )
+            resp_search_a = await lgrep_search("login", path=str(project_a), ctx=mock_ctx)
             assert "results" in resp_search_a
             for result in resp_search_a["results"]:
                 assert "billing.py" not in result["file_path"]
 
             # 7. Search project B — results should only contain files from B
-            resp_search_b = json.loads(
-                await lgrep_search("payment", path=str(project_b), ctx=mock_ctx)
-            )
+            resp_search_b = await lgrep_search("payment", path=str(project_b), ctx=mock_ctx)
             assert "results" in resp_search_b
             for result in resp_search_b["results"]:
                 assert "auth.py" not in result["file_path"]
 
             # 8. Search unindexed project returns error
-            resp_err = json.loads(await lgrep_search("test", path="/not/indexed", ctx=mock_ctx))
+            resp_err = await lgrep_search("test", path="/not/indexed", ctx=mock_ctx)
             assert "error" in resp_err
             assert "does not exist" in resp_err["error"].lower()
