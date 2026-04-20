@@ -78,6 +78,14 @@ lgrep init-ignore /path/to/project
 ```
 This creates a default `.lgrepignore` template you can customize.
 
+**Prune orphan semantic caches:**
+```bash
+lgrep prune-orphans --dry-run            # inspect only (default)
+lgrep prune-orphans --execute            # delete orphan cache dirs
+lgrep prune-orphans --cache-dir /tmp/x   # one-off cache root override
+```
+Dry-run by default. Active projects and the `symbols/` subdir are always skipped.
+
 This installs three artifacts into `~/.config/opencode/`: the MCP server entry,
 the always-on `instructions/lgrep-tools.md` policy file, and this skill file.
 To remove them: `lgrep uninstall-opencode`.

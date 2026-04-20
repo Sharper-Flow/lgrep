@@ -1,4 +1,4 @@
-"""Symbol tools: indexing, search, and lookup for the lgrep MCP server."""
+"""Symbol and maintenance tools for the lgrep MCP server."""
 
 from __future__ import annotations
 
@@ -481,3 +481,6 @@ async def invalidate_cache(
         status=result["status"],
         _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
     )
+
+
+

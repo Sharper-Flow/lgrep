@@ -18,7 +18,6 @@ from lgrep.storage import (
     discover_cached_projects,
     get_project_db_path,
     has_disk_cache,
-    write_project_meta,
 )
 from lgrep.watcher import FileWatcher
 
@@ -75,11 +74,18 @@ class LgrepContext:
     Each project gets its own ProjectState (ChunkStore, Indexer, FileWatcher),
     keyed by resolved absolute path string. A single VoyageEmbedder is shared
     across all projects to avoid duplicate API client overhead.
+
+    ``transport`` records the MCP transport kind (``"stdio"``, ``"http"``,
+    ``"sse"``, ...) when the server is started via ``run_server``. Tools
+    that perform destructive operations use this to apply transport-aware
+    safety (for example, refusing ``dry_run=False`` on shared HTTP
+    transports). ``None`` means "unknown" and is treated as untrusted.
     """
 
     projects: dict[str, ProjectState] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
+    transport: str | None = None
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
 
@@ -100,8 +106,13 @@ async def _startup(server: FastMCP) -> LgrepContext:
     if not voyage_api_key:
         log.error("voyage_api_key_missing", hint="Set VOYAGE_API_KEY env var")
 
-    ctx = LgrepContext(voyage_api_key=voyage_api_key)
-    log.info("lgrep_ready")
+    # Transport is populated by ``bootstrap.run_server`` via
+    # LGREP_TRANSPORT; absent when running under tests or embedded use
+    # where the caller did not go through run_server.
+    transport = os.environ.get("LGREP_TRANSPORT")
+
+    ctx = LgrepContext(voyage_api_key=voyage_api_key, transport=transport)
+    log.info("lgrep_ready", transport=transport)
     return ctx
 
 
@@ -193,7 +204,7 @@ async def _ensure_project_initialized(
                 app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
 
             db_path = get_project_db_path(project_path)
-            db = ChunkStore(db_path)
+            db = ChunkStore(db_path, project_path=path_key)
             indexer = Indexer(
                 project_path=project_path,
                 storage=db,
@@ -201,7 +212,6 @@ async def _ensure_project_initialized(
             )
             state = ProjectState(db=db, indexer=indexer)
             app_ctx.projects[path_key] = state
-            write_project_meta(path_key)
             log.info("project_initialized", project=path_key)
             return state
         except Exception as e:

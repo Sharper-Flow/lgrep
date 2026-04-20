@@ -237,7 +237,7 @@ async def status_semantic(
 
                     def _read_disk_stats():
                         db_path = get_project_db_path(project_path)
-                        store = ChunkStore(db_path)
+                        store = ChunkStore(db_path, project_path=project_path)
                         chunks = store.count_chunks()
                         files_set = store.get_indexed_files()
                         return len(files_set), chunks

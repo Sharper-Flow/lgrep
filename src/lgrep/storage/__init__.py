@@ -9,6 +9,7 @@ Existing imports like `from lgrep.storage import ChunkStore` continue to work.
 # Re-export everything from the chunk store (semantic storage)
 from lgrep.storage._chunk_store import (  # noqa: F401
     CHUNKS_TABLE,
+    DEFAULT_CACHE_DIR,
     EMBEDDING_DIM,
     ChunkStore,
     CodeChunk,
@@ -17,5 +18,6 @@ from lgrep.storage._chunk_store import (  # noqa: F401
     discover_cached_projects,
     get_project_db_path,
     has_disk_cache,
+    read_project_meta,
     write_project_meta,
 )

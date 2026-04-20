@@ -210,6 +210,39 @@ class InvalidateCacheResult(TypedDict):
     _meta: _Meta
 
 
+class PruneOrphanEntry(TypedDict):
+    """Single orphan entry in a prune report."""
+
+    path: str
+    reason: str  # one of OrphanReason values; kept loose for cross-module reuse
+    bytes: int
+    project_path: str | None
+
+
+class PruneFailureEntry(TypedDict):
+    """Single failure entry in a prune report."""
+
+    path: str
+    error: str
+
+
+class PruneOrphansResult(TypedDict):
+    """Response for the prune_orphans maintenance tool.
+
+    Mirrors ``lgrep.tools.prune_orphans.PruneReport`` at the MCP layer so
+    all MCP tool responses share the same response-pattern convention.
+    """
+
+    dry_run: bool
+    dirs_examined: int
+    orphans: list[PruneOrphanEntry]
+    skipped_active: list[str]
+    deleted_dirs: int
+    reclaimed_bytes: int
+    failures: list[PruneFailureEntry]
+    _meta: _Meta
+
+
 class _Meta(TypedDict):
     """Envelope metadata attached to symbol-tool responses."""
 

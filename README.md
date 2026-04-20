@@ -264,6 +264,19 @@ With stdio, each OpenCode session spawns its own server process. With `streamabl
 lgrep init-ignore /path/to/project
 ```
 
+### 5. Optional: inspect or prune orphan semantic caches
+
+```bash
+lgrep prune-orphans --dry-run
+lgrep prune-orphans --execute --cache-dir /path/to/cache
+```
+
+`prune-orphans` is dry-run by default. Use `--execute` to actually delete orphaned semantic cache directories. `--cache-dir` overrides `LGREP_CACHE_DIR` for a single run. Agents can call the same workflow via the `lgrep_prune_orphans` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+
+### Troubleshooting `prune-orphans --execute`
+
+Each orphan is deleted independently. If `shutil.rmtree` fails for one entry (for example a lingering file lock or permission issue), the batch continues and the failure is recorded in the response under `failures[]` as `{path, error}`; the rest of the reclaim still lands. Re-run `lgrep prune-orphans --execute` after addressing the error, or inspect with `--dry-run` first to confirm the orphan is still present.
+
 ## First-use workflow
 
 Typical OpenCode flow:
@@ -358,6 +371,7 @@ Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If yo
 | `lgrep_get_symbol(symbol_id, path)` | Retrieve one symbol |
 | `lgrep_get_symbols(symbol_ids, path)` | Retrieve multiple symbols |
 | `lgrep_invalidate_cache(path)` | Drop the symbol index for a repo |
+| `lgrep_prune_orphans(dry_run=True)` | Report (or with `dry_run=False`, delete) orphan semantic cache dirs; skips active projects and the `symbols/` cache |
 
 ### Symbol ID format
 

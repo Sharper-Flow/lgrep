@@ -39,6 +39,11 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
 
+    # Record the transport in the environment so the lifespan can
+    # populate LgrepContext.transport. Transport-aware safety checks
+    # (e.g. refusing destructive prune on shared HTTP) read this.
+    os.environ["LGREP_TRANSPORT"] = transport
+
     if transport == "streamable-http":
         mcp.settings.host = host
         mcp.settings.port = port

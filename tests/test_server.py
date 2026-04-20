@@ -24,6 +24,9 @@ from lgrep.server import (
     index_semantic as lgrep_index,
 )
 from lgrep.server import (
+    prune_orphans as lgrep_prune_orphans,
+)
+from lgrep.server import (
     search_semantic as lgrep_search,
 )
 from lgrep.server import (
@@ -199,6 +202,63 @@ class TestDiskCacheAutoLoad:
         data = response
         assert data["files"] == 0
         assert data["chunks"] == 0
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_orphans_skips_active_projects(self, tmp_path, monkeypatch):
+        mock_ctx = MagicMock(spec=Context)
+        # Mark the transport stdio so the SEC-4 guard allows dry_run=False.
+        app_ctx = LgrepContext(transport="stdio")
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        project_path = tmp_path / "active-project"
+        project_path.mkdir()
+        cache_dir = tmp_path / "cache-root"
+        cache_dir.mkdir()
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+        monkeypatch.setenv("LGREP_PRUNE_MIN_AGE_S", "0")
+
+        from lgrep.storage import get_project_db_path
+
+        active_cache = get_project_db_path(project_path)
+        active_cache.mkdir(parents=True)
+        (active_cache / "chunks.lance").mkdir()
+
+        app_ctx.projects[str(project_path.resolve())] = ProjectState(db=MagicMock(), indexer=MagicMock())
+
+        result = await lgrep_prune_orphans(dry_run=False, ctx=mock_ctx)
+
+        assert str(project_path.resolve()) in result["skipped_active"]
+        assert active_cache.exists()
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_orphans_forces_dry_run_on_non_stdio_transport(
+        self, tmp_path, monkeypatch
+    ):
+        # Review SEC-4: lgrep MCP has no per-client auth, so destructive
+        # prune on shared HTTP transports is refused. The handler must
+        # coerce dry_run=True and report it in the result.
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(transport="streamable-http")
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        cache_dir = tmp_path / "cache-root"
+        cache_dir.mkdir()
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_dir))
+        monkeypatch.setenv("LGREP_PRUNE_MIN_AGE_S", "0")
+
+        # Create an orphan that would otherwise be deleted on --execute.
+        import hashlib
+
+        orphan_name = hashlib.sha256(b"orphan-seed").hexdigest()[:12]
+        orphan = cache_dir / orphan_name
+        orphan.mkdir()
+        (orphan / "chunks.lance").mkdir()
+
+        result = await lgrep_prune_orphans(dry_run=False, ctx=mock_ctx)
+
+        assert result["dry_run"] is True
+        assert result["deleted_dirs"] == 0
+        assert orphan.exists()
 
 
 class TestAcceptanceToolChoiceAndOnboarding:

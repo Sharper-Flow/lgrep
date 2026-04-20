@@ -1,6 +1,7 @@
 """Tests for LanceDB storage."""
 
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -115,6 +116,12 @@ class TestDbPathResolution:
         assert has_disk_cache(project_path) is True
 
 
+class TestStorageModuleDeletion:
+    def test_storage_py_file_does_not_exist(self):
+        storage_py = Path(__file__).resolve().parents[1] / "src" / "lgrep" / "storage.py"
+        assert storage_py.exists() is False
+
+
 class TestChunkStoreLifecycle:
     """Tests for ChunkStore initialization and basic operations."""
 
@@ -122,6 +129,28 @@ class TestChunkStoreLifecycle:
         """Should create database directory."""
         ChunkStore(temp_db_path)
         assert temp_db_path.exists()
+
+    def test_init_writes_project_meta(self, temp_db_path):
+        """Should write project metadata next to the LanceDB cache."""
+        project_path = temp_db_path.parent / "project"
+        project_path.mkdir()
+
+        ChunkStore(temp_db_path, project_path=project_path)
+
+        meta_path = temp_db_path / "project_meta.json"
+        assert meta_path.exists()
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["project_path"] == str(project_path.resolve())
+
+    def test_init_without_project_path_skips_meta(self, temp_db_path):
+        """When project_path is omitted, no project_meta.json must be
+        written. Defaulting it to db_path would record the hash dir as
+        the project, corrupting orphan detection.
+        """
+        ChunkStore(temp_db_path)
+
+        meta_path = temp_db_path / "project_meta.json"
+        assert not meta_path.exists()
 
     def test_init_reconnects_on_corruption(self, temp_db_path):
         """Should clear and reconnect if database is corrupted."""
@@ -135,6 +164,22 @@ class TestChunkStoreLifecycle:
 
         # Verify directory was cleared (junk.txt should be gone)
         assert not (temp_db_path / "junk.txt").exists()
+
+    def test_init_corruption_recovery_rewrites_meta(self, temp_db_path):
+        """Should rewrite project metadata after corruption recovery."""
+        temp_db_path.mkdir()
+        (temp_db_path / "junk.txt").write_text("some data")
+        project_path = temp_db_path.parent / "project_recovery"
+        project_path.mkdir()
+
+        with patch("lancedb.connect", side_effect=[RuntimeError("corrupt"), MagicMock()]):
+            store = ChunkStore(temp_db_path, project_path=project_path)
+            assert store.db is not None
+
+        meta_path = temp_db_path / "project_meta.json"
+        assert meta_path.exists()
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["project_path"] == str(project_path.resolve())
 
     def test_init_deeply_nested_path(self):
         """Should create deeply nested database directory if needed."""

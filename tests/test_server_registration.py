@@ -1,12 +1,12 @@
-"""Test that all 16 MCP tools are registered after the server split."""
+"""Test that all 17 MCP tools are registered after the server split."""
 
 
 
-def test_server_has_16_tools():
+def test_server_has_17_tools():
     from lgrep.server import mcp
 
     tool_count = len(mcp._tool_manager._tools)
-    assert tool_count == 16, f"Expected 16 tools, got {tool_count}"
+    assert tool_count == 17, f"Expected 17 tools, got {tool_count}"
 
 
 def test_all_expected_tools_present():
@@ -29,6 +29,7 @@ def test_all_expected_tools_present():
         "get_symbol",
         "get_symbols",
         "invalidate_cache",
+        "prune_orphans",
     }
     registered = {t.name for t in mcp._tool_manager.list_tools()}
     assert registered == expected, (

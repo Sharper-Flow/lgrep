@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from lgrep.cli import _cmd_index_semantic as _cmd_index
 from lgrep.cli import _cmd_init_ignore, main
+from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
 from lgrep.indexing import IndexStatus
 from lgrep.storage import SearchResult, SearchResults
@@ -69,6 +70,16 @@ class TestCLIDispatch:
             rc = main()
         assert rc == 0
         mock_init.assert_called_once_with(["--help"])
+
+    def test_main_dispatches_to_prune_orphans(self):
+        """'lgrep prune-orphans' should dispatch to _cmd_prune_orphans."""
+        with (
+            patch("sys.argv", ["lgrep", "prune-orphans", "--help"]),
+            patch("lgrep.cli._cmd_prune_orphans", return_value=0) as mock_prune,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_prune.assert_called_once_with(["--help"])
 
     def test_main_server_defaults_to_stdio(self):
         """No subcommand should start MCP server with stdio defaults."""
@@ -525,3 +536,60 @@ class TestCmdInitIgnore:
         data = json.loads(out)
         assert data["created"] is True
         assert ignore_file.read_text() != "custom\n"
+
+
+class TestCmdPruneOrphans:
+    def test_prune_help(self, capsys):
+        rc = _cmd_prune_orphans(["--help"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "prune-orphans" in out
+        assert "--execute" in out
+
+    @patch("lgrep.tools.prune_orphans.prune_orphans")
+    def test_prune_dry_run_default(self, mock_prune, capsys, tmp_path):
+        mock_prune.return_value = {
+            "dry_run": True,
+            "dirs_examined": 0,
+            "orphans": [],
+            "skipped_active": [],
+            "deleted_dirs": 0,
+            "reclaimed_bytes": 0,
+            "failures": [],
+            "_meta": {},
+        }
+
+        rc = _cmd_prune_orphans(["--cache-dir", str(tmp_path)])
+
+        assert rc == 0
+        assert mock_prune.call_args.kwargs["dry_run"] is True
+
+    @patch("lgrep.tools.prune_orphans.prune_orphans")
+    def test_prune_execute_flag(self, mock_prune, capsys, tmp_path):
+        mock_prune.return_value = {
+            "dry_run": False,
+            "dirs_examined": 1,
+            "orphans": [],
+            "skipped_active": [],
+            "deleted_dirs": 1,
+            "reclaimed_bytes": 1,
+            "failures": [],
+            "_meta": {},
+        }
+
+        rc = _cmd_prune_orphans(["--execute", "--cache-dir", str(tmp_path)])
+
+        assert rc == 0
+        assert mock_prune.call_args.kwargs["dry_run"] is False
+
+    @patch("lgrep.tools.prune_orphans.prune_orphans")
+    def test_prune_rejects_execute_and_dry_run_together(self, mock_prune, capsys):
+        # Deletion is irreversible, so passing both flags must be an
+        # error rather than "last flag wins".
+        rc = _cmd_prune_orphans(["--execute", "--dry-run"])
+
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "mutually exclusive" in err
+        # And the prune tool must not have been invoked.
+        mock_prune.assert_not_called()

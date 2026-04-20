@@ -123,18 +123,26 @@ def has_disk_cache(project_path: str | Path) -> bool:
 _META_FILENAME = "project_meta.json"
 
 
-def write_project_meta(project_path: str | Path) -> None:
+def write_project_meta(
+    project_path: str | Path,
+    *,
+    db_path: str | Path | None = None,
+) -> None:
     """Write a metadata file alongside the LanceDB cache for reverse-mapping.
 
     Stores the original project path so ``discover_cached_projects`` can
-    reconstruct which hash dir belongs to which project.  The write is
-    atomic (write-to-tmp then rename) to avoid partial reads.
+    reconstruct which hash dir belongs to which project. The write is
+    atomic (write-to-tmp then rename) to avoid partial reads. When
+    ``db_path`` is omitted it is derived from ``project_path`` via
+    ``get_project_db_path``; callers that already know the cache
+    directory (for example ``ChunkStore.__init__``) may pass it directly
+    to avoid recomputing the hash.
     """
     project_path = str(Path(project_path).resolve())
-    db_path = get_project_db_path(project_path)
-    meta_path = db_path / _META_FILENAME
+    resolved_db_path = Path(db_path) if db_path is not None else get_project_db_path(project_path)
+    meta_path = resolved_db_path / _META_FILENAME
     tmp_path = meta_path.with_suffix(".tmp")
-    db_path.mkdir(parents=True, exist_ok=True)
+    resolved_db_path.mkdir(parents=True, exist_ok=True)
     payload = {"project_path": project_path, "updated_at": time.time()}
     try:
         tmp_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -202,13 +210,28 @@ class ChunkStore:
     Provides vector and hybrid search over indexed code chunks.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, project_path: str | Path | None = None) -> None:
         """Initialize the chunk store.
 
         Args:
-            db_path: Path to the LanceDB database directory
+            db_path: Path to the LanceDB database directory.
+            project_path: Original project path for metadata writes. When
+                provided, the constructor emits `project_meta.json` next
+                to the LanceDB cache so reverse-mapping tools (orphan
+                pruning, disk-cache discovery) can recover the mapping.
+                Callers that only need temporary stores (tests, tools)
+                may pass ``None`` to skip metadata persistence — no
+                `project_meta.json` is created in that case. Writing the
+                hash dir as project_path would corrupt orphan detection.
         """
         self.db_path = Path(db_path)
+        # NOTE: when project_path is None we intentionally keep
+        # self._project_path as None so the metadata side-effect is
+        # skipped below. Do not fall back to db_path — it would record
+        # the hash dir as the project path and confuse prune_orphans.
+        self._project_path = (
+            Path(project_path).resolve() if project_path is not None else None
+        )
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -233,8 +256,20 @@ class ChunkStore:
         self._table: Table | None = None
         self._fts_indexed = False
         self._vector_indexed = False
+        self._persist_meta()
 
         log.info("chunk_store_connected", db_path=str(self.db_path))
+
+    def _persist_meta(self) -> None:
+        """Persist project metadata next to the cache directory.
+
+        Skipped when the caller did not supply a project_path — writing
+        meta in that case would record the cache hash dir as the
+        project, confusing orphan detection and reverse-mapping tools.
+        """
+        if self._project_path is None:
+            return
+        write_project_meta(self._project_path, db_path=self.db_path)
 
     @property
     def table(self) -> Table:

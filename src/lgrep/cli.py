@@ -35,6 +35,9 @@ def main() -> int:
     if args and args[0] in ("init-ignore", "init-lgrepignore"):
         return _cmd_init_ignore(args[1:])
 
+    if args and args[0] == "prune-orphans":
+        return _cmd_prune_orphans(args[1:])
+
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
@@ -95,6 +98,7 @@ def _print_help() -> None:
     print("  search-symbols <query> [path]  symbol search (one-shot, no server)")
     print("  index-symbols [path]           index symbols for a project")
     print("  init-ignore [path]             create recommended .lgrepignore")
+    print("  prune-orphans                  inspect or delete orphan semantic caches")
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
@@ -204,7 +208,7 @@ def _cmd_search_semantic(args: list[str]) -> int:
     # Search
     try:
         embedder = VoyageEmbedder(api_key=api_key)
-        store = ChunkStore(db_path)
+        store = ChunkStore(db_path, project_path=path)
 
         query_vector = embedder.embed_query(query)
 
@@ -278,6 +282,64 @@ def _cmd_init_ignore(args: list[str]) -> int:
         return 1
 
 
+def _cmd_prune_orphans(args: list[str]) -> int:
+    """Inspect or delete orphan semantic cache directories."""
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep prune-orphans [--execute] [--dry-run] [--cache-dir DIR]")
+        print()
+        print("Inspect or delete orphan semantic cache directories.")
+        print()
+        print("options:")
+        print("  --execute                      actually delete orphan caches")
+        print("  --dry-run                      preview only (default)")
+        print("  --cache-dir DIR                override semantic cache directory")
+        print()
+        print("Deletion is refused for any path outside the resolved cache")
+        print("directory (path-confinement guard) and for any symlinked cache")
+        print("entry (TOCTOU guard). Recently-modified caches (default 1 hour)")
+        print("are preserved so a live indexer cannot be mid-pruned; override")
+        print("with LGREP_PRUNE_MIN_AGE_S=<seconds>.")
+        return 0
+
+    from pathlib import Path
+
+    from lgrep.tools.prune_orphans import prune_orphans
+
+    # Mutual exclusion: refuse to silently pick a mode if the operator
+    # passes both --execute and --dry-run. Deletion is irreversible, so
+    # ambiguous intent must be a loud error rather than "last flag wins".
+    if "--execute" in args and "--dry-run" in args:
+        print(
+            "error: --execute and --dry-run are mutually exclusive",
+            file=sys.stderr,
+        )
+        return 2
+
+    dry_run = True
+    cache_dir = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--execute":
+            dry_run = False
+            i += 1
+        elif args[i] == "--dry-run":
+            dry_run = True
+            i += 1
+        elif args[i] == "--cache-dir" and i + 1 < len(args):
+            cache_dir = Path(args[i + 1]).resolve()
+            i += 2
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+
+    report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
+    print(json.dumps(report))
+    return 0
+
+
 def _cmd_index_semantic(args: list[str]) -> int:
     """Index a project directory for semantic search.
 
@@ -345,7 +407,7 @@ def _cmd_index_semantic(args: list[str]) -> int:
     try:
         db_path = get_project_db_path(path)
         embedder = VoyageEmbedder(api_key=api_key)
-        store = ChunkStore(db_path)
+        store = ChunkStore(db_path, project_path=path)
         indexer = Indexer(path, store, embedder, chunk_size=chunk_size)
 
         status = indexer.index_all()
