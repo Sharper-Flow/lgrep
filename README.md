@@ -182,35 +182,33 @@ pip install .
 
 ## Fast setup for OpenCode
 
+**stdio is the local default** for single-session / single-user setups — no server process needed. For shared or multi-session deployments, see [Scale-up: shared HTTP server](#3-scale-up-shared-http-server) below.
+
 ### 1. Get a Voyage API key
 
 Create a key at [dash.voyageai.com](https://dash.voyageai.com/).
 
 You only need this for the semantic engine. The symbol engine works without it.
 
-### 2. Start `lgrep` as a shared HTTP MCP server
+### 2. Wire it into OpenCode
 
-Recommended manual start:
-
-```bash
-VOYAGE_API_KEY=your-key \
-LGREP_WARM_PATHS=/path/to/project-a:/path/to/project-b \
-lgrep --transport streamable-http --host 127.0.0.1 --port 6285
-```
-
-Why HTTP instead of stdio?
-
-With stdio, each OpenCode session spawns its own server process. With `streamable-http`, one warm server handles all sessions.
-
-### 3. Wire it into OpenCode
-
-Add this to `~/.config/opencode/opencode.json`:
+For single-user, single-session setups, stdio is the local default. Add this to `~/.config/opencode/opencode.json`:
 
 ```json
 {
   "instructions": [
     "~/.config/opencode/instructions/lgrep-tools.md"
   ],
+  "mcp": {
+    "lgrep": { "type": "local" }
+  }
+}
+```
+
+If you prefer to run a shared HTTP server (see [section 3](#3-scale-up-shared-http-server)), swap the `mcp.lgrep` block for:
+
+```json
+{
   "mcp": {
     "lgrep": {
       "type": "remote",
@@ -221,18 +219,20 @@ Add this to `~/.config/opencode/opencode.json`:
 }
 ```
 
-Or let `lgrep` do the wiring for you:
+Or let the installer wire the shared-HTTP path automatically:
 
 ```bash
 lgrep install-opencode
 ```
 
-That installer can:
+That installer will:
 
-- add the MCP entry
-- copy the packaged `lgrep-tools.md` instruction into your OpenCode config
-- copy the packaged `skills/lgrep/SKILL.md` reference file into your OpenCode config
-- append it to the `instructions` array so agents prefer `lgrep` first
+- create `~/.cache/lgrep/` for indexes and logs
+- add a `type: "remote"` MCP entry pointing at `http://localhost:6285/mcp`
+- copy the packaged `lgrep-tools.md` instruction and `skills/lgrep/SKILL.md` into your OpenCode config
+- append the instruction file to the `instructions` array so agents prefer `lgrep` first
+
+To use stdio with `lgrep install-opencode`, run the installer first and then change `mcp.lgrep` in `opencode.json` to `{ "type": "local" }`.
 
 Important: the active agent must also expose `lgrep_*` tool definitions in its
 tool manifest. If an agent profile only allows `read`/`glob`/`grep`, the model
@@ -243,6 +243,20 @@ The installed files land at:
 
 - `~/.config/opencode/instructions/lgrep-tools.md`
 - `~/.config/opencode/skills/lgrep/SKILL.md`
+
+### 3. Scale-up: shared HTTP server
+
+For shared or multi-session deployments, run lgrep as a persistent HTTP server instead of stdio:
+
+```bash
+VOYAGE_API_KEY=your-key \
+LGREP_WARM_PATHS=/path/to/project-a:/path/to/project-b \
+lgrep --transport streamable-http --host 127.0.0.1 --port 6285
+```
+
+Why HTTP instead of stdio?
+
+With stdio, each OpenCode session spawns its own server process. With `streamable-http`, one warm server handles all sessions. After starting the HTTP server, use the `type: "remote"` MCP config from section 2 above.
 
 ### 4. Optional: generate a `.lgrepignore`
 
@@ -287,6 +301,35 @@ High-value prompts:
 | Find exact text or identifiers | `lgrep_search_text` or `grep` | Literal match |
 | Retrieve exact source for a symbol | `lgrep_get_symbol` | Targeted code retrieval |
 | Read a known file directly | `Read` | No search needed |
+
+## MCP response format
+
+As of `3.0.0`, every lgrep MCP tool returns a structured dict matching a declared TypedDict in [`src/lgrep/server/responses.py`](src/lgrep/server/responses.py). Clients should consume responses as native dicts — no `json.loads` is needed.
+
+Example — `lgrep_search_semantic`:
+
+```python
+{
+    "query": "authentication flow",
+    "path": "/path/to/project",
+    "engine": "semantic",
+    "total": 3,
+    "results": [
+        {"file_path": "src/auth.py", "start_line": 42, "end_line": 87,
+         "content": "...", "score": 0.91, "match_type": "hybrid"},
+        # ...
+    ],
+    "_meta": {"duration_ms": 87.4}
+}
+```
+
+Error responses use the shared `ToolError` shape:
+
+```python
+{"error": "VOYAGE_API_KEY not set. Cannot perform semantic search."}
+```
+
+Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If you upgrade from `2.x`, remove any `json.loads(response)` wrappers on tool output. See the [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x) notes in the changelog for the full migration path.
 
 ## MCP tools
 
@@ -358,6 +401,8 @@ Security notes:
 | `LGREP_LOG_LEVEL` | No | `INFO` | Log verbosity |
 | `LGREP_CACHE_DIR` | No | `~/.cache/lgrep` | Cache directory |
 | `LGREP_WARM_PATHS` | No | none | Colon-separated projects to warm on startup |
+| `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
+| `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
 
 ### Ignore behavior
 

@@ -25,11 +25,11 @@ def test_pathspec_importable():
     assert hasattr(pathspec, "patterns")
 
 
-def test_version_is_2_1_1():
+def test_version_is_3_0_0():
     """lgrep package version should match the current release."""
     from lgrep import __version__
 
-    assert __version__ == "2.1.1", f"Expected 2.1.1, got {__version__}"
+    assert __version__ == "3.0.0", f"Expected 3.0.0, got {__version__}"
 
 
 def test_tree_sitter_language_pack_python_parser():

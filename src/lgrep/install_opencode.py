@@ -18,10 +18,11 @@ via HTTP and prints instructions for running lgrep as a persistent daemon.
 
 from __future__ import annotations
 
-import json
 import shutil
 import sys
 from pathlib import Path
+
+from lgrep._jsonc import dump_jsonc_text, load_jsonc_text
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -89,8 +90,8 @@ RestartSec=5
 Environment=VOYAGE_API_KEY={api_key_placeholder}
 Environment=LGREP_WARM_PATHS={warm_paths_placeholder}
 Environment=LGREP_AUTO_WATCH=true
-StandardOutput=append:/tmp/lgrep.log
-StandardError=append:/tmp/lgrep.log
+StandardOutput=append:$HOME/.cache/lgrep/lgrep.log
+StandardError=append:$HOME/.cache/lgrep/lgrep.log
 
 [Install]
 WantedBy=default.target
@@ -113,6 +114,7 @@ def _print_daemon_instructions() -> None:
     print()
     print("─── Option A: systemd user service (recommended) ───────────────────")
     print()
+    print("  mkdir -p ~/.cache/lgrep")
     print(f"  mkdir -p {service_dir}")
     print(f"  cat > {service_path} << 'EOF'")
     print(
@@ -135,6 +137,15 @@ def _print_daemon_instructions() -> None:
     print(f"  {lgrep_bin} --transport streamable-http --port 6285")
     print()
     print("Then open OpenCode — the agent will discover lgrep automatically.")
+    print()
+    print("─── Option C: stdio per-session (local default) ─────────────────────")
+    print()
+    print("  For single-user single-session setups, stdio is the local default.")
+    print("  Add this to your ~/.config/opencode/opencode.json to use stdio:")
+    print()
+    print('  "mcp": {')
+    print('    "lgrep": { "type": "local" }')
+    print("  }")
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +156,13 @@ def _print_daemon_instructions() -> None:
 def install() -> int:
     """Install lgrep into OpenCode (MCP + instruction + skill)."""
     print("Installing lgrep into OpenCode...")
+
+    # 0. Ensure ~/.cache/lgrep exists so systemd service log output and the
+    #    semantic engine cache have a landing pad on first run. Matches the
+    #    path used by `_SYSTEMD_SERVICE` StandardOutput/StandardError.
+    cache_dir = Path.home() / ".cache" / "lgrep"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    print(f"  [ok] Cache directory ready at {cache_dir}")
 
     # 1. Copy always-loaded instruction file
     INSTRUCTION_DIR.mkdir(parents=True, exist_ok=True)
@@ -171,7 +189,7 @@ def install() -> int:
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     if config_path.exists():
-        config = json.loads(config_path.read_text())
+        config = load_jsonc_text(config_path.read_text())
     else:
         config = {"$schema": "https://opencode.ai/config.json"}
 
@@ -195,7 +213,13 @@ def install() -> int:
     instructions = config.get("instructions", [])
     has_lgrep_policy = _check_instructions_have_lgrep_policy(instructions)
 
-    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    # Preserve the file extension: write as JSONC if the existing file was JSONC
+    if config_path.suffix == ".jsonc":
+        config_path.write_text(dump_jsonc_text(config, indent=2) + "\n")
+    else:
+        import json
+
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
     print(f"  [ok] MCP entry added to {config_path}")
 
     if not has_lgrep_policy:
@@ -241,7 +265,7 @@ def uninstall() -> int:
     # 3. Remove MCP entry and installed instruction entry from opencode.json
     config_path = _config_path()
     if config_path.exists():
-        config = json.loads(config_path.read_text())
+        config = load_jsonc_text(config_path.read_text())
         if "mcp" in config and "lgrep" in config["mcp"]:
             del config["mcp"]["lgrep"]
         else:
@@ -256,7 +280,12 @@ def uninstall() -> int:
         else:
             print(f"  [skip] No lgrep instruction entry in {config_path}")
 
-        config_path.write_text(json.dumps(config, indent=2) + "\n")
+        if config_path.suffix == ".jsonc":
+            config_path.write_text(dump_jsonc_text(config, indent=2) + "\n")
+        else:
+            import json
+
+            config_path.write_text(json.dumps(config, indent=2) + "\n")
         print(f"  [ok] Config updated at {config_path}")
     else:
         print(f"  [skip] {config_path} not found")

@@ -9,8 +9,7 @@ Verifies:
 - Response shapes are preserved (regression guard)
 """
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp import Context
@@ -106,14 +105,15 @@ class TestSemanticToolResponseShapes:
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         response = await search_semantic(query="test", path="/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert "results" in data
         assert len(data["results"]) == 1
         assert data["results"][0]["file_path"] == "a.py"
-        assert data["query_time_ms"] == 10.0
+        # query_time_ms removed from SearchSemanticResult TypedDict
 
     @pytest.mark.asyncio
     async def test_status_semantic_response_shape(self):
@@ -132,7 +132,7 @@ class TestSemanticToolResponseShapes:
         mock_db.get_indexed_files.return_value = {"a.py", "b.py"}
 
         response = await status_semantic(path="/path", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert data["files"] == 2
         assert data["chunks"] == 500
@@ -149,7 +149,7 @@ class TestSemanticToolResponseShapes:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await watch_stop_semantic(ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert data["stopped"] is True
         assert data["projects_stopped"] == []
@@ -164,7 +164,7 @@ class TestSemanticToolResponseShapes:
         mock_ctx.request_context.lifespan_context = app_ctx
 
         response = await index_semantic(path="/nonexistent/path/xyz", ctx=mock_ctx)
-        data = json.loads(response)
+        data = response
 
         assert "error" in data
         assert "does not exist" in data["error"]

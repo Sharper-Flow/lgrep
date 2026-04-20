@@ -59,6 +59,8 @@ the `lgrep_*` tool definitions in its tool manifest.
 
 ## Setup
 
+**stdio is the local default** for single-session / single-user setups. For shared deployments, use the HTTP transport option.
+
 **API key (semantic engine only):**
 - Semantic tools (`lgrep_search_semantic`, `lgrep_index_semantic`) require `VOYAGE_API_KEY`.
 - Symbol tools work without any API key.
