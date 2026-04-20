@@ -271,11 +271,17 @@ lgrep prune-orphans --dry-run
 lgrep prune-orphans --execute --cache-dir /path/to/cache
 ```
 
-`prune-orphans` is dry-run by default. Use `--execute` to actually delete orphaned semantic cache directories. `--cache-dir` overrides `LGREP_CACHE_DIR` for a single run. Agents can call the same workflow via the `lgrep_prune_orphans` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+`prune-orphans` is dry-run by default. Use `--execute` to actually delete orphaned semantic cache directories. `--cache-dir` overrides `LGREP_CACHE_DIR` for a single run. `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_orphans` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+
+**Grace window.** Recently modified cache dirs are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). The `missing_meta` and `project_path_enoent` reasons bypass the grace check because they are unambiguous.
+
+**Transport-aware MCP safety.** When lgrep is reached over a shared transport (for example `streamable-http`), the MCP tool coerces `dry_run=True` regardless of the caller's request. Destructive prunes on shared deployments must go through the CLI (`lgrep prune-orphans --execute`) so the operator is explicit.
 
 ### Troubleshooting `prune-orphans --execute`
 
 Each orphan is deleted independently. If `shutil.rmtree` fails for one entry (for example a lingering file lock or permission issue), the batch continues and the failure is recorded in the response under `failures[]` as `{path, error}`; the rest of the reclaim still lands. Re-run `lgrep prune-orphans --execute` after addressing the error, or inspect with `--dry-run` first to confirm the orphan is still present.
+
+Deletion is refused for any path outside the resolved cache directory (path-confinement guard) and for any symlinked cache entry (TOCTOU guard) — both show up in `failures[]` rather than as successful deletes.
 
 ## First-use workflow
 
@@ -417,6 +423,8 @@ Security notes:
 | `LGREP_WARM_PATHS` | No | none | Colon-separated projects to warm on startup |
 | `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
+| `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
+| `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
 
 ### Ignore behavior
 

@@ -83,8 +83,14 @@ This creates a default `.lgrepignore` template you can customize.
 lgrep prune-orphans --dry-run            # inspect only (default)
 lgrep prune-orphans --execute            # delete orphan cache dirs
 lgrep prune-orphans --cache-dir /tmp/x   # one-off cache root override
+
+# Tune the grace window (default 1h; protects caches mid-indexing):
+LGREP_PRUNE_MIN_AGE_S=0    lgrep prune-orphans --execute   # aggressive, no grace
+LGREP_PRUNE_MIN_AGE_S=7200 lgrep prune-orphans --dry-run   # 2h grace window
 ```
-Dry-run by default. Active projects and the `symbols/` subdir are always skipped.
+Dry-run by default. Active projects and the `symbols/` subdir are always skipped. `--execute` and `--dry-run` are mutually exclusive.
+
+**MCP safety.** The `lgrep_prune_orphans` MCP tool forces `dry_run=True` on non-stdio (shared HTTP) transports. Destructive prunes on shared servers must use the CLI.
 
 This installs three artifacts into `~/.config/opencode/`: the MCP server entry,
 the always-on `instructions/lgrep-tools.md` policy file, and this skill file.
