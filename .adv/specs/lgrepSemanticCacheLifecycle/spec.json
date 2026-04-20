@@ -1,0 +1,350 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anomalyco/oc-plugins/main/advance/plugin/schemas/spec.schema.json",
+  "name": "lgrepSemanticCacheLifecycle",
+  "title": "LgrepSemanticCacheLifecycle",
+  "purpose": "Capability: LgrepSemanticCacheLifecycle — defines the invariants and operator-facing surfaces that keep the semantic cache directory (LanceDB chunks + metadata) consistent over time, including orphan detection, manual pruning (CLI + MCP), and lifecycle safety guards.",
+  "version": "1.0.0",
+  "updated_at": "2026-04-20T16:00:00.000Z",
+  "requirements": [
+    {
+      "id": "rq-cache-meta-invariant",
+      "title": "Cache directory carries reverse-mapping metadata",
+      "body": "When a `ChunkStore` is constructed with an explicit `project_path`, it MUST write a `project_meta.json` file next to the LanceDB cache on disk. The metadata MUST at minimum record the resolved absolute project path. The write MUST be atomic (write-to-tmp then rename) to avoid partial reads. When `project_path` is omitted, the constructor MUST NOT write meta (writing the cache hash dir as the project path corrupts orphan detection).",
+      "priority": "must",
+      "tags": [
+        "cache",
+        "storage",
+        "invariant"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-cache-meta-invariant.1",
+          "title": "Explicit project_path writes meta",
+          "given": [
+            "A fresh cache directory",
+            "A ChunkStore constructed with a resolved project_path"
+          ],
+          "when": "Construction completes",
+          "then": [
+            "`project_meta.json` exists in the cache directory",
+            "The file's `project_path` field equals the resolved project path",
+            "The write is atomic (no partial file observable by concurrent readers)"
+          ]
+        },
+        {
+          "id": "rq-cache-meta-invariant.2",
+          "title": "Omitted project_path skips meta",
+          "given": [
+            "A fresh cache directory",
+            "A ChunkStore constructed without a project_path argument"
+          ],
+          "when": "Construction completes",
+          "then": [
+            "No `project_meta.json` is written",
+            "The cache hash dir is never recorded as a project_path"
+          ]
+        },
+        {
+          "id": "rq-cache-meta-invariant.3",
+          "title": "Corruption recovery rewrites meta",
+          "given": [
+            "A cache directory whose existing LanceDB connection fails and must be re-created",
+            "A ChunkStore reconstructed with project_path after the corruption recovery"
+          ],
+          "when": "Construction completes",
+          "then": [
+            "`project_meta.json` is present after recovery",
+            "Its contents reflect the supplied project_path"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-orphan-detection",
+      "title": "Orphan detection classifies four stable reasons",
+      "body": "`find_orphans` MUST classify candidate cache directories using exactly four stable orphan reasons: `missing_meta`, `unreadable_meta`, `missing_chunks_lance`, and `project_path_enoent`. Candidates whose name does not match the semantic cache hash shape (`^[0-9a-f]{12}$`) MUST be skipped outright. Symlinked candidates MUST be refused during scan to prevent any downstream operation from following them. Transient filesystem errors on the project_path side (e.g., `PermissionError` on an unmounted drive) MUST preserve the cache rather than mark it orphan.",
+      "priority": "must",
+      "tags": [
+        "prune-orphans",
+        "detection",
+        "security"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-orphan-detection.1",
+          "title": "Missing meta is detected",
+          "given": [
+            "A cache-shaped directory with chunks.lance/ but no project_meta.json"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "The directory is reported with reason `missing_meta`"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.2",
+          "title": "Unreadable meta is distinguished from missing",
+          "given": [
+            "A cache-shaped directory whose project_meta.json exists but is not valid JSON"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "The directory is reported with reason `unreadable_meta`",
+            "The reported project_path is null"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.3",
+          "title": "Missing chunks.lance is detected",
+          "given": [
+            "A cache-shaped directory with a valid project_meta.json but no chunks.lance/ subdir"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "The directory is reported with reason `missing_chunks_lance`"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.4",
+          "title": "Project-path ENOENT is detected",
+          "given": [
+            "A cache-shaped directory whose project_meta.json points at a project path that no longer exists"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "The directory is reported with reason `project_path_enoent`"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.5",
+          "title": "Non-hash-shaped children are skipped",
+          "given": [
+            "A cache root containing a child named `symbols/` and a child named `unrelated/`"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "Neither child is reported as an orphan",
+            "dirs_examined excludes both because they do not match the cache hash shape"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.6",
+          "title": "Symlinked candidates are refused",
+          "given": [
+            "A cache-shaped name that is a symlink to an unrelated directory"
+          ],
+          "when": "find_orphans or prune_orphans runs",
+          "then": [
+            "The symlink is not reported as an orphan",
+            "Its target is not visited or deleted"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.7",
+          "title": "Transient PermissionError preserves cache",
+          "given": [
+            "A cache whose project_path raises PermissionError when checked"
+          ],
+          "when": "find_orphans runs",
+          "then": [
+            "The cache is NOT reported as project_path_enoent",
+            "No orphan entry is emitted for it"
+          ]
+        },
+        {
+          "id": "rq-orphan-detection.8",
+          "title": "Active in-memory projects are skipped",
+          "given": [
+            "A cache-shaped directory whose project path is present in the server's active_set"
+          ],
+          "when": "prune_orphans runs with that active_set",
+          "then": [
+            "The cache is listed under `skipped_active`",
+            "It never appears in `orphans`"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-prune-dry-run-default",
+      "title": "Prune is dry-run by default and projects reclaim",
+      "body": "Both the `prune_orphans` core function and every operator-facing surface (CLI, MCP) MUST default to `dry_run=True`. A dry-run response MUST include the projected reclaim (`reclaimed_bytes = sum of orphan bytes`) so operators can preview savings without mutating disk. `--execute` and `--dry-run` MUST be mutually exclusive on the CLI to avoid last-flag-wins surprises.",
+      "priority": "must",
+      "tags": [
+        "prune-orphans",
+        "safety",
+        "cli"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-prune-dry-run-default.1",
+          "title": "Dry-run preserves disk state",
+          "given": [
+            "An orphan cache directory on disk"
+          ],
+          "when": "prune_orphans runs with dry_run=True (or the CLI default)",
+          "then": [
+            "The orphan directory still exists after the call",
+            "deleted_dirs is 0",
+            "reclaimed_bytes equals the sum of orphan[].bytes"
+          ]
+        },
+        {
+          "id": "rq-prune-dry-run-default.2",
+          "title": "CLI rejects simultaneous --execute and --dry-run",
+          "given": [
+            "A CLI invocation passing both --execute and --dry-run"
+          ],
+          "when": "the CLI parses arguments",
+          "then": [
+            "The command exits with a non-zero status",
+            "stderr explains that --execute and --dry-run are mutually exclusive",
+            "prune_orphans is not invoked"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-prune-guards",
+      "title": "Destructive prune applies path-confinement, TOCTOU, and grace guards",
+      "body": "When `dry_run=False`, `prune_orphans` MUST enforce three guards before any `shutil.rmtree` call: (1) path-confinement — the resolved orphan path must be strictly under the resolved cache root; (2) TOCTOU — the orphan path must not be a symlink at delete time; (3) grace — orphan reasons that can be produced by a mid-write indexer (`unreadable_meta`, `missing_chunks_lance`) MUST NOT be reported for caches modified within a grace window (default 3600 seconds, overridable via `LGREP_PRUNE_MIN_AGE_S`; `0` disables). Unambiguous reasons (`missing_meta`, `project_path_enoent`) bypass the grace check. Per-entry failures (rmtree raises, confinement or symlink refusal) MUST be recorded in `failures[]` and MUST NOT abort the batch.",
+      "priority": "must",
+      "tags": [
+        "prune-orphans",
+        "security",
+        "toctou",
+        "path-confinement"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-prune-guards.1",
+          "title": "Paths outside the cache root are refused",
+          "given": [
+            "A tampered orphans list containing a path outside the resolved cache root"
+          ],
+          "when": "prune_orphans runs with dry_run=False",
+          "then": [
+            "The out-of-root target is not deleted",
+            "failures[] records the refusal with an 'outside cache root' error",
+            "In-scope orphans are still processed"
+          ]
+        },
+        {
+          "id": "rq-prune-guards.2",
+          "title": "Symlink orphans are refused at delete time",
+          "given": [
+            "A hash-shaped cache entry that is a symlink swapped in after scan"
+          ],
+          "when": "prune_orphans runs with dry_run=False",
+          "then": [
+            "shutil.rmtree is not called on the symlink target",
+            "The symlink may be recorded in failures[] with a 'symlink' error",
+            "The decoy target directory remains intact"
+          ]
+        },
+        {
+          "id": "rq-prune-guards.3",
+          "title": "Recently modified ambiguous orphans are held back",
+          "given": [
+            "A cache with unreadable_meta whose mtime is within the grace window",
+            "LGREP_PRUNE_MIN_AGE_S > 0"
+          ],
+          "when": "prune_orphans runs",
+          "then": [
+            "The cache is NOT reported as an orphan",
+            "No deletion attempt is made"
+          ]
+        },
+        {
+          "id": "rq-prune-guards.4",
+          "title": "Unambiguous reasons bypass grace",
+          "given": [
+            "A fresh cache with missing_meta"
+          ],
+          "when": "prune_orphans runs with grace enabled",
+          "then": [
+            "The cache IS reported as missing_meta and eligible for prune"
+          ]
+        },
+        {
+          "id": "rq-prune-guards.5",
+          "title": "Per-entry rmtree failures do not abort the batch",
+          "given": [
+            "Two orphan cache directories, where shutil.rmtree is patched to fail on the first"
+          ],
+          "when": "prune_orphans runs with dry_run=False",
+          "then": [
+            "The first directory still exists and appears in failures[]",
+            "The second directory is deleted",
+            "deleted_dirs equals 1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-prune-mcp-transport-safety",
+      "title": "MCP prune_orphans coerces dry_run on non-stdio transports",
+      "body": "The MCP `prune_orphans` tool MUST coerce `dry_run=True` whenever the server transport is not `stdio` (or an equivalent local transport). The transport kind MUST be carried on the application context (set from `LGREP_TRANSPORT` at server startup). Unknown or absent transport MUST be treated as non-local. The tool's description MUST tell callers to use the CLI for destructive prunes on shared deployments.",
+      "priority": "must",
+      "tags": [
+        "prune-orphans",
+        "mcp",
+        "security",
+        "transport"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-prune-mcp-transport-safety.1",
+          "title": "stdio transport allows caller-chosen dry_run",
+          "given": [
+            "An LgrepContext with transport=stdio",
+            "An MCP caller requesting dry_run=False"
+          ],
+          "when": "the prune_orphans tool runs",
+          "then": [
+            "The effective dry_run matches the caller's request"
+          ]
+        },
+        {
+          "id": "rq-prune-mcp-transport-safety.2",
+          "title": "HTTP transport forces dry_run=True",
+          "given": [
+            "An LgrepContext with transport=streamable-http",
+            "An MCP caller requesting dry_run=False"
+          ],
+          "when": "the prune_orphans tool runs",
+          "then": [
+            "The response's dry_run field is True",
+            "deleted_dirs is 0",
+            "The on-disk orphan still exists"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-prune-response-contract",
+      "title": "Prune responses use typed dicts aligned with the MCP response pattern",
+      "body": "The MCP `prune_orphans` tool MUST return a structured dict matching the `PruneOrphansResult` TypedDict, containing `dry_run`, `dirs_examined`, `orphans`, `skipped_active`, `deleted_dirs`, `reclaimed_bytes`, `failures`, and `_meta`. Orphan entries MUST conform to `PruneOrphanEntry` (`path`, `reason`, `bytes`, `project_path`). Failure entries MUST conform to `PruneFailureEntry` (`path`, `error`). This aligns the new MCP surface with the repo-wide typed-response convention.",
+      "priority": "must",
+      "tags": [
+        "prune-orphans",
+        "mcp",
+        "output-contract"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-prune-response-contract.1",
+          "title": "MCP dry-run response carries every required key",
+          "given": [
+            "An MCP prune_orphans call in dry-run mode"
+          ],
+          "when": "the tool responds",
+          "then": [
+            "The response is a dict (not a JSON string)",
+            "The keys {dry_run, dirs_examined, orphans, skipped_active, deleted_dirs, reclaimed_bytes, failures, _meta} are all present"
+          ]
+        }
+      ]
+    }
+  ]
+}
