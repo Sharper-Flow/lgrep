@@ -126,7 +126,18 @@ class TestJsoncConfigHandling:
             '    "instructions": ["~/.config/opencode/instructions/lgrep-tools.md"]\n'
             '}\n'
         )
+        # Isolate uninstall() from the real ~/.config/opencode/ paths. If the
+        # user has symlinked ~/.config/opencode/skills/lgrep -> this repo's
+        # skills/lgrep (a common dev workflow), an unpatched uninstall would
+        # unlink() through the symlink and delete the source-tree SKILL.md.
+        instruction_path = tmp_path / ".config" / "opencode" / "instructions" / "lgrep-tools.md"
+        skill_dir = tmp_path / ".config" / "opencode" / "skills" / "lgrep"
+        skill_path = skill_dir / "SKILL.md"
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
+        monkeypatch.setattr(inst, "INSTRUCTION_DIR", instruction_path.parent)
+        monkeypatch.setattr(inst, "INSTRUCTION_PATH", instruction_path)
+        monkeypatch.setattr(inst, "SKILL_DIR", skill_dir)
+        monkeypatch.setattr(inst, "SKILL_PATH", skill_path)
 
         # Should not raise
         result = inst.uninstall()
