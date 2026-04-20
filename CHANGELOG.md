@@ -4,19 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-
-- **Prune orphan semantic caches.** New `lgrep prune-orphans` CLI subcommand and `lgrep_prune_orphans` MCP tool inspect and (with `--execute`) delete orphaned semantic cache directories. Dry-run by default; `--execute` and `--dry-run` are mutually exclusive.
-- **Orphan detection invariant.** `ChunkStore.__init__` now writes `project_meta.json` next to the LanceDB cache when a `project_path` is supplied, making the cache-hash → project-path mapping recoverable. Passing `project_path=None` intentionally skips the write (no hash-dir-as-project corruption).
-- **Path-confinement + TOCTOU guards.** `prune_orphans` resolves each candidate and refuses any path outside the cache root or any symlinked cache entry before calling `shutil.rmtree`; refusals land in `failures[]` rather than as silent skips.
-- **Grace window.** Recently-modified caches are preserved for 1 hour by default so the pruner cannot race a live indexer. Configurable via `LGREP_PRUNE_MIN_AGE_S` (seconds; `0` disables). `missing_meta` and `project_path_enoent` reasons bypass the grace check.
-- **Transport-aware MCP safety.** The MCP `prune_orphans` tool coerces `dry_run=True` on non-stdio transports (shared HTTP/SSE). Destructive prunes on shared deployments must use the CLI. Transport is plumbed via `LGREP_TRANSPORT` (set by `run_server`, stored on `LgrepContext.transport`).
-- **Response contracts.** Added `PruneOrphansResult`, `PruneOrphanEntry`, `PruneFailureEntry` TypedDicts in `lgrep.server.responses` so the new MCP surface shares the project's response-pattern convention.
-
-### Fixed
-
-- **`ChunkStore` side-effect clarity.** Constructor docstring now documents when `project_meta.json` is written and the opt-out via `project_path=None`.
-
 ## [3.0.0] - 2026-04-20
 
 ### Upgrade from 2.x
@@ -44,12 +31,22 @@ Rollback: if 3.0.0 integration is not feasible yet, pin to `lgrep==2.1.1`.
 - **Centralized MCP response contracts** — `src/lgrep/server/responses.py` defines `ToolError`, per-tool TypedDict response shapes, and shared timeout/error helpers.
 - **JSONC installer support** — `install_opencode.py` now reads and writes `.jsonc` OpenCode configs with comment- and trailing-comma-safe parsing via `src/lgrep/_jsonc.py`.
 - **Async query retry path** — semantic query embedding now uses `embed_query_async()` with `asyncio.sleep(...)` backoff, avoiding thread hops and blocking sleeps on interactive search retries.
+- **Prune orphan semantic caches** — new `lgrep prune-orphans` CLI subcommand and `lgrep_prune_orphans` MCP tool inspect and (with `--execute`) delete orphaned semantic cache directories. Dry-run by default; `--execute` and `--dry-run` are mutually exclusive.
+- **Orphan detection invariant** — `ChunkStore.__init__` now writes `project_meta.json` next to the LanceDB cache when a `project_path` is supplied, making the cache-hash → project-path mapping recoverable. Passing `project_path=None` intentionally skips the write (no hash-dir-as-project corruption).
+- **Path-confinement + TOCTOU guards** — `prune_orphans` resolves each candidate and refuses any path outside the cache root or any symlinked cache entry before calling `shutil.rmtree`; refusals land in `failures[]` rather than as silent skips.
+- **Grace window** — recently-modified caches are preserved for 1 hour by default so the pruner cannot race a live indexer. Configurable via `LGREP_PRUNE_MIN_AGE_S` (seconds; `0` disables). `missing_meta` and `project_path_enoent` reasons bypass the grace check.
+- **Transport-aware MCP safety** — the MCP `prune_orphans` tool coerces `dry_run=True` on non-stdio transports (shared HTTP/SSE). Destructive prunes on shared deployments must use the CLI. Transport is plumbed via `LGREP_TRANSPORT` (set by `run_server`, stored on `LgrepContext.transport`).
+- **Prune response contracts** — added `PruneOrphansResult`, `PruneOrphanEntry`, `PruneFailureEntry` TypedDicts in `lgrep.server.responses` so the new MCP surface shares the project's response-pattern convention.
+- **Semantic cache lifecycle spec** — added `lgrepSemanticCacheLifecycle` capability (`v1.0.0`) with 6 requirements covering cache metadata, orphan detection, dry-run defaults, prune guards, MCP transport safety, and response contracts.
 
 ### Fixed
 
 - **Installer log path is user-scoped** — systemd setup now uses `~/.cache/lgrep/lgrep.log` instead of `/tmp/lgrep.log`, and setup instructions create the cache directory explicitly.
 - **Tool error handling is consistent** — error paths now return structured `{ "error": ... }` responses across semantic and symbol tools.
 - **JSONC config install/uninstall edge cases** — installer now handles `//` comments, `/* ... */` blocks, trailing commas, and adversarial string literals in `.jsonc` files.
+- **`ChunkStore` side-effect clarity** — constructor docstring now documents when `project_meta.json` is written and the opt-out via `project_path=None`.
+- **Installer uninstall symlink safety** — `uninstall()` refuses to unlink `SKILL_PATH` / `INSTRUCTION_PATH` when they resolve through a parent-directory symlink into the package source tree, preventing accidental deletion of committed repo files during dev-workflow setups.
+- **Live MCP structured errors** — semantic and symbol handlers now declare `ToolError` in their return annotations, so FastMCP returns structured `{ "error": ... }` payloads on live error paths instead of framework validation errors.
 
 ### Removed
 
