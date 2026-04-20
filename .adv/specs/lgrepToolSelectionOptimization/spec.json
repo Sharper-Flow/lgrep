@@ -3,8 +3,8 @@
   "name": "lgrepToolSelectionOptimization",
   "title": "LgrepToolSelectionOptimization",
   "purpose": "Capability: LgrepToolSelectionOptimization",
-  "version": "1.1.0",
-  "updated_at": "2026-02-08T18:07:19.493Z",
+  "version": "1.2.1",
+  "updated_at": "2026-04-20T04:54:16.075Z",
   "requirements": [
     {
       "id": "rq-1",
@@ -338,6 +338,132 @@
           "when": "Execution terminates",
           "then": [
             "Artifacts include enough context to diagnose failure and trace authorization"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-out-1",
+      "title": "Tool responses use structured models, not json.dumps strings",
+      "body": "All MCP tool handlers MUST return structured TypedDict instances (or plain dicts matching TypedDict shapes) instead of json.dumps strings. This enables type-checker verification, eliminates double-serialization, and provides a single source of truth for response contracts.",
+      "priority": "must",
+      "tags": [
+        "output-contract",
+        "type-safety",
+        "breaking-change"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-out-1.1",
+          "title": "Tool returns dict, not JSON string",
+          "given": [
+            "A tool handler that previously returned json.dumps(result)"
+          ],
+          "when": "The handler is invoked via MCP",
+          "then": [
+            "The return value is a dict matching the declared TypedDict",
+            "No json.dumps call exists in the handler"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-out-2",
+      "title": "Centralized typed error model",
+      "body": "Error responses from all tools MUST use a single ToolError TypedDict (error: str) returned via error_response(), not ad-hoc json.dumps or string returns. This ensures consistent error shape across all tools and enables type-checker verification of error paths.",
+      "priority": "must",
+      "tags": [
+        "output-contract",
+        "error-handling",
+        "type-safety"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-out-2.1",
+          "title": "Error responses use ToolError shape",
+          "given": [
+            "A tool handler that encounters an error condition"
+          ],
+          "when": "The handler returns an error",
+          "then": [
+            "The return value is a dict with exactly one key \"error\" whose value is a string",
+            "No isinstance(result, str) checks remain in lifecycle or tool code"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-ins-1",
+      "title": "Installer handles JSON and JSONC formats",
+      "body": "The install_opencode.py installer MUST correctly read and write both .json and .jsonc config files, preserving comments and trailing commas in .jsonc files via the _jsonc module.",
+      "priority": "must",
+      "tags": [
+        "installer",
+        "config",
+        "jsonc"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-ins-1.1",
+          "title": "JSONC config round-trips correctly",
+          "given": [
+            "An opencode.jsonc config containing // comments and trailing commas"
+          ],
+          "when": "install_opencode.py reads and writes the config",
+          "then": [
+            "Comments are preserved in the output",
+            "Trailing commas are handled without error",
+            "The MCP server entry is correctly added"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-ins-2",
+      "title": "Service template uses user-scoped log path",
+      "body": "The systemd service template in install_opencode.py MUST use a user-scoped log path (~/.cache/lgrep/lgrep.log) instead of /tmp/lgrep.log, and MUST create the cache directory during setup.",
+      "priority": "must",
+      "tags": [
+        "installer",
+        "security",
+        "logging"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-ins-2.1",
+          "title": "Log path is user-scoped",
+          "given": [
+            "The systemd service template"
+          ],
+          "when": "The template is rendered",
+          "then": [
+            "StandardOutput and StandardError paths use ~/.cache/lgrep/",
+            "mkdir -p ~/.cache/lgrep is in setup instructions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-sto-1",
+      "title": "Legacy duplicate storage module removed",
+      "body": "The legacy src/lgrep/storage.py file (which duplicates the lgrep.storage package) MUST be deleted. All consumers already import from the lgrep.storage package which re-exports from _chunk_store.py.",
+      "priority": "must",
+      "tags": [
+        "cleanup",
+        "storage",
+        "deletion"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-sto-1.1",
+          "title": "storage.py file does not exist",
+          "given": [
+            "The lgrep.storage package with __init__.py and _chunk_store.py"
+          ],
+          "when": "The codebase is checked",
+          "then": [
+            "src/lgrep/storage.py does not exist",
+            "All imports resolve to lgrep.storage package"
           ]
         }
       ]

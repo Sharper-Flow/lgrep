@@ -1,7 +1,7 @@
 # LgrepToolSelectionOptimization
 
-> **Version:** 2.1.0
-> **Updated:** 2026-03-06
+> **Version:** 1.2.1
+> **Updated:** 2026-04-20
 
 ## Purpose
 
@@ -13,13 +13,13 @@ Capability: LgrepToolSelectionOptimization
 
 **ID:** `rq-1` | **Priority:** **[MUST]**
 
-Agents MUST prefer `lgrep_search_semantic` as the first search action for intent-based code discovery prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
+Agents MUST prefer `lgrep_search` as the first search action for intent-based code discovery prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
 
 **Tags:** `tool-selection`, `semantic-search`
 
 #### Scenarios
 
-**Semantic prompts choose lgrep_search_semantic first** (`rq-1.1`)
+**Semantic prompts choose lgrep first** (`rq-1.1`)
 
 **Given:**
 - A fixed semantic-discovery prompt fixture set
@@ -27,7 +27,7 @@ Agents MUST prefer `lgrep_search_semantic` as the first search action for intent
 **When:** The tool-choice harness runs
 
 **Then:**
-- `lgrep_search_semantic` is selected as first search action in at least 90% of fixture cases
+- `lgrep_search` is selected as first search action in at least 90% of fixture cases
 
 ---
 
@@ -35,21 +35,21 @@ Agents MUST prefer `lgrep_search_semantic` as the first search action for intent
 
 **ID:** `rq-2` | **Priority:** **[MUST]**
 
-Agents MUST prefer `lgrep_search_symbols` for exact symbol name lookups and exact-match tools for regex prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
+Agents MUST prefer exact-match tools for exact identifier and regex prompts, measured against a fixed acceptance scenario matrix with a >=90% pass threshold.
 
-**Tags:** `tool-selection`, `exact-match`, `symbol-search`
+**Tags:** `tool-selection`, `exact-match`
 
 #### Scenarios
 
-**Exact symbol prompts choose lgrep_search_symbols first** (`rq-2.1`)
+**Exact prompts avoid semantic-first behavior** (`rq-2.1`)
 
 **Given:**
-- A fixed exact-identifier and symbol-name prompt fixture set
+- A fixed exact-identifier and regex prompt fixture set
 
 **When:** The tool-choice harness runs
 
 **Then:**
-- `lgrep_search_symbols` or other exact-match tools are selected as first search action in at least 90% of fixture cases
+- Exact-match tools are selected as first search action in at least 90% of fixture cases
 
 ---
 
@@ -313,111 +313,118 @@ Lifecycle operations MUST emit structured status markers and auditable artifacts
 
 ---
 
-### Routing policy lives in always-loaded instructions
+### Tool responses use structured models, not json.dumps strings
 
-**ID:** `rq-10` | **Priority:** **[MUST]**
+**ID:** `rq-out-1` | **Priority:** **[MUST]**
 
-The lgrep routing policy MUST be enforced via always-loaded instruction files (for example `lgrep-tools.md` or `mcp-tools.md`), not solely via skill files or documentation. Agent-specific prompts (e.g. `explore.md`) MUST NOT contradict the canonical routing policy. The installer MUST install or verify an always-loaded instruction path that includes lgrep routing guidance.
+All MCP tool handlers MUST return structured TypedDict instances (or plain dicts matching TypedDict shapes) instead of json.dumps strings. This enables type-checker verification, eliminates double-serialization, and provides a single source of truth for response contracts.
 
-**Tags:** `tool-selection`, `policy-enforcement`, `instructions`, `installer`
+**Tags:** `output-contract`, `type-safety`, `breaking-change`
 
 #### Scenarios
 
-**Always-loaded instructions contain lgrep routing** (`rq-10.1`)
+**Tool returns dict, not JSON string** (`rq-out-1.1`)
 
 **Given:**
-- The OpenCode config `instructions` array
+- A tool handler that previously returned json.dumps(result)
 
-**When:** The installer or test harness checks for lgrep routing policy
-
-**Then:**
-- At least one always-loaded instruction file contains lgrep first-action routing guidance
-- The guidance routes intent queries to `lgrep_search_semantic` and symbol queries to `lgrep_search_symbols`
-
-**Agent prompts do not contradict routing policy** (`rq-10.2`)
-
-**Given:**
-- Agent-specific prompt files (e.g. `explore.md`, `general.md`)
-
-**When:** The test harness checks for anti-patterns
+**When:** The handler is invoked via MCP
 
 **Then:**
-- No agent prompt says "glob first" or lists grep before lgrep for concept queries
-- Agent research strategies align with the canonical lgrep-first routing policy
-
-**Installer verifies policy wiring** (`rq-10.3`)
-
-**Given:**
-- A fresh `lgrep install-opencode` run
-
-**When:** The installer completes
-
-**Then:**
-- The installer checks the `instructions` array for lgrep routing policy
-- If missing, the installer emits a warning with remediation guidance
+- The return value is a dict matching the declared TypedDict
+- No json.dumps call exists in the handler
 
 ---
 
-### Dual-engine routing decision matrix is documented and enforced
+### Centralized typed error model
 
-**ID:** `rq-11` | **Priority:** **[MUST]**
+**ID:** `rq-out-2` | **Priority:** **[MUST]**
 
-Agents MUST route search requests to the correct engine based on query intent. The dual-engine routing decision matrix MUST be documented in SKILL.md and README.md and MUST be enforced by agent tool-choice behavior.
+Error responses from all tools MUST use a single ToolError TypedDict (error: str) returned via error_response(), not ad-hoc json.dumps or string returns. This ensures consistent error shape across all tools and enables type-checker verification of error paths.
 
-**Tags:** `tool-selection`, `dual-engine`, `routing`, `documentation`
-
-#### Routing matrix
-
-| Query intent | Engine | Tool |
-|---|---|---|
-| Intent/concept discovery | Semantic | `lgrep_search_semantic` |
-| Find symbol by name | Symbol | `lgrep_search_symbols` |
-| File structure overview | Symbol | `lgrep_get_file_outline` |
-| Repo structure overview | Symbol | `lgrep_get_repo_outline` |
-| Exact text/identifier | Symbol or Grep | `lgrep_search_text` or `Grep` |
-| Get symbol source | Symbol | `lgrep_get_symbol` |
-| Known-file review | N/A | `Read` |
+**Tags:** `output-contract`, `error-handling`, `type-safety`
 
 #### Scenarios
 
-**Semantic intent routes to lgrep_search_semantic** (`rq-11.1`)
+**Error responses use ToolError shape** (`rq-out-2.1`)
 
 **Given:**
-- A prompt expressing intent-based discovery ("where is auth enforced?")
+- A tool handler that encounters an error condition
 
-**When:** The tool-choice harness runs
+**When:** The handler returns an error
 
 **Then:**
-- `lgrep_search_semantic` is selected, not `lgrep_search_symbols` or `Grep`
+- The return value is a dict with exactly one key "error" whose value is a string
+- No isinstance(result, str) checks remain in lifecycle or tool code
 
-**Symbol name intent routes to lgrep_search_symbols** (`rq-11.2`)
+---
+
+### Installer handles JSON and JSONC formats
+
+**ID:** `rq-ins-1` | **Priority:** **[MUST]**
+
+The install_opencode.py installer MUST correctly read and write both .json and .jsonc config files, preserving comments and trailing commas in .jsonc files via the _jsonc module.
+
+**Tags:** `installer`, `config`, `jsonc`
+
+#### Scenarios
+
+**JSONC config round-trips correctly** (`rq-ins-1.1`)
 
 **Given:**
-- A prompt expressing exact symbol lookup ("find the authenticate function")
+- An opencode.jsonc config containing // comments and trailing commas
 
-**When:** The tool-choice harness runs
+**When:** install_opencode.py reads and writes the config
 
 **Then:**
-- `lgrep_search_symbols` is selected, not `lgrep_search_semantic`
+- Comments are preserved in the output
+- Trailing commas are handled without error
+- The MCP server entry is correctly added
 
-**File outline intent routes to lgrep_get_file_outline** (`rq-11.3`)
+---
+
+### Service template uses user-scoped log path
+
+**ID:** `rq-ins-2` | **Priority:** **[MUST]**
+
+The systemd service template in install_opencode.py MUST use a user-scoped log path (~/.cache/lgrep/lgrep.log) instead of /tmp/lgrep.log, and MUST create the cache directory during setup.
+
+**Tags:** `installer`, `security`, `logging`
+
+#### Scenarios
+
+**Log path is user-scoped** (`rq-ins-2.1`)
 
 **Given:**
-- A prompt requesting file structure ("what functions are in src/auth.py?")
+- The systemd service template
 
-**When:** The tool-choice harness runs
+**When:** The template is rendered
 
 **Then:**
-- `lgrep_get_file_outline` is selected
+- StandardOutput and StandardError paths use ~/.cache/lgrep/
+- mkdir -p ~/.cache/lgrep is in setup instructions
 
-**Routing matrix is documented** (`rq-11.4`)
+---
+
+### Legacy duplicate storage module removed
+
+**ID:** `rq-sto-1` | **Priority:** **[MUST]**
+
+The legacy src/lgrep/storage.py file (which duplicates the lgrep.storage package) MUST be deleted. All consumers already import from the lgrep.storage package which re-exports from _chunk_store.py.
+
+**Tags:** `cleanup`, `storage`, `deletion`
+
+#### Scenarios
+
+**storage.py file does not exist** (`rq-sto-1.1`)
 
 **Given:**
-- README.md and SKILL.md
+- The lgrep.storage package with __init__.py and _chunk_store.py
 
-**When:** Documentation is reviewed
+**When:** The codebase is checked
 
 **Then:**
-- Both documents contain a tool-selection decision matrix covering all 7 routing cases
+- src/lgrep/storage.py does not exist
+- All imports resolve to lgrep.storage package
 
 ---
