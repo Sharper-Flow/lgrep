@@ -170,6 +170,89 @@ class TestInstallUninstall:
         assert "~/.config/opencode/instructions/identity.md" in config["instructions"]
         assert "~/.config/opencode/instructions/lgrep-tools.md" in config["instructions"]
 
+    def test_uninstall_refuses_when_skill_dir_is_symlink_into_package(self, tmp_path):
+        """When SKILL_DIR itself is a symlink whose target lives inside the
+        installed package tree (common dev-workflow setup:
+        ``~/.config/opencode/skills/lgrep -> <repo>/skills/lgrep``),
+        ``SKILL_PATH`` resolves through the parent symlink to a real file
+        in the package tree. A naive ``SKILL_PATH.unlink()`` destroys that
+        real file.
+
+        uninstall() MUST detect this case and skip the unlink (or unlink only
+        the dir-level symlink, never its target).
+
+        We build a fake package tree under tmp_path and patch
+        ``_PACKAGE_SKILL`` to point at it so the test never risks the
+        real repo files during the red phase.
+        """
+        # Fake package tree under tmp_path
+        fake_pkg_skill_dir = tmp_path / "pkg" / "skills" / "lgrep"
+        fake_pkg_skill_dir.mkdir(parents=True)
+        fake_pkg_skill = fake_pkg_skill_dir / "SKILL.md"
+        fake_pkg_skill.write_text("FAKE_PACKAGE_SKILL_SENTINEL")
+        before_bytes = fake_pkg_skill.read_bytes()
+
+        # User's OpenCode config has SKILL_DIR as a symlink INTO the fake pkg.
+        config_dir = tmp_path / ".config" / "opencode"
+        (config_dir / "skills").mkdir(parents=True)
+        skill_dir_link = config_dir / "skills" / "lgrep"
+        skill_dir_link.symlink_to(fake_pkg_skill_dir)
+        skill_path = skill_dir_link / "SKILL.md"
+
+        instruction_path = config_dir / "instructions" / "lgrep-tools.md"
+        config_path = config_dir / "opencode.json"
+        config_path.write_text('{"mcp":{}, "instructions":[]}')
+
+        with (
+            patch("lgrep.install_opencode._PACKAGE_SKILL", fake_pkg_skill),
+            patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_path.parent),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
+            patch("lgrep.install_opencode.SKILL_DIR", skill_dir_link),
+            patch("lgrep.install_opencode.SKILL_PATH", skill_path),
+        ):
+            rc = uninstall()
+
+        assert rc == 0
+        assert fake_pkg_skill.exists(), \
+            "package SKILL.md was unlinked through the parent dir symlink"
+        assert fake_pkg_skill.read_bytes() == before_bytes
+
+    def test_uninstall_refuses_when_instruction_dir_is_symlink_into_package(self, tmp_path):
+        """Same guard for INSTRUCTION_DIR when a user symlinks the whole
+        instructions dir into a source checkout.
+        """
+        fake_pkg_instruction_dir = tmp_path / "pkg" / "instructions"
+        fake_pkg_instruction_dir.mkdir(parents=True)
+        fake_pkg_instruction = fake_pkg_instruction_dir / "lgrep-tools.md"
+        fake_pkg_instruction.write_text("FAKE_PACKAGE_INSTRUCTION_SENTINEL")
+        before_bytes = fake_pkg_instruction.read_bytes()
+
+        config_dir = tmp_path / ".config" / "opencode"
+        config_dir.mkdir(parents=True)
+        instruction_dir_link = config_dir / "instructions"
+        instruction_dir_link.symlink_to(fake_pkg_instruction_dir)
+        instruction_path = instruction_dir_link / "lgrep-tools.md"
+
+        skill_path = config_dir / "skills" / "lgrep" / "SKILL.md"
+        config_path = config_dir / "opencode.json"
+        config_path.write_text('{"mcp":{}, "instructions":[]}')
+
+        with (
+            patch("lgrep.install_opencode._PACKAGE_INSTRUCTION", fake_pkg_instruction),
+            patch("lgrep.install_opencode.OPENCODE_CONFIG_DIR", config_dir),
+            patch("lgrep.install_opencode.INSTRUCTION_DIR", instruction_dir_link),
+            patch("lgrep.install_opencode.INSTRUCTION_PATH", instruction_path),
+            patch("lgrep.install_opencode.SKILL_DIR", skill_path.parent),
+            patch("lgrep.install_opencode.SKILL_PATH", skill_path),
+        ):
+            rc = uninstall()
+
+        assert rc == 0
+        assert fake_pkg_instruction.exists(), \
+            "package lgrep-tools.md was unlinked through the parent dir symlink"
+        assert fake_pkg_instruction.read_bytes() == before_bytes
+
     def test_install_same_file_skill_does_not_crash(self, tmp_path):
         """install() should not crash when SKILL source and dest are the same file."""
         config_dir = tmp_path / ".config" / "opencode"

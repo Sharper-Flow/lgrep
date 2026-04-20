@@ -241,24 +241,66 @@ def install() -> int:
 # ---------------------------------------------------------------------------
 
 
+def _resolves_to_package_source(installed: Path, package_source: Path) -> bool:
+    """Return True when ``installed`` resolves to ``package_source``.
+
+    Protects uninstall() from dev-workflow symlinks. If a user has made
+    ``~/.config/opencode/skills/lgrep`` (or the whole instructions dir) a
+    symlink into a source checkout, ``SKILL_PATH.unlink()`` would destroy
+    the committed file in the repo. The symmetric install() guard at
+    ``_PACKAGE_SKILL.resolve() == SKILL_PATH.resolve()`` handles the copy
+    side; this helper provides the same invariant for the unlink side.
+    """
+    try:
+        return installed.resolve() == package_source.resolve()
+    except OSError:
+        # Broken symlink or permission issue — err on the side of refusing.
+        return True
+
+
 def uninstall() -> int:
-    """Remove lgrep from OpenCode (tool + MCP + skill)."""
+    """Remove lgrep from OpenCode (tool + MCP + skill).
+
+    Symlink safety: if ``INSTRUCTION_PATH`` or ``SKILL_PATH`` resolves into
+    the installed package source tree (for example the user symlinked
+    ``~/.config/opencode/skills/lgrep -> <repo>/skills/lgrep``), the unlink
+    for that path is skipped to avoid destroying committed files.
+    """
     print("Uninstalling lgrep from OpenCode...")
 
-    # 1. Remove installed instruction
+    # 1. Remove installed instruction — skip when the path resolves into
+    #    the package source (dev-workflow symlink).
     if INSTRUCTION_PATH.exists():
-        INSTRUCTION_PATH.unlink()
-        print(f"  [ok] Removed {INSTRUCTION_PATH}")
+        if _resolves_to_package_source(INSTRUCTION_PATH, _PACKAGE_INSTRUCTION):
+            print(
+                f"  [skip] {INSTRUCTION_PATH} resolves into package source; "
+                "refusing to unlink"
+            )
+        else:
+            INSTRUCTION_PATH.unlink()
+            print(f"  [ok] Removed {INSTRUCTION_PATH}")
     else:
         print(f"  [skip] {INSTRUCTION_PATH} not found")
 
-    # 2. Remove skill
+    # 2. Remove skill — same guard.
     if SKILL_PATH.exists():
-        SKILL_PATH.unlink()
-        # Remove empty directory
-        if SKILL_DIR.exists() and not any(SKILL_DIR.iterdir()):
-            SKILL_DIR.rmdir()
-        print(f"  [ok] Removed {SKILL_PATH}")
+        if _resolves_to_package_source(SKILL_PATH, _PACKAGE_SKILL):
+            print(
+                f"  [skip] {SKILL_PATH} resolves into package source; "
+                "refusing to unlink"
+            )
+        else:
+            SKILL_PATH.unlink()
+            # Remove empty directory (only if it's a real dir, not a symlink
+            # — rmdir would fail on a symlink, and we don't want to remove
+            # symlinks here either).
+            if (
+                SKILL_DIR.exists()
+                and not SKILL_DIR.is_symlink()
+                and not any(SKILL_DIR.iterdir())
+            ):
+                SKILL_DIR.rmdir()
+            print(f"  [ok] Removed {SKILL_PATH}")
     else:
         print(f"  [skip] {SKILL_PATH} not found")
 
