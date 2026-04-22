@@ -49,7 +49,17 @@ class ToolError(TypedDict):
 
 
 class SearchSemanticResult(TypedDict):
-    """Response for search_semantic."""
+    """Response for search_semantic.
+
+    Fields:
+      - ``results``: list of ``SearchChunk`` entries (may be empty).
+      - ``total``: always equals ``len(results)`` for this response; it is
+        not the corpus chunk count.
+      - ``query``: the original query string echoed back.
+      - ``path``: the project path the search ran against.
+      - ``engine``: enum — ``"hybrid"`` when the handler ran a hybrid
+        (vector + keyword) search, ``"vector"`` when vector-only.
+    """
 
     results: list[SearchChunk]
     total: int
@@ -70,8 +80,15 @@ class _SearchChunkRequired(TypedDict):
 class SearchChunk(_SearchChunkRequired, total=False):
     """A single semantic search result.
 
-    Required keys are set by the handler at construction time.
-    Optional fidelity keys preserve the original range/match info.
+    Required keys (always present):
+      - ``file_path``: repo-relative path of the matching file.
+      - ``line_number``: primary line anchor (mapped from ``start_line``).
+      - ``content``: matched chunk text.
+      - ``score``: relevance score from the underlying engine.
+
+    Optional fidelity keys (may be absent):
+      - ``start_line`` / ``end_line``: original chunk line range.
+      - ``match_type``: ``"hybrid"`` | ``"vector"`` | ``"keyword"``.
     """
 
     start_line: int  # optional fidelity — original range start

@@ -342,6 +342,8 @@ Example — `lgrep_search_semantic`:
 }
 ```
 
+`engine` is `"hybrid"` when `hybrid=true` (the default) or `"vector"` when `hybrid=false`.
+
 Error responses use the shared `ToolError` shape:
 
 ```python

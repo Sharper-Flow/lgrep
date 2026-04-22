@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-04-22
+
 ### Fixed
 
 - **`search_semantic` response now includes `line_number`** — handler previously forwarded raw `SearchResult` dataclass fields (`start_line`, `end_line`, `match_type`) without mapping to the declared `SearchChunk` TypedDict which requires `line_number`. The handler now explicitly maps `line_number = start_line` while preserving range fields as optional fidelity keys.
