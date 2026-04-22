@@ -84,6 +84,22 @@ class TestSemanticToolRenames:
 class TestSemanticToolResponseShapes:
     """Regression guard: renamed tools must preserve exact response shapes."""
 
+    def test_search_chunk_typed_dict_required_fields(self):
+        """SearchChunk contract must keep core fields required."""
+        from lgrep.server.responses import SearchChunk
+
+        assert SearchChunk.__required_keys__ == {
+            "file_path",
+            "line_number",
+            "content",
+            "score",
+        }
+        assert SearchChunk.__optional_keys__ == {
+            "start_line",
+            "end_line",
+            "match_type",
+        }
+
     @pytest.mark.asyncio
     async def test_search_semantic_response_shape(self):
         """lgrep_search_semantic must return same JSON shape as old lgrep_search."""

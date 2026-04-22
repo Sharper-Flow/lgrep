@@ -58,17 +58,22 @@ class SearchSemanticResult(TypedDict):
     engine: str
 
 
-class SearchChunk(TypedDict, total=False):
+class _SearchChunkRequired(TypedDict):
+    """Required fields for a semantic search result chunk."""
+
+    file_path: str
+    line_number: int  # required — mapped from SearchResult.start_line
+    content: str
+    score: float
+
+
+class SearchChunk(_SearchChunkRequired, total=False):
     """A single semantic search result.
 
     Required keys are set by the handler at construction time.
     Optional fidelity keys preserve the original range/match info.
     """
 
-    file_path: str
-    line_number: int  # required — mapped from SearchResult.start_line
-    content: str
-    score: float
     start_line: int  # optional fidelity — original range start
     end_line: int  # optional fidelity — original range end
     match_type: str  # optional fidelity — "hybrid" | "vector" | "keyword"
