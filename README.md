@@ -331,14 +331,14 @@ Example — `lgrep_search_semantic`:
 {
     "query": "authentication flow",
     "path": "/path/to/project",
-    "engine": "semantic",
+    "engine": "hybrid",
     "total": 3,
     "results": [
-        {"file_path": "src/auth.py", "start_line": 42, "end_line": 87,
-         "content": "...", "score": 0.91, "match_type": "hybrid"},
+        {"file_path": "src/auth.py", "line_number": 42,
+         "content": "...", "score": 0.91,
+         "start_line": 42, "end_line": 87, "match_type": "hybrid"},
         # ...
     ],
-    "_meta": {"duration_ms": 87.4}
 }
 ```
 
