@@ -18,11 +18,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-[project.urls]
-Homepage = "https://sharperflow.com/projects/lgrep"
-Repository = "https://github.com/Sharper-Flow/lgrep"
-Changelog = "https://github.com/Sharper-Flow/lgrep/blob/main/CHANGELOG.md"
-
 dependencies = [
     "lancedb>=0.5.0",
     "voyageai>=0.3.0",
@@ -35,6 +30,11 @@ dependencies = [
     "tree-sitter-language-pack>=0.7.0",
     "pathspec>=0.12.0",
 ]
+
+[project.urls]
+Homepage = "https://sharperflow.com/projects/lgrep"
+Repository = "https://github.com/Sharper-Flow/lgrep"
+Changelog = "https://github.com/Sharper-Flow/lgrep/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
