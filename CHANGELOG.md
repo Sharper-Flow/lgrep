@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`search_semantic` response now includes `line_number`** — handler previously forwarded raw `SearchResult` dataclass fields (`start_line`, `end_line`, `match_type`) without mapping to the declared `SearchChunk` TypedDict which requires `line_number`. The handler now explicitly maps `line_number = start_line` while preserving range fields as optional fidelity keys.
+- **`search_semantic` `total` now returns `len(results)`** — was always 0 because the handler read `result_dict.get("total", 0)` from a `SearchResults` dataclass that uses `total_chunks` (a corpus count), not `total`. Now correctly returns the number of results in this response.
+- **`get_repo_outline` `files` declared as `list[FileOutline]`** — TypedDict previously declared `files: list[str]` but runtime already returned `list[dict]` with `file_path`, `symbols`, `symbol_count`. Declaration now matches runtime via new `FileOutline` TypedDict.
+
 ## [3.0.0] - 2026-04-20
 
 ### Upgrade from 2.x
