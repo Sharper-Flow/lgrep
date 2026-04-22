@@ -129,6 +129,14 @@ class TestSymbolToolResponses:
         data = result
         assert "_meta" in data
         assert "files" in data
+        # Contract: files is list of FileOutline dicts, not list of strings
+        assert isinstance(data["files"], list)
+        if len(data["files"]) > 0:
+            entry = data["files"][0]
+            assert isinstance(entry, dict), f"Expected dict, got {type(entry)}"
+            assert "file_path" in entry
+            assert "symbols" in entry
+            assert "symbol_count" in entry
 
     @pytest.mark.asyncio
     async def test_search_symbols_missing_index_returns_error(self, tmp_path):
