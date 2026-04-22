@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
@@ -56,10 +55,23 @@ async def _execute_search(
             results = await asyncio.to_thread(state.db.search_hybrid, query_vector, query, limit)
         else:
             results = await asyncio.to_thread(state.db.search_vector, query_vector, limit)
-        result_dict = asdict(results)
+        # Explicit key mapping: construct SearchChunk dicts with line_number
+        # mapped from SearchResult.start_line, preserving fidelity fields.
+        chunks = [
+            {
+                "file_path": r.file_path,
+                "line_number": r.start_line,
+                "content": r.content,
+                "score": r.score,
+                "start_line": r.start_line,
+                "end_line": r.end_line,
+                "match_type": r.match_type,
+            }
+            for r in results.results
+        ]
         return SearchSemanticResult(
-            results=result_dict.get("results", []),
-            total=result_dict.get("total", 0),
+            results=chunks,
+            total=len(chunks),
             query=query,
             path=project_path,
             engine="hybrid" if hybrid else "vector",

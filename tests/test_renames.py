@@ -113,6 +113,12 @@ class TestSemanticToolResponseShapes:
         assert "results" in data
         assert len(data["results"]) == 1
         assert data["results"][0]["file_path"] == "a.py"
+        # Contract: line_number is required, mapped from start_line
+        assert "line_number" in data["results"][0]
+        assert data["results"][0]["line_number"] == 1  # start_line value
+        # Contract: total == len(results), not total_chunks
+        assert data["total"] == len(data["results"])
+        assert data["total"] != 0
         # query_time_ms removed from SearchSemanticResult TypedDict
 
     @pytest.mark.asyncio
