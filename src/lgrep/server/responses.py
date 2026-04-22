@@ -58,11 +58,28 @@ class SearchSemanticResult(TypedDict):
     engine: str
 
 
-class SearchChunk(TypedDict):
+class SearchChunk(TypedDict, total=False):
+    """A single semantic search result.
+
+    Required keys are set by the handler at construction time.
+    Optional fidelity keys preserve the original range/match info.
+    """
+
     file_path: str
-    line_number: int
+    line_number: int  # required — mapped from SearchResult.start_line
     content: str
     score: float
+    start_line: int  # optional fidelity — original range start
+    end_line: int  # optional fidelity — original range end
+    match_type: str  # optional fidelity — "hybrid" | "vector" | "keyword"
+
+
+class FileOutline(TypedDict):
+    """A single file's symbol summary in a repo outline."""
+
+    file_path: str
+    symbols: list[Any]
+    symbol_count: int
 
 
 class IndexSemanticResult(TypedDict):
@@ -161,7 +178,7 @@ class GetRepoOutlineResult(TypedDict):
     """Response for get_repo_outline."""
 
     repo_path: str
-    files: list[str]
+    files: list[FileOutline]
     total_files: int
     total_symbols: int
     _meta: _Meta
