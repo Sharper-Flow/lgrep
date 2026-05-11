@@ -1,0 +1,143 @@
+name: Auto Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Auto Release
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get last tag
+        id: last_tag
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Determine version bump
+        id: bump
+        run: |
+          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
+
+          COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')
+          if [ "$COUNT" -eq 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          HAS_BREAKING=false
+          HAS_FEAT=false
+          HAS_FIX=false
+          HAS_OTHER=false
+
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^[a-z]+(\(.+\))?!:'; then HAS_BREAKING=true; fi
+            if echo "$line" | grep -qE '^feat(\(.+\))?:'; then HAS_FEAT=true; fi
+            if echo "$line" | grep -qE '^fix(\(.+\))?:'; then HAS_FIX=true; fi
+            if echo "$line" | grep -qE '^[a-z]+(\(.+\))?:'; then HAS_OTHER=true; fi
+          done <<< "$COMMITS"
+
+          CURRENT="${LAST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          if [ "$HAS_BREAKING" = true ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0; BUMP="major"
+          elif [ "$HAS_FEAT" = true ]; then
+            MINOR=$((MINOR + 1)); PATCH=0; BUMP="minor"
+          elif [ "$HAS_FIX" = true ] || [ "$HAS_OTHER" = true ]; then
+            PATCH=$((PATCH + 1)); BUMP="patch"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+
+      - name: Generate CHANGELOG
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
+          NEW_TAG="${{ steps.bump.outputs.new_tag }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          FEAT_ENTRIES=""
+          FIX_ENTRIES=""
+          OTHER_ENTRIES=""
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s")
+
+          while IFS= read -r line; do
+            MSG=$(echo "$line" | sed -E 's/^[a-z]+(\(.+\))?:\s*//')
+            if echo "$line" | grep -qE '^feat(\(.+\))?:'; then
+              FEAT_ENTRIES="${FEAT_ENTRIES}\n- ${MSG}"
+            elif echo "$line" | grep -qE '^fix(\(.+\))?:'; then
+              FIX_ENTRIES="${FIX_ENTRIES}\n- ${MSG}"
+            elif echo "$line" | grep -qE '^(chore|ci|docs|refactor|test|perf|style|build)(\(.+\))?:'; then
+              OTHER_ENTRIES="${OTHER_ENTRIES}\n- ${MSG}"
+            fi
+          done <<< "$COMMITS"
+
+          ENTRY="## ${TODAY} (${NEW_TAG})"
+          [ -n "$FEAT_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Added${FEAT_ENTRIES}"
+          [ -n "$FIX_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Fixed${FIX_ENTRIES}"
+          [ -n "$OTHER_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Changed${OTHER_ENTRIES}"
+
+          if [ -f CHANGELOG.md ]; then
+            EXISTING=$(cat CHANGELOG.md)
+            printf '%s\n\n%s\n' "$ENTRY" "$EXISTING" > CHANGELOG.md
+          else
+            printf '%s\n' "$ENTRY" > CHANGELOG.md
+          fi
+
+      - name: Build package
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          pip install build
+          python -m build
+
+      - name: Commit CHANGELOG and push tag
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          NEW_TAG="${{ steps.bump.outputs.new_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: update changelog for ${NEW_TAG}"
+          git tag -a "$NEW_TAG" -m "Release ${NEW_TAG}"
+          git push origin HEAD:"${{ github.event.workflow_run.head_branch }}"
+          git push origin "$NEW_TAG"
+
+      - name: Create Release
+        if: steps.bump.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+          generate_release_notes: true
+
+      - name: Summary
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          echo "## Auto Release 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "**${{ steps.bump.outputs.new_tag }}** (${{ steps.bump.outputs.bump }} from ${{ steps.last_tag.outputs.tag }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skip summary
+        if: steps.bump.outputs.skip == 'true'
+        run: echo "## No Release Needed" >> "$GITHUB_STEP_SUMMARY"
