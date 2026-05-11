@@ -1,0 +1,305 @@
+{
+  "id": "improveLgrepStaleIndex",
+  "title": "Improve lgrep stale-index resilience",
+  "status": "archived",
+  "created_at": "2026-05-11T06:11:51.500Z",
+  "tasks": [
+    {
+      "id": "tk-f6b78d25a93d",
+      "title": "Add `ChunkStore.get_file_hashes()` batch projection query method. TDD: write `tests/test_storage.py::test_get_file_hashes_returns_all_paths_and_hashes` (red) asserting (a) returns dict mapping rel_path→file_hash for all indexed files, (b) uses column projection (no vectors loaded), (c) returns empty dict for empty table. Then implement on `src/lgrep/storage/_chunk_store.py` mirroring `get_indexed_files()` projection pattern — select `file_path` and `file_hash` columns only, return `dict[str, str]` taking first hash per file_path. Also add `ChunkStore.get_latest_indexed_at() -> float` returning `max(indexed_at)` via projection, 0.0 if empty. AC4 dep.",
+      "type": "code",
+      "section": "staleness",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-05-11T15:38:22.274Z",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:42:39.605Z",
+      "verification": "Added ChunkStore.get_file_hashes() projection query returning dict[str,str] (first hash per file_path). Added ChunkStore.get_latest_indexed_at() projection returning max indexed_at, 0.0 on empty/error. Both follow get_indexed_files() column-projection pattern. 4 new tests.",
+      "summary": "Added ChunkStore.get_file_hashes() projection query returning dict[str,str] (first hash per file_path). Added ChunkStore.get_latest_indexed_at() projection returning max indexed_at, 0.0 on empty/error. Both follow get_indexed_files() column-projection pattern. 4 new tests.",
+      "implementation_summary": "Added ChunkStore.get_file_hashes() projection query returning dict[str,str] (first hash per file_path). Added ChunkStore.get_latest_indexed_at() projection returning max indexed_at, 0.0 on empty/error. Both follow get_indexed_files() column-projection pattern. 4 new tests.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-11T15:45:34.618Z",
+      "completed_at": "2026-05-11T15:45:34.618Z"
+    },
+    {
+      "id": "tk-24adbdb0ab12",
+      "title": "Wire 3-stage staleness pre-flight into `_execute_search()` (AC4, UD2, AD2). TDD: write `tests/test_server_tools.py::test_search_semantic_preflight_fresh_path_skips_reindex` (red) — mocks `indexer.index_all`, calls search with fresh on-disk state, asserts `index_all` NOT called and search returns embedded results. Add `test_search_semantic_preflight_stale_triggers_reindex` — mutate a file on disk between index and search, assert `index_all` called once before embedding. Then in `src/lgrep/server/tools_semantic.py:_execute_search()` (before `embedder.embed_query_async`): Stage-1 mtime gate — iterate `indexer.discovery.find_files()`, compare each file's `stat().st_mtime` against cached `state.latest_indexed_at` and check `len(current_files) == len(state.indexer.storage.get_indexed_files())`; if all fresh, skip. Stage-2 hash check — only for files with `mtime > latest_indexed_at` OR if file-count mismatch, compute SHA-256 and compare to `state.indexer.storage.get_file_hashes()`. Stage-3 — on confirmed mismatch, call `_auto_index_project_single_flight(app_ctx, project_path, Path(project_path))` to coordinate with concurrent searches, then refresh `state.latest_indexed_at`. Wrap whole pre-flight in `asyncio.to_thread`. Log `staleness_check_triggered_reindex` with file count. Also cache `latest_indexed_at` on `ProjectState` (lifecycle.py) — set after `_ensure_project_initialized()` and after any `index_all()` / `index_file()` call.",
+      "type": "code",
+      "section": "staleness",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-05-11T15:38:37.441Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-f6b78d25a93d"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:45:46.494Z",
+      "verification": "pytest TestStalenessPreflight + TestServerErrorPaths → 11 passed (fresh→no reindex, stale→reindex once)",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/tools_semantic.py",
+        "tests/test_server.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/tools_semantic.py",
+        "tests/test_server.py"
+      ],
+      "checkpointSha": "9e4174698c30ae1967ac098febcd21cab2c2bc97",
+      "completedAt": "2026-05-11T15:47:34.137Z",
+      "completed_at": "2026-05-11T15:47:34.137Z"
+    },
+    {
+      "id": "tk-7baef96330cc",
+      "title": "Fix all-projects `status_semantic` response shape (AC1, D1). TDD: write `tests/test_server.py::test_status_semantic_all_projects_response_includes_disk_cache_and_error` (red) — load 2+ projects, call `status_semantic(path=\"\")`, assert each entry in `projects` list has `disk_cache` key (value `None` or bool) and `error` key (value `None` or string), assert no pydantic validation errors raised. Then in `src/lgrep/server/lifecycle.py:_get_project_stats()` (lifecycle.py:222-241): add `\"disk_cache\": None` and `\"error\": None` to success-branch return dict; add `\"disk_cache\": None` to error-branch return dict (error branch already has `\"error\": str(e)`). Verify single-project path in `tools_semantic.py:status_semantic` still works.",
+      "type": "code",
+      "section": "response-shape",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-05-11T15:38:40.912Z",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:42:37.646Z",
+      "verification": "Added disk_cache=None and error=None to success branch of _get_project_stats(); added disk_cache=None to error branch. 2 new tests verify all-projects status response shape (success + error branch).",
+      "summary": "Added disk_cache=None and error=None to success branch of _get_project_stats(); added disk_cache=None to error branch. 2 new tests verify all-projects status response shape (success + error branch).",
+      "implementation_summary": "Added disk_cache=None and error=None to success branch of _get_project_stats(); added disk_cache=None to error branch. 2 new tests verify all-projects status response shape (success + error branch).",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-11T15:45:29.633Z",
+      "completed_at": "2026-05-11T15:45:29.633Z"
+    },
+    {
+      "id": "tk-0a1dd173b42c",
+      "title": "Wire `detect_changes()` into `index_folder()` for deleted-file cleanup (AC2, UD3). TDD: write `tests/test_symbol_tools.py::test_index_folder_incremental_removes_deleted_files_and_symbols` (red) — (1) create repo with `a.py` + `b.py`, run `index_folder(repo)`, verify both files+symbols indexed; (2) delete `b.py` from disk; (3) re-run `index_folder(repo, incremental=True)`; (4) assert `b.py` and its symbols absent from saved index; (5) assert `a.py` and its symbols still present. Then in `src/lgrep/tools/index_folder.py`: collect `walked_files: dict[str, str] = {}` during the existing file-walk loop (line 76-93, mapping `rel_path → file_hash`); after the loop, call `changes = store.detect_changes(resolved_root, walked_files)` to get `deleted` list; remove deleted entries from `files_dict` and remove all symbols where `sdata[\"file_path\"]` is in `set(changes[\"deleted\"])` from `symbols_dict` before `store.save()`. Add `files_deleted: int` to return dict.",
+      "type": "code",
+      "section": "symbol-cleanup",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-05-11T15:38:45.558Z",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:42:38.588Z",
+      "verification": "Track walked_files dict during index walk; after loop call detect_changes() to find deleted, prune from files_dict and symbols_dict. Skip prune when walk_truncated by max_files (avoids false-positive deletions). Added files_deleted to result.",
+      "summary": "Track walked_files dict during index walk; after loop call detect_changes() to find deleted, prune from files_dict and symbols_dict. Skip prune when walk_truncated by max_files (avoids false-positive deletions). Added files_deleted to result.",
+      "implementation_summary": "Track walked_files dict during index walk; after loop call detect_changes() to find deleted, prune from files_dict and symbols_dict. Skip prune when walk_truncated by max_files (avoids false-positive deletions). Added files_deleted to result.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-11T15:45:32.372Z",
+      "completed_at": "2026-05-11T15:45:32.372Z"
+    },
+    {
+      "id": "tk-93dda6ce4649",
+      "title": "Add `.adv/changes/` and `.adv/archive/` to `DEFAULT_LGREPIGNORE_TEMPLATE` (AC3, UD1). TDD: write `tests/test_discovery.py::test_default_template_excludes_adv_changes_and_archive` (red) — assert `DEFAULT_LGREPIGNORE_TEMPLATE` contains `\".adv/changes/\"` and `\".adv/archive/\"`. Also write `test_default_template_keeps_adv_specs_searchable` — assert template does NOT contain `\".adv/specs/\"` or bare `\".adv/\"`. Verify `test_scaffold_does_not_overwrite_without_force` still passes (constraint: existing files never overwritten). Then in `src/lgrep/discovery.py:DEFAULT_LGREPIGNORE_TEMPLATE` (lines 29-61) append a new section: `# ADV change/archive state (stale planning text)\\n.adv/changes/\\n.adv/archive/\\n` after the existing \"Large fixtures/snapshots\" block.",
+      "type": "code",
+      "section": "hygiene",
+      "status": "done",
+      "priority": 4,
+      "created_at": "2026-05-11T15:38:49.566Z",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:42:37.280Z",
+      "verification": "pytest tests/test_discovery.py + 3 other suites → 60 passed",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/discovery.py",
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/storage/_chunk_store.py",
+        "src/lgrep/tools/index_folder.py",
+        "tests/test_discovery.py",
+        "tests/test_server.py",
+        "tests/test_storage.py",
+        "tests/test_symbol_tools.py"
+      ],
+      "touched_files": [
+        "src/lgrep/discovery.py",
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/storage/_chunk_store.py",
+        "src/lgrep/tools/index_folder.py",
+        "tests/test_discovery.py",
+        "tests/test_server.py",
+        "tests/test_storage.py",
+        "tests/test_symbol_tools.py"
+      ],
+      "checkpointSha": "270f06012a179c92f9436ee3e70aaa2bb6d48963",
+      "completedAt": "2026-05-11T15:45:10.069Z",
+      "completed_at": "2026-05-11T15:45:10.069Z"
+    },
+    {
+      "id": "tk-313cf6bcc610",
+      "title": "Update agent guidance docs (AC5, D5). No TDD — doc-only. (1) `README.md` \"Troubleshooting\" → revise \"Stale semantic results\" section: explain auto-staleness check runs on every search, manual `lgrep_index_semantic` only needed for first-time setup or to force a refresh. (2) `skills/lgrep/SKILL.md` → add new \"## Staleness Handling\" section after lgrep_status_semantic docs (around line 140): describe Stage-1 mtime gate, that searches return fresh results automatically, and call `lgrep_status_semantic` if diagnostics needed. Update item 7 in \"Best Practices\" to reflect auto-handling. (3) `CHANGELOG.md` → [Unreleased] entry noting auto-staleness, deleted-file cleanup, status response fix, default ignore template additions, and migration note for existing `.lgrepignore` files (consumers can manually add `.adv/changes/` and `.adv/archive/`).",
+      "type": "code",
+      "section": "docs",
+      "status": "done",
+      "priority": 5,
+      "created_at": "2026-05-11T15:39:00.361Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-24adbdb0ab12"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-7baef96330cc"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-0a1dd173b42c"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-93dda6ce4649"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "not_applicable",
+        "delegation_hint": "delegate_allowed",
+        "priority": "should"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:47:40.817Z",
+      "verification": "doc-only — README troubleshooting + SKILL.md staleness section + CHANGELOG [Unreleased] entry. Pytest tests pass for upstream impl tasks.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "CHANGELOG.md",
+        "README.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "touched_files": [
+        "CHANGELOG.md",
+        "README.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "checkpointSha": "c1d2b70c5f8190b6c79e956971acc78275fd2a0d",
+      "completedAt": "2026-05-11T15:48:13.921Z",
+      "completed_at": "2026-05-11T15:48:13.921Z"
+    },
+    {
+      "id": "tk-90d9a1b6de3b",
+      "title": "Final verification — run full test suite (AC6). Execute `pytest -x --tb=short` from repo root via `adv_run_test`. All tests must pass. If failures: triage, fix, re-run. Record final pass count and timing in completion notes. Verify: (a) new tests added in upstream tasks pass, (b) existing tests still pass (no regressions), (c) test count increased by at least 5 (one per new test added).",
+      "type": "code",
+      "section": "verification",
+      "status": "done",
+      "priority": 6,
+      "created_at": "2026-05-11T15:39:03.998Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-f6b78d25a93d"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-24adbdb0ab12"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-7baef96330cc"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-0a1dd173b42c"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-93dda6ce4649"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "separate_verification",
+        "delegation_hint": "delegate_allowed",
+        "priority": "must"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-11T15:48:19.835Z",
+      "verification": "Focused latency benchmark passed (1 passed in 12.01s); full pytest passed (537 passed in 15.60s).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "touched_files": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "checkpointSha": "8ccca1375a9b8b56b1bdc1b70d8696c637aa3083",
+      "completedAt": "2026-05-11T16:03:16.521Z",
+      "completed_at": "2026-05-11T16:03:16.521Z"
+    }
+  ],
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-05-11T06:13:50.164Z",
+      "completed_by": "agent",
+      "approval_evidence": "Proposal confirmed during chat investigation. User approved direction."
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-05-11T06:17:41.016Z",
+      "completed_by": "agent",
+      "approval_evidence": "Discovery complete. Agreement approved with 6 AC, 3 user decisions, 3 agent decisions. No ambiguity findings blocking."
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-05-11T06:24:50.949Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design complete. Validator CAUTION (3 items) resolved inline: (1) 3-stage gating clarifies 100ms warm-path budget, (2) env-var bypass removed, (3) D2 single-walk integration noted. No CONFLICT, no contract-compromise risk. Auto-continuing to prep."
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-05-11T15:41:53.297Z",
+      "completed_by": "agent",
+      "approval_evidence": "7 tasks synthesized from design. User approved inline."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-05-11T15:48:48.522Z",
+      "completed_by": "agent",
+      "approval_evidence": "All 7 tasks done. 537/537 pytest passes (+12 vs. baseline). 4 commits on change/improveLgrepStaleIndex branch."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-05-11T16:05:43.878Z",
+      "completed_by": "agent",
+      "approval_evidence": "User accepted review verdict APPROVED. Review findings: 1 issue fixed, 0 blockers/issues unresolved. Full pytest passed: 537 passed in 15.60s. Non-blocking suggestions/nits deferred to harden validation."
+    },
+    "release": {
+      "status": "done",
+      "completed_at": "2026-05-11T17:13:22.136Z",
+      "completed_by": "agent",
+      "approval_evidence": "Archive sign-off received (`sign off`). Release hardening complete: pytest 537 passed, ruff passed, warm-path staleness bench p95 18.985ms <100ms, validation passed with NO_DELTAS warning only. Conformance status checked: no conformance specs configured."
+    }
+  },
+  "reentry_history": [],
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248"
+}
