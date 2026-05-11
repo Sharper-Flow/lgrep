@@ -152,6 +152,44 @@ class TestIndexFolder:
         result = index_folder(str(tmp_repo), storage_dir=tmp_store)
         assert "repo_path" in result
 
+    def test_incremental_removes_deleted_files_and_symbols(self, tmp_repo, tmp_store):
+        """Deleted files MUST be pruned from the index on incremental re-run.
+
+        Regression for stale-index bug: previously `index_folder` started from
+        the existing files/symbols and only added/updated, so deletions never
+        propagated and produced stale symbol results.
+        """
+        from lgrep.storage.index_store import IndexStore
+        from lgrep.tools.index_folder import index_folder
+
+        # 1. Initial full index — both files present.
+        first = index_folder(str(tmp_repo), storage_dir=tmp_store)
+        assert first["files_indexed"] >= 2
+
+        store = IndexStore(storage_dir=tmp_store)
+        idx = store.load(str(tmp_repo.resolve()))
+        assert idx is not None
+        assert "src/auth.py" in idx.files
+        assert "src/utils.py" in idx.files
+        assert any(s.get("file_path") == "src/utils.py" for s in idx.symbols.values())
+
+        # 2. Delete one file from disk between runs.
+        (tmp_repo / "src" / "utils.py").unlink()
+
+        # 3. Incremental re-run prunes the deleted file and its symbols.
+        second = index_folder(str(tmp_repo), storage_dir=tmp_store, incremental=True)
+        assert second.get("files_deleted", 0) == 1
+
+        idx2 = store.load(str(tmp_repo.resolve()))
+        assert idx2 is not None
+        assert "src/utils.py" not in idx2.files
+        assert not any(
+            s.get("file_path") == "src/utils.py" for s in idx2.symbols.values()
+        ), "Stale symbols for deleted file must be removed"
+        # The surviving file must still be present and queryable.
+        assert "src/auth.py" in idx2.files
+        assert any(s.get("file_path") == "src/auth.py" for s in idx2.symbols.values())
+
 
 # ── list_repos ────────────────────────────────────────────────────────────────
 

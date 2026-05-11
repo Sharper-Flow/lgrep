@@ -519,6 +519,61 @@ class ChunkStore:
             log.debug("get_indexed_files_failed", error=str(e))
             return set()
 
+    def get_file_hashes(self) -> dict[str, str]:
+        """Return a mapping of indexed file paths to their stored content hashes.
+
+        Uses the same column-projection pattern as ``get_indexed_files`` to
+        avoid loading vectors. Designed for cheap freshness checks: callers
+        compare these stored hashes against current on-disk SHA-256 values to
+        detect drift before paying the cost of a full re-embed.
+
+        When a file has multiple chunks (the common case), the first hash
+        encountered is returned — all chunks of a file share the same
+        ``file_hash`` value by construction (see ``Indexer.index_file``).
+        Returns an empty dict on error or when the table is empty.
+        """
+        try:
+            count = self.table.count_rows()
+            if count == 0:
+                return {}
+            arrow_table = (
+                self.table.search()
+                .select(["file_path", "file_hash"])
+                .limit(count)
+                .to_arrow()
+            )
+            paths = arrow_table.column("file_path").to_pylist()
+            hashes = arrow_table.column("file_hash").to_pylist()
+            result: dict[str, str] = {}
+            for path, file_hash in zip(paths, hashes, strict=False):
+                if path not in result:
+                    result[path] = file_hash
+            return result
+        except Exception as e:
+            log.debug("get_file_hashes_failed", error=str(e))
+            return {}
+
+    def get_latest_indexed_at(self) -> float:
+        """Return the most-recent ``indexed_at`` timestamp across all chunks.
+
+        Used as a cheap mtime gate: if no file on disk has been modified after
+        this timestamp, the index is fresh and no further checking is needed.
+        Returns ``0.0`` when the table is empty or on error (safe default —
+        forces a full check rather than a false-fresh result).
+        """
+        try:
+            count = self.table.count_rows()
+            if count == 0:
+                return 0.0
+            arrow_table = (
+                self.table.search().select(["indexed_at"]).limit(count).to_arrow()
+            )
+            values = arrow_table.column("indexed_at").to_pylist()
+            return float(max(values)) if values else 0.0
+        except Exception as e:
+            log.debug("get_latest_indexed_at_failed", error=str(e))
+            return 0.0
+
     def clear(self) -> None:
         """Clear all chunks from the store."""
         self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)

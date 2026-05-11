@@ -129,7 +129,7 @@ lgrep_search_semantic(query="JWT verification and token handling", path="/home/u
 
 ### lgrep_index_semantic
 
-Indexes a project for semantic search. Call this once per project to build the initial index, or if search results seem stale. **Not required after server restart** — `lgrep_search_semantic` auto-loads existing disk indexes.
+Indexes a project for semantic search. Call this once per project to build the initial index, or to force a full refresh. **Not required after server restart** — `lgrep_search_semantic` auto-loads existing disk indexes. **Not required when files change** — `lgrep_search_semantic` runs a built-in staleness check and re-indexes drifted files automatically (see *Staleness Handling* below).
 
 - `path` (string, **required**): Absolute path to project root.
 
@@ -138,6 +138,25 @@ Indexes a project for semantic search. Call this once per project to build the i
 Check semantic index status and statistics.
 
 - `path` (string, optional): Absolute path to project. If omitted, returns stats for **all** in-memory projects.
+
+## Staleness Handling
+
+`lgrep_search_semantic` is fresh-by-default. Before every search it runs a
+three-stage check:
+
+1. **mtime gate** — walks current files, compares each `stat().st_mtime` to the
+   index's latest `indexed_at` timestamp. Also checks the indexed file-set
+   size against current. Warm path (no edits since last index) typically
+   completes in single-digit milliseconds.
+2. **hash check** — only files whose mtime is newer than the index are
+   SHA-256-hashed and compared against the stored hash from a single
+   batched LanceDB projection query.
+3. **re-index** — on confirmed drift, `index_all()` runs via the existing
+   single-flight coordinator so concurrent searches share one re-index.
+
+Agents do **not** need to manually call `lgrep_index_semantic` to refresh
+between searches. Call `lgrep_status_semantic` if a project's drift behavior
+seems wrong (e.g., to inspect `disk_cache` / `watching` state per project).
 
 ### lgrep_watch_start_semantic
 
@@ -257,7 +276,7 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 4. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
 5. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
 6. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.
-7. **Re-index for freshness**: Run `lgrep_index_semantic` when files have changed and search results seem stale.
+7. **Auto-fresh by default**: `lgrep_search_semantic` re-indexes drifted files automatically. Only run `lgrep_index_semantic` explicitly to force a full rebuild.
 8. **Always pass `path`**: Both engines require an explicit project path — they do not auto-detect the current project.
 9. **Use `LGREP_WARM_PATHS`**: Set this env var to a colon-separated list of project paths in your MCP config to pre-load semantic indexes at server startup.
 10. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.

@@ -473,7 +473,11 @@ Run `lgrep_index_symbols_folder(path=...)` first.
 
 **Stale semantic results**
 
-Run `lgrep_index_semantic(...)` or start `lgrep_watch_start_semantic(...)`.
+`lgrep_search_semantic` now runs an auto-staleness check before every search.
+If file mtimes have moved past the index timestamp and content hashes have
+drifted, it re-indexes automatically. Manual `lgrep_index_semantic(...)` is
+only needed for first-time setup or to force a refresh; `lgrep_watch_start_semantic(...)`
+remains available for proactive background re-indexing on long-running setups.
 
 **Native dependency build issues**
 

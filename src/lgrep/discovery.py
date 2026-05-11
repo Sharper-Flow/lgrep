@@ -58,6 +58,10 @@ docs/site/
 # Large fixtures/snapshots
 *.snap
 *.test.data
+
+# ADV change/archive state (stale planning text)
+.adv/changes/
+.adv/archive/
 """
 
 # Maximum file size to index (1 MB). Files larger than this are skipped.

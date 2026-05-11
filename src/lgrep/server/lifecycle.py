@@ -59,12 +59,20 @@ def _error_response(message: str) -> dict:
 
 @dataclass
 class ProjectState:
-    """State for a single indexed project."""
+    """State for a single indexed project.
+
+    ``latest_indexed_at`` caches the most-recent chunk timestamp so the
+    staleness pre-flight can answer the cheap mtime question without hitting
+    LanceDB on every search. ``None`` means "not yet computed"; the pre-flight
+    populates it lazily on first call and refreshes it after every full or
+    incremental re-index.
+    """
 
     db: ChunkStore
     indexer: Indexer
     watcher: FileWatcher | None = None
     watching: bool = False
+    latest_indexed_at: float | None = None
 
 
 @dataclass
@@ -220,7 +228,12 @@ async def _ensure_project_initialized(
 
 
 async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
-    """Get stats for a single project. Safe to call concurrently via asyncio.gather."""
+    """Get stats for a single project. Safe to call concurrently via asyncio.gather.
+
+    Always returns a dict matching the ``StatusSemanticResult`` TypedDict shape
+    (including ``disk_cache`` and ``error`` keys), so callers can pass the dict
+    directly into the typed result without missing-key validation errors.
+    """
     try:
         chunks = await asyncio.to_thread(state.db.count_chunks)
         files_set = await asyncio.to_thread(state.db.get_indexed_files)
@@ -229,6 +242,8 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
             "chunks": chunks,
             "watching": state.watching,
             "project": proj_path,
+            "disk_cache": None,
+            "error": None,
         }
     except Exception as e:
         log.exception("status_failed", project=proj_path, error=str(e))
@@ -237,6 +252,7 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
             "chunks": 0,
             "watching": False,
             "project": proj_path,
+            "disk_cache": None,
             "error": str(e),
         }
 
@@ -284,6 +300,11 @@ async def _auto_index_project_single_flight(
         for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
             try:
                 status = await asyncio.to_thread(state.indexer.index_all)
+                # Refresh the cached freshness timestamp so subsequent
+                # staleness pre-flights observe the just-completed index.
+                state.latest_indexed_at = await asyncio.to_thread(
+                    state.db.get_latest_indexed_at
+                )
                 log.info(
                     "search_auto_index_success",
                     project=project_path,

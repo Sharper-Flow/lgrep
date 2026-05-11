@@ -105,3 +105,27 @@ class TestLgrepignoreScaffold:
         assert created is True
         assert path == existing
         assert existing.read_text() == DEFAULT_LGREPIGNORE_TEMPLATE
+
+
+class TestDefaultTemplateAdvIgnore:
+    """Default `.lgrepignore` template must exclude stale ADV change/archive state.
+
+    Indexing `.adv/changes/` and `.adv/archive/` markdown causes stale proposal
+    text to outrank current implementation in semantic search results.
+    `.adv/specs/` must stay searchable — spec content is useful to agents.
+    """
+
+    def test_template_excludes_adv_changes(self):
+        assert ".adv/changes/" in DEFAULT_LGREPIGNORE_TEMPLATE
+
+    def test_template_excludes_adv_archive(self):
+        assert ".adv/archive/" in DEFAULT_LGREPIGNORE_TEMPLATE
+
+    def test_template_keeps_adv_specs_searchable(self):
+        # Neither the specs subtree nor the bare .adv/ root should be excluded.
+        assert ".adv/specs/" not in DEFAULT_LGREPIGNORE_TEMPLATE
+        # The only `.adv/` lines must be the two specific subdir entries.
+        adv_lines = [
+            line for line in DEFAULT_LGREPIGNORE_TEMPLATE.splitlines() if ".adv/" in line
+        ]
+        assert sorted(adv_lines) == [".adv/archive/", ".adv/changes/"]

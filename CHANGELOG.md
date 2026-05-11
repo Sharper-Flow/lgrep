@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-staleness check in `lgrep_search_semantic`** — before every search, lgrep runs a cheap three-stage freshness gate (mtime → hash → re-index). When the on-disk file set diverges from the stored index, it triggers `index_all()` automatically via the existing single-flight coordinator before embedding the query. Warm path (no edits since last index) costs only a directory walk + `stat` per file.
+- **`ChunkStore.get_file_hashes()` and `ChunkStore.get_latest_indexed_at()`** — batched column-projection queries supporting the staleness gate. Both follow the established `get_indexed_files()` projection pattern.
+- **`.adv/changes/` and `.adv/archive/` in default `.lgrepignore` template** — stops stale ADV proposal/archive markdown from outranking current implementation in semantic search results. `.adv/specs/` stays searchable. Existing `.lgrepignore` files are never overwritten; consumers can add the entries manually with `lgrep init-ignore --force` or by editing the file.
+
+### Fixed
+
+- **`lgrep_status_semantic(path="")` no longer fails with pydantic validation errors** — the all-projects branch passes `_get_project_stats()` output directly into the response, and that helper now returns the full `StatusSemanticResult` shape (`disk_cache`, `error`) on both the success and error branches.
+- **`lgrep_index_symbols_folder` now prunes deleted files on incremental runs** — wires `IndexStore.detect_changes()` into the index loop, removing files (and their symbols) that disappeared from disk since the last index. Skipped when `max_files` truncates the walk to avoid false-positive deletions. Adds `files_deleted` to the result.
+
+### Notes
+
+- Manual `lgrep_index_semantic` is no longer required when files change. Run it only to force a full rebuild or for first-time setup.
+
 ## [3.0.1] - 2026-04-22
 
 ### Fixed
