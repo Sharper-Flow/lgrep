@@ -1,3 +1,5 @@
+## 2026-05-11 (v3.0.1)\n\n### Fixed\n- pin compatible tree-sitter language pack\n- support pydantic TypedDict on Python 3.11\n- move dependencies out of [project.urls] section\n\n### Changed\n- use setup-python for test matrix\n- install dev extras with uv\n- add lgrep ignore defaults\n- format codebase for CI\n- add auto release workflow
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
