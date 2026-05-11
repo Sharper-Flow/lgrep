@@ -59,12 +59,20 @@ def _error_response(message: str) -> dict:
 
 @dataclass
 class ProjectState:
-    """State for a single indexed project."""
+    """State for a single indexed project.
+
+    ``latest_indexed_at`` caches the most-recent chunk timestamp so the
+    staleness pre-flight can answer the cheap mtime question without hitting
+    LanceDB on every search. ``None`` means "not yet computed"; the pre-flight
+    populates it lazily on first call and refreshes it after every full or
+    incremental re-index.
+    """
 
     db: ChunkStore
     indexer: Indexer
     watcher: FileWatcher | None = None
     watching: bool = False
+    latest_indexed_at: float | None = None
 
 
 @dataclass
@@ -292,6 +300,11 @@ async def _auto_index_project_single_flight(
         for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
             try:
                 status = await asyncio.to_thread(state.indexer.index_all)
+                # Refresh the cached freshness timestamp so subsequent
+                # staleness pre-flights observe the just-completed index.
+                state.latest_indexed_at = await asyncio.to_thread(
+                    state.db.get_latest_indexed_at
+                )
                 log.info(
                     "search_auto_index_success",
                     project=project_path,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import Annotated
 
@@ -14,6 +15,7 @@ from lgrep.server import log, mcp, time_tool
 from lgrep.server.lifecycle import (
     LgrepContext,
     ProjectState,
+    _auto_index_project_single_flight,
     _ensure_project_initialized,
     _ensure_search_project_state,
     _get_project_stats,
@@ -38,6 +40,68 @@ from lgrep.watcher import FileWatcher
 # ---------------------------------------------------------------------------
 
 
+def _check_staleness(state: ProjectState) -> tuple[bool, int]:
+    """Cheap three-stage freshness check.
+
+    Returns ``(stale, suspect_count)``. ``stale=True`` means the on-disk file
+    set has drifted from the index and a re-embed is needed before search.
+
+    Stages, ordered cheapest first so the warm path (no edits since last
+    index) costs only a directory walk + ``stat`` per file:
+
+    1. mtime gate — collect current files with their ``stat().st_mtime``.
+       If the file count differs from the indexed set we already know the
+       index is stale (additions or deletions). Otherwise any file whose
+       mtime exceeds the cached ``latest_indexed_at`` becomes a suspect.
+    2. hash check — only suspect files are read+hashed and compared against
+       the stored ``file_hash`` from ``ChunkStore.get_file_hashes()``. A
+       single batched projection query handles all comparisons.
+    3. caller acts on the result. Any errors during the check are treated
+       as "fresh" so transient I/O issues never cause an unintended re-embed.
+    """
+    try:
+        indexer = state.indexer
+        if state.latest_indexed_at is None:
+            state.latest_indexed_at = state.db.get_latest_indexed_at()
+        latest = state.latest_indexed_at or 0.0
+
+        indexed_files = state.db.get_indexed_files()
+        current: list[tuple[Path, float]] = []
+        for fp in indexer.discovery.find_files():
+            try:
+                current.append((fp, fp.stat().st_mtime))
+            except OSError:
+                continue
+
+        # Stage 1a — file-count mismatch is unambiguous drift.
+        if len(current) != len(indexed_files):
+            return True, abs(len(current) - len(indexed_files))
+
+        # Stage 1b — pick files whose mtime is newer than the index timestamp.
+        suspects = [(fp, mt) for fp, mt in current if mt > latest]
+        if not suspects:
+            return False, 0
+
+        # Stage 2 — hash only the suspect subset.
+        stored = state.db.get_file_hashes()
+        project_root = Path(indexer.project_path)
+        for fp, _ in suspects:
+            try:
+                content = fp.read_bytes()
+                rel = str(fp.relative_to(project_root))
+            except (OSError, ValueError):
+                continue
+            current_hash = hashlib.sha256(content).hexdigest()
+            if stored.get(rel) != current_hash:
+                return True, len(suspects)
+
+        # All suspects had matching hashes (mtime touched but content unchanged).
+        return False, 0
+    except Exception as e:  # pragma: no cover — pre-flight must never crash search
+        log.debug("staleness_check_failed", error=str(e))
+        return False, 0
+
+
 async def _execute_search(
     app_ctx: LgrepContext,
     state: ProjectState,
@@ -50,6 +114,29 @@ async def _execute_search(
     if app_ctx.embedder is None:
         return error_response("VOYAGE_API_KEY not set. Cannot perform semantic search.")
     try:
+        # Auto-staleness pre-flight: cheap mtime gate, then hash check on the
+        # suspect subset only. If drift is confirmed, re-index synchronously
+        # before paying for the query embedding so the user sees fresh results.
+        stale, suspect_count = await asyncio.to_thread(_check_staleness, state)
+        if stale:
+            log.info(
+                "staleness_check_triggered_reindex",
+                project=project_path,
+                suspect_count=suspect_count,
+            )
+            reindex_result = await _auto_index_project_single_flight(
+                app_ctx, project_path, Path(project_path)
+            )
+            if isinstance(reindex_result, dict) and "error" in reindex_result:
+                # Re-index failed; surface the error rather than returning
+                # silently-stale results.
+                return reindex_result  # type: ignore[return-value]
+            # Refresh the cached timestamp so subsequent searches use the
+            # post-reindex value without another DB round trip.
+            state.latest_indexed_at = await asyncio.to_thread(
+                state.db.get_latest_indexed_at
+            )
+
         query_vector = await app_ctx.embedder.embed_query_async(query)
         if hybrid:
             results = await asyncio.to_thread(state.db.search_hybrid, query_vector, query, limit)
@@ -195,6 +282,11 @@ async def index_semantic(
     # Perform indexing
     try:
         status = await asyncio.to_thread(state.indexer.index_all)
+        # Refresh cached freshness timestamp so staleness pre-flight sees the
+        # just-rebuilt index on the next search call.
+        state.latest_indexed_at = await asyncio.to_thread(
+            state.db.get_latest_indexed_at
+        )
         return IndexSemanticResult(
             file_count=status.file_count,
             chunk_count=status.chunk_count,

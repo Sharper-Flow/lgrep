@@ -1278,3 +1278,134 @@ class TestToolTimeout:
         assert "results" in data
         assert len(data["results"]) >= 1
         assert data["results"][0]["file_path"] == "test.py"
+
+
+class TestStalenessPreflight:
+    """`_execute_search` must auto-detect stale indexes and re-embed before search.
+
+    Three-stage gate: mtime → hash → re-index. Fresh path must NOT call
+    `index_all`; stale path must trigger exactly one re-index before embedding.
+    """
+
+    def _make_fresh_state(self, tmp_path):
+        """Build a ProjectState whose stored index reflects current disk."""
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore, get_project_db_path
+
+        # Project with one indexable file.
+        project = tmp_path / "proj"
+        project.mkdir()
+        f = project / "a.py"
+        f.write_text("def a():\n    return 1\n")
+
+        db_path = get_project_db_path(str(project.resolve()))
+        db = ChunkStore(db_path, project_path=str(project.resolve()))
+        embedder = MagicMock()
+        indexer = Indexer(project_path=project, storage=db, embedder=embedder)
+
+        # Insert a chunk that mirrors the on-disk file so latest_indexed_at
+        # ends up newer than the file's mtime — i.e. fresh from the pre-flight's
+        # perspective.
+        import hashlib
+        import time as _time
+
+        from lgrep.storage import CodeChunk
+
+        content = f.read_bytes()
+        file_hash = hashlib.sha256(content).hexdigest()
+        future = _time.time() + 1_000_000
+        chunk = CodeChunk(
+            id="c1",
+            file_path="a.py",
+            chunk_index=0,
+            start_line=1,
+            end_line=2,
+            content="def a():\n    return 1\n",
+            vector=[0.1] * 1024,
+            file_hash=file_hash,
+            indexed_at=future,
+        )
+        db.add_chunks([chunk])
+
+        state = ProjectState(db=db, indexer=indexer, watching=False)
+        state.latest_indexed_at = future
+        return project, state, embedder
+
+    @pytest.mark.asyncio
+    async def test_fresh_index_skips_reindex(self, tmp_path):
+        """Mtime + hash match → no re-index call before embedding."""
+        project, state, embedder = self._make_fresh_state(tmp_path)
+
+        # Spy on index_all — must NOT be invoked.
+        state.indexer.index_all = MagicMock(
+            side_effect=AssertionError("index_all must not run on fresh index")
+        )
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        response = await lgrep_search(
+            query="anything", path=str(project), ctx=mock_ctx
+        )
+        # No error and no index_all call — pre-flight short-circuited.
+        assert "error" not in response, response
+        state.indexer.index_all.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stale_index_triggers_reindex_via_single_flight(self, tmp_path):
+        """File modified after index → pre-flight detects drift, re-index runs once."""
+        import time as _time
+
+        project, state, embedder = self._make_fresh_state(tmp_path)
+
+        # Backdate the index timestamp so the file mtime > latest_indexed_at.
+        past = _time.time() - 60.0
+        state.latest_indexed_at = past
+
+        # Mutate the on-disk file so its hash diverges from the stored hash.
+        f = project / "a.py"
+        f.write_text("def a():\n    return 99\n")  # different content
+        import os as _os
+
+        _os.utime(f, (past + 30, past + 30))  # newer mtime than the index
+
+        # Patch _auto_index_project_single_flight to count invocations without
+        # paying the embedding cost.
+        from lgrep.server import tools_semantic as _ts
+
+        original = _ts._auto_index_project_single_flight
+        call_count = {"n": 0}
+
+        async def fake_single_flight(app_ctx_, project_path_, path_obj_):
+            call_count["n"] += 1
+            return state  # caller treats this as success
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        with patch.object(_ts, "_auto_index_project_single_flight", fake_single_flight):
+            response = await lgrep_search(
+                query="anything", path=str(project), ctx=mock_ctx
+            )
+
+        assert "error" not in response, response
+        assert call_count["n"] == 1, "Re-index must run exactly once on stale path"
+
+        # Sanity: restoring the original keeps no side-effects.
+        assert _ts._auto_index_project_single_flight is original
