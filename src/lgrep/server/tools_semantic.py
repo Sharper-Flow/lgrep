@@ -50,9 +50,11 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
     index) costs only a directory walk + ``stat`` per file:
 
     1. mtime gate — collect current files with their ``stat().st_mtime``.
-       If the file count differs from the indexed set we already know the
-       index is stale (additions or deletions). Otherwise any file whose
-       mtime exceeds the cached ``latest_indexed_at`` becomes a suspect.
+       Deleted indexed files are stale. Otherwise any file whose mtime exceeds
+       the cached ``latest_indexed_at`` becomes a suspect. We intentionally do
+       not compare file counts because discovered files can legitimately
+       produce zero chunks (empty/comment-only files) and therefore never
+       appear in the indexed file set.
     2. hash check — only suspect files are read+hashed and compared against
        the stored ``file_hash`` from ``ChunkStore.get_file_hashes()``. A
        single batched projection query handles all comparisons.
@@ -65,31 +67,34 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
             state.latest_indexed_at = state.db.get_latest_indexed_at()
         latest = state.latest_indexed_at or 0.0
 
-        indexed_files = state.db.get_indexed_files()
-        current: list[tuple[Path, float]] = []
+        indexed_files = set(state.db.get_indexed_files() or set())
+        current: list[tuple[Path, float, str]] = []
+        current_rel_paths: set[str] = set()
+        project_root = Path(indexer.project_path)
         for fp in indexer.discovery.find_files():
             try:
-                current.append((fp, fp.stat().st_mtime))
-            except OSError:
+                rel = str(fp.relative_to(project_root))
+                current.append((fp, fp.stat().st_mtime, rel))
+                current_rel_paths.add(rel)
+            except (OSError, ValueError):
                 continue
 
-        # Stage 1a — file-count mismatch is unambiguous drift.
-        if len(current) != len(indexed_files):
-            return True, abs(len(current) - len(indexed_files))
+        # Stage 1a — indexed files that no longer exist on disk are stale.
+        deleted_indexed_files = indexed_files - current_rel_paths
+        if deleted_indexed_files:
+            return True, len(deleted_indexed_files)
 
         # Stage 1b — pick files whose mtime is newer than the index timestamp.
-        suspects = [(fp, mt) for fp, mt in current if mt > latest]
+        suspects = [(fp, rel) for fp, mt, rel in current if mt > latest]
         if not suspects:
             return False, 0
 
         # Stage 2 — hash only the suspect subset.
         stored = state.db.get_file_hashes()
-        project_root = Path(indexer.project_path)
-        for fp, _ in suspects:
+        for fp, rel in suspects:
             try:
                 content = fp.read_bytes()
-                rel = str(fp.relative_to(project_root))
-            except (OSError, ValueError):
+            except OSError:
                 continue
             current_hash = hashlib.sha256(content).hexdigest()
             if stored.get(rel) != current_hash:

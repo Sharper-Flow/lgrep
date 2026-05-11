@@ -1368,6 +1368,72 @@ class TestStalenessPreflight:
         state.indexer.index_all.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_fresh_index_with_zero_chunk_file_skips_reindex(self, tmp_path):
+        """Fresh projects may contain files that produce no indexed chunks."""
+        project, state, embedder = self._make_fresh_state(tmp_path)
+
+        empty_file = project / "empty.py"
+        empty_file.write_text("# comments only\n")
+
+        import os as _os
+
+        _os.utime(
+            empty_file,
+            (state.latest_indexed_at - 60.0, state.latest_indexed_at - 60.0),
+        )
+
+        state.indexer.index_all = MagicMock(
+            side_effect=AssertionError("zero-chunk files must not force reindex")
+        )
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
+
+        assert "error" not in response, response
+        state.indexer.index_all.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_deleted_indexed_file_triggers_reindex(self, tmp_path):
+        """Indexed files absent from disk are stale even without count matching."""
+        project, state, embedder = self._make_fresh_state(tmp_path)
+        (project / "a.py").unlink()
+
+        from lgrep.server import tools_semantic as _ts
+
+        call_count = {"n": 0}
+
+        async def fake_single_flight(app_ctx_, project_path_, path_obj_):
+            call_count["n"] += 1
+            return state
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        with patch.object(_ts, "_auto_index_project_single_flight", fake_single_flight):
+            response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
+
+        assert "error" not in response, response
+        assert call_count["n"] == 1
+
+    @pytest.mark.asyncio
     async def test_stale_index_triggers_reindex_via_single_flight(self, tmp_path):
         """File modified after index → pre-flight detects drift, re-index runs once."""
         import time as _time
