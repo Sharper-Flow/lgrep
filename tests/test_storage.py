@@ -244,6 +244,35 @@ class TestChunkStoreLifecycle:
         files = chunk_store.get_indexed_files()
         assert files == {"a.py", "b.py"}
 
+    def test_get_file_hashes_returns_path_to_hash_mapping(self, chunk_store):
+        """Should return dict mapping each indexed file to its stored hash."""
+        chunks = [
+            make_chunk(file_path="a.py", chunk_index=0, file_hash="hash-a"),
+            make_chunk(file_path="a.py", chunk_index=1, file_hash="hash-a"),
+            make_chunk(file_path="b.py", chunk_index=0, file_hash="hash-b"),
+        ]
+        chunk_store.add_chunks(chunks)
+        result = chunk_store.get_file_hashes()
+        assert result == {"a.py": "hash-a", "b.py": "hash-b"}
+
+    def test_get_file_hashes_empty_table(self, chunk_store):
+        """Empty table returns an empty dict, not an error."""
+        assert chunk_store.get_file_hashes() == {}
+
+    def test_get_latest_indexed_at_returns_max_timestamp(self, chunk_store):
+        """Should return the max indexed_at across all chunks."""
+        chunks = [
+            make_chunk(file_path="a.py", chunk_index=0, indexed_at=100.0),
+            make_chunk(file_path="b.py", chunk_index=0, indexed_at=300.0),
+            make_chunk(file_path="c.py", chunk_index=0, indexed_at=200.0),
+        ]
+        chunk_store.add_chunks(chunks)
+        assert chunk_store.get_latest_indexed_at() == 300.0
+
+    def test_get_latest_indexed_at_empty_table(self, chunk_store):
+        """Empty table returns 0.0 (safe default — forces full freshness check)."""
+        assert chunk_store.get_latest_indexed_at() == 0.0
+
     def test_clear(self, chunk_store, sample_chunks):
         """Should drop the table and reset state."""
         chunk_store.add_chunks(sample_chunks)

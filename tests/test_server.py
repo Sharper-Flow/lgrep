@@ -754,6 +754,64 @@ class TestServerErrorPaths:
         assert data["projects"] == []
 
     @pytest.mark.asyncio
+    async def test_lgrep_status_all_projects_entries_include_disk_cache_and_error(self):
+        """All-projects status entries MUST include `disk_cache` and `error`.
+
+        Regression for the missing-field bug that produced 23 pydantic
+        validation errors when more than one project was loaded — the
+        StatusSemanticResult TypedDict requires both keys, and the
+        all-projects path passes _get_project_stats() output directly.
+        """
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext()
+
+        for proj_path in ("/proj/a", "/proj/b"):
+            mock_db = MagicMock()
+            mock_db.count_chunks.return_value = 42
+            mock_db.get_indexed_files.return_value = {"x.py"}
+            state = ProjectState(db=mock_db, indexer=MagicMock(), watching=False)
+            app_ctx.projects[proj_path] = state
+
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        response = await lgrep_status(ctx=mock_ctx)
+        data = response
+        assert "projects" in data
+        assert len(data["projects"]) == 2
+        for entry in data["projects"]:
+            assert "disk_cache" in entry, f"entry missing disk_cache: {entry}"
+            assert "error" in entry, f"entry missing error: {entry}"
+            # Defaults on the success path — must be None when not loaded from disk
+            assert entry["disk_cache"] is None
+            assert entry["error"] is None
+            # Existing fields must remain
+            assert entry["files"] == 1
+            assert entry["chunks"] == 42
+            assert entry["watching"] is False
+
+    @pytest.mark.asyncio
+    async def test_lgrep_status_all_projects_includes_fields_on_error_branch(self):
+        """When a project's stats query raises, the entry MUST still carry both
+        `disk_cache` (None) and `error` (string) keys."""
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext()
+
+        broken_db = MagicMock()
+        broken_db.count_chunks.side_effect = RuntimeError("simulated DB failure")
+        state = ProjectState(db=broken_db, indexer=MagicMock(), watching=False)
+        app_ctx.projects["/proj/broken"] = state
+
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        response = await lgrep_status(ctx=mock_ctx)
+        data = response
+        assert len(data["projects"]) == 1
+        entry = data["projects"][0]
+        assert entry["disk_cache"] is None
+        assert isinstance(entry["error"], str)
+        assert "simulated DB failure" in entry["error"]
+
+    @pytest.mark.asyncio
     async def test_lgrep_watch_stop_when_not_watching(self):
         """Should return graceful response when not watching."""
         mock_ctx = MagicMock(spec=Context)

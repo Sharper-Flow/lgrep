@@ -220,7 +220,12 @@ async def _ensure_project_initialized(
 
 
 async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
-    """Get stats for a single project. Safe to call concurrently via asyncio.gather."""
+    """Get stats for a single project. Safe to call concurrently via asyncio.gather.
+
+    Always returns a dict matching the ``StatusSemanticResult`` TypedDict shape
+    (including ``disk_cache`` and ``error`` keys), so callers can pass the dict
+    directly into the typed result without missing-key validation errors.
+    """
     try:
         chunks = await asyncio.to_thread(state.db.count_chunks)
         files_set = await asyncio.to_thread(state.db.get_indexed_files)
@@ -229,6 +234,8 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
             "chunks": chunks,
             "watching": state.watching,
             "project": proj_path,
+            "disk_cache": None,
+            "error": None,
         }
     except Exception as e:
         log.exception("status_failed", project=proj_path, error=str(e))
@@ -237,6 +244,7 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
             "chunks": 0,
             "watching": False,
             "project": proj_path,
+            "disk_cache": None,
             "error": str(e),
         }
 

@@ -71,10 +71,18 @@ def index_folder(
     files_dict: dict[str, str] = dict(existing_files)  # start from existing
     symbols_dict: dict[str, dict] = dict(existing_symbols)
 
+    # Track every code file we observed on disk in this walk so we can detect
+    # deletions after the loop. Distinct from `files_dict` (the post-state)
+    # because files_dict still carries entries from prior indexes that may no
+    # longer exist on disk.
+    walked_files: dict[str, str] = {}
+    walk_truncated = False
+
     files_processed = 0
     files_skipped = 0
     for file_path in discovery.find_files():
         if files_processed + files_skipped >= max_files:
+            walk_truncated = True
             break
         if get_language_spec(file_path.suffix.lower()) is None:
             continue
@@ -86,6 +94,7 @@ def index_folder(
 
         rel_path = str(file_path.relative_to(root))
         file_hash = hashlib.sha256(content).hexdigest()
+        walked_files[rel_path] = file_hash
 
         # Incremental skip: file unchanged
         if incremental and existing_files.get(rel_path) == file_hash:
@@ -122,6 +131,23 @@ def index_folder(
 
         files_processed += 1
 
+    # Detect files that disappeared from disk since the last index and prune
+    # them. Only safe to do when we walked the full tree — if max_files
+    # truncated the walk, unscanned files would falsely appear "deleted".
+    files_deleted = 0
+    if incremental and not walk_truncated:
+        changes = store.detect_changes(resolved_root, walked_files)
+        deleted_set = set(changes.get("deleted", []))
+        if deleted_set:
+            for path in deleted_set:
+                files_dict.pop(path, None)
+            symbols_dict = {
+                sid: sdata
+                for sid, sdata in symbols_dict.items()
+                if sdata.get("file_path") not in deleted_set
+            }
+            files_deleted = len(deleted_set)
+
     index = CodeIndex(
         repo_path=resolved_root,
         files=files_dict,
@@ -135,6 +161,7 @@ def index_folder(
         repo=str(root),
         files=files_processed,
         files_skipped=files_skipped,
+        files_deleted=files_deleted,
         symbols=len(symbols_dict),
         incremental=incremental,
     )
@@ -143,6 +170,7 @@ def index_folder(
         "repo_path": resolved_root,
         "files_indexed": files_processed,
         "files_skipped": files_skipped,
+        "files_deleted": files_deleted,
         "symbols_indexed": len(symbols_dict),
         "_meta": make_meta(t0, tokens_saved=tokens_saved),
     }
