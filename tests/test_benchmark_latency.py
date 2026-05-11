@@ -14,7 +14,7 @@ does not exceed baseline * 1.10 (10% regression budget).
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -48,8 +48,10 @@ class TestSemanticSearchLatency:
         mock_state = ProjectState(db=mock_db, indexer=MagicMock())
         app_ctx.projects[str(project_path)] = mock_state
 
-        # Mock embedder returns instantly
-        app_ctx.embedder.embed_query.return_value = [0.1] * 1024
+        # Mock embedder returns instantly. `search_semantic` awaits the async
+        # path, so use AsyncMock to measure search latency instead of the error
+        # logging path.
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
         # Mock search returns 10 results
         results = SearchResults(
@@ -86,7 +88,8 @@ class TestSemanticSearchLatency:
 
         for query in queries:
             t0 = time.monotonic()
-            await search_semantic(query=query, path=str(project_path), ctx=mock_ctx)
+            response = await search_semantic(query=query, path=str(project_path), ctx=mock_ctx)
+            assert "error" not in response, response
             elapsed_ms = (time.monotonic() - t0) * 1000
             latencies.append(elapsed_ms)
 
