@@ -38,9 +38,7 @@ OrphanReason = Literal[
 #
 # Default: 1 hour. Override with LGREP_PRUNE_MIN_AGE_S (seconds).
 _DEFAULT_GRACE_SECONDS = 3600
-_GRACE_EXEMPT_REASONS: frozenset[OrphanReason] = frozenset(
-    {"missing_meta", "project_path_enoent"}
-)
+_GRACE_EXEMPT_REASONS: frozenset[OrphanReason] = frozenset({"missing_meta", "project_path_enoent"})
 
 
 def _grace_seconds() -> int:
@@ -308,9 +306,7 @@ def prune_orphans(
     # `skipped_active` lists projects that are in the active set AND have
     # a cache directory present on disk. Projects without an on-disk cache
     # are not reported here because there is nothing to skip.
-    skipped_active = [
-        project for cache_path, project in active_dirs.items() if cache_path.is_dir()
-    ]
+    skipped_active = [project for cache_path, project in active_dirs.items() if cache_path.is_dir()]
     orphans = find_orphans(root, active_set=active_set, grace_seconds=grace_seconds)
     failures: list[FailureEntry] = []
     deleted_dirs = 0

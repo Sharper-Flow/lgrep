@@ -223,7 +223,9 @@ class TestDiskCacheAutoLoad:
         active_cache.mkdir(parents=True)
         (active_cache / "chunks.lance").mkdir()
 
-        app_ctx.projects[str(project_path.resolve())] = ProjectState(db=MagicMock(), indexer=MagicMock())
+        app_ctx.projects[str(project_path.resolve())] = ProjectState(
+            db=MagicMock(), indexer=MagicMock()
+        )
 
         result = await lgrep_prune_orphans(dry_run=False, ctx=mock_ctx)
 
@@ -459,7 +461,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         with (
             patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
-            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch(
+                "lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init
+            ),
         ):
             response_a, response_b = await asyncio.gather(
                 lgrep_search(
@@ -525,7 +529,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         with (
             patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
-            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch(
+                "lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init
+            ),
         ):
             response = await lgrep_search(
                 query="find auth logic",
@@ -581,7 +587,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         with (
             patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
-            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch(
+                "lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init
+            ),
             patch("lgrep.server.lifecycle.AUTO_INDEX_RETRY_BASE_DELAY_S", 0),
         ):
             response = await lgrep_search(
@@ -616,7 +624,9 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         with (
             patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
-            patch("lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init),
+            patch(
+                "lgrep.server.lifecycle._ensure_project_initialized", side_effect=fake_ensure_init
+            ),
         ):
             response_a, response_b = await asyncio.gather(
                 lgrep_search(
@@ -1352,9 +1362,7 @@ class TestStalenessPreflight:
 
         embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
 
-        response = await lgrep_search(
-            query="anything", path=str(project), ctx=mock_ctx
-        )
+        response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
         # No error and no index_all call — pre-flight short-circuited.
         assert "error" not in response, response
         state.indexer.index_all.assert_not_called()
@@ -1400,9 +1408,7 @@ class TestStalenessPreflight:
         embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
 
         with patch.object(_ts, "_auto_index_project_single_flight", fake_single_flight):
-            response = await lgrep_search(
-                query="anything", path=str(project), ctx=mock_ctx
-            )
+            response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
 
         assert "error" not in response, response
         assert call_count["n"] == 1, "Re-index must run exactly once on stale path"

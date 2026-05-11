@@ -214,8 +214,9 @@ class TestInstallUninstall:
             rc = uninstall()
 
         assert rc == 0
-        assert fake_pkg_skill.exists(), \
+        assert fake_pkg_skill.exists(), (
             "package SKILL.md was unlinked through the parent dir symlink"
+        )
         assert fake_pkg_skill.read_bytes() == before_bytes
 
     def test_uninstall_refuses_when_instruction_dir_is_symlink_into_package(self, tmp_path):
@@ -249,8 +250,9 @@ class TestInstallUninstall:
             rc = uninstall()
 
         assert rc == 0
-        assert fake_pkg_instruction.exists(), \
+        assert fake_pkg_instruction.exists(), (
             "package lgrep-tools.md was unlinked through the parent dir symlink"
+        )
         assert fake_pkg_instruction.read_bytes() == before_bytes
 
     def test_install_same_file_skill_does_not_crash(self, tmp_path):

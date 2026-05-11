@@ -88,7 +88,10 @@ class TestEmbedQueryAsync:
         embedder, mock_client = mock_embedder
         mock_client.embed.side_effect = RuntimeError("persistent failure")
 
-        with patch("lgrep.embeddings.asyncio.sleep", new_callable=AsyncMock), pytest.raises(RuntimeError, match="persistent failure"):
+        with (
+            patch("lgrep.embeddings.asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(RuntimeError, match="persistent failure"),
+        ):
             await embedder.embed_query_async("failing query")
 
         assert mock_client.embed.call_count == QUERY_MAX_RETRIES

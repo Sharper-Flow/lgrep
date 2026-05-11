@@ -272,10 +272,7 @@ def uninstall() -> int:
     #    the package source (dev-workflow symlink).
     if INSTRUCTION_PATH.exists():
         if _resolves_to_package_source(INSTRUCTION_PATH, _PACKAGE_INSTRUCTION):
-            print(
-                f"  [skip] {INSTRUCTION_PATH} resolves into package source; "
-                "refusing to unlink"
-            )
+            print(f"  [skip] {INSTRUCTION_PATH} resolves into package source; refusing to unlink")
         else:
             INSTRUCTION_PATH.unlink()
             print(f"  [ok] Removed {INSTRUCTION_PATH}")
@@ -285,20 +282,13 @@ def uninstall() -> int:
     # 2. Remove skill — same guard.
     if SKILL_PATH.exists():
         if _resolves_to_package_source(SKILL_PATH, _PACKAGE_SKILL):
-            print(
-                f"  [skip] {SKILL_PATH} resolves into package source; "
-                "refusing to unlink"
-            )
+            print(f"  [skip] {SKILL_PATH} resolves into package source; refusing to unlink")
         else:
             SKILL_PATH.unlink()
             # Remove empty directory (only if it's a real dir, not a symlink
             # — rmdir would fail on a symlink, and we don't want to remove
             # symlinks here either).
-            if (
-                SKILL_DIR.exists()
-                and not SKILL_DIR.is_symlink()
-                and not any(SKILL_DIR.iterdir())
-            ):
+            if SKILL_DIR.exists() and not SKILL_DIR.is_symlink() and not any(SKILL_DIR.iterdir()):
                 SKILL_DIR.rmdir()
             print(f"  [ok] Removed {SKILL_PATH}")
     else:

@@ -183,9 +183,9 @@ class TestIndexFolder:
         idx2 = store.load(str(tmp_repo.resolve()))
         assert idx2 is not None
         assert "src/utils.py" not in idx2.files
-        assert not any(
-            s.get("file_path") == "src/utils.py" for s in idx2.symbols.values()
-        ), "Stale symbols for deleted file must be removed"
+        assert not any(s.get("file_path") == "src/utils.py" for s in idx2.symbols.values()), (
+            "Stale symbols for deleted file must be removed"
+        )
         # The surviving file must still be present and queryable.
         assert "src/auth.py" in idx2.files
         assert any(s.get("file_path") == "src/auth.py" for s in idx2.symbols.values())

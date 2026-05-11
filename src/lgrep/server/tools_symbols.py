@@ -482,5 +482,3 @@ async def invalidate_cache(
         status=result["status"],
         _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
     )
-
-

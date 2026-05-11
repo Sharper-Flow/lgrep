@@ -1,7 +1,6 @@
 """Test that all 17 MCP tools are registered after the server split."""
 
 
-
 def test_server_has_17_tools():
     from lgrep.server import mcp
 

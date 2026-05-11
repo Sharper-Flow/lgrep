@@ -125,7 +125,5 @@ class TestDefaultTemplateAdvIgnore:
         # Neither the specs subtree nor the bare .adv/ root should be excluded.
         assert ".adv/specs/" not in DEFAULT_LGREPIGNORE_TEMPLATE
         # The only `.adv/` lines must be the two specific subdir entries.
-        adv_lines = [
-            line for line in DEFAULT_LGREPIGNORE_TEMPLATE.splitlines() if ".adv/" in line
-        ]
+        adv_lines = [line for line in DEFAULT_LGREPIGNORE_TEMPLATE.splitlines() if ".adv/" in line]
         assert sorted(adv_lines) == [".adv/archive/", ".adv/changes/"]

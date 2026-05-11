@@ -302,9 +302,7 @@ async def _auto_index_project_single_flight(
                 status = await asyncio.to_thread(state.indexer.index_all)
                 # Refresh the cached freshness timestamp so subsequent
                 # staleness pre-flights observe the just-completed index.
-                state.latest_indexed_at = await asyncio.to_thread(
-                    state.db.get_latest_indexed_at
-                )
+                state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
                 log.info(
                     "search_auto_index_success",
                     project=project_path,
@@ -384,7 +382,11 @@ async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
         result = await _ensure_project_initialized(app_ctx, project_path)
         if isinstance(result, dict):
             log.warning("warm_skipped", project=path_str, reason=result.get("error", str(result)))
-            return {"path": path_str, "status": "skipped", "detail": result.get("error", str(result))}
+            return {
+                "path": path_str,
+                "status": "skipped",
+                "detail": result.get("error", str(result)),
+            }
 
         # Start watcher if auto-watch is enabled
         auto_watch = os.environ.get("LGREP_AUTO_WATCH", "").lower() in ("true", "1", "yes")

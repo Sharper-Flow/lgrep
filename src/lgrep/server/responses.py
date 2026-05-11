@@ -293,6 +293,7 @@ class _Meta(TypedDict):
 # Public helpers
 # --------------------------------------------------------------------------- #
 
+
 def error_response(message: str) -> ToolError:
     """Create a structured error response.
 

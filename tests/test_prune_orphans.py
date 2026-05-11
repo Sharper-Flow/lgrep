@@ -48,7 +48,9 @@ def _make_cache_dir(
             meta_path.write_text(
                 json.dumps(
                     {
-                        "project_path": str((project_path or cache_dir / "missing-project").resolve()),
+                        "project_path": str(
+                            (project_path or cache_dir / "missing-project").resolve()
+                        ),
                         "updated_at": 123.456,
                     }
                 ),
@@ -84,15 +86,16 @@ def test_find_orphans_detects_unreadable_meta(tmp_path):
     # Corrupt JSON must be reported as `unreadable_meta`, not `missing_meta`,
     # and without surfacing a bogus project_path.
     assert any(
-        entry["reason"] == "unreadable_meta" and entry["project_path"] is None
-        for entry in results
+        entry["reason"] == "unreadable_meta" and entry["project_path"] is None for entry in results
     )
 
 
 def test_find_orphans_detects_missing_chunks_lance(tmp_path):
     project_path = tmp_path / "project"
     project_path.mkdir()
-    _make_cache_dir(tmp_path, "missing-chunks", project_path=project_path, with_meta=True, with_chunks=False)
+    _make_cache_dir(
+        tmp_path, "missing-chunks", project_path=project_path, with_meta=True, with_chunks=False
+    )
 
     results = find_orphans(cache_dir=tmp_path)
 
@@ -101,7 +104,9 @@ def test_find_orphans_detects_missing_chunks_lance(tmp_path):
 
 def test_find_orphans_detects_project_path_enoent(tmp_path):
     missing_project = tmp_path / "gone-project"
-    _make_cache_dir(tmp_path, "gone", project_path=missing_project, with_meta=True, with_chunks=True)
+    _make_cache_dir(
+        tmp_path, "gone", project_path=missing_project, with_meta=True, with_chunks=True
+    )
 
     results = find_orphans(cache_dir=tmp_path)
 
@@ -135,7 +140,9 @@ def test_find_orphans_skips_active_in_memory(tmp_path, monkeypatch):
 def test_find_orphans_transient_eacces_preserved(tmp_path, monkeypatch):
     project_path = tmp_path / "permission-project"
     project_path.mkdir()
-    _make_cache_dir(tmp_path, "permission-cache", project_path=project_path, with_meta=True, with_chunks=True)
+    _make_cache_dir(
+        tmp_path, "permission-cache", project_path=project_path, with_meta=True, with_chunks=True
+    )
 
     original_is_dir = Path.is_dir
 
@@ -160,7 +167,9 @@ def test_prune_dry_run_does_not_delete(tmp_path):
     report = prune_orphans(cache_dir=tmp_path, dry_run=True)
 
     assert orphan_dir.exists()
-    assert any(entry["path"] == str(orphan_dir) and entry["bytes"] > 0 for entry in report["orphans"])
+    assert any(
+        entry["path"] == str(orphan_dir) and entry["bytes"] > 0 for entry in report["orphans"]
+    )
     assert report["deleted_dirs"] == 0
     # dry-run surfaces projected reclaim so the operator can preview
     # savings; the actual disk state is unchanged (orphan_dir still exists).
@@ -174,7 +183,9 @@ def test_prune_execute_deletes_only_orphans_and_matches_dry_run_bytes(tmp_path):
     valid_project = tmp_path / "valid-project"
     valid_project.mkdir()
     orphan_dir = _make_cache_dir(tmp_path, "orphan-exec", with_meta=False, with_chunks=True)
-    valid_dir = _make_cache_dir(tmp_path, "valid-exec", project_path=valid_project, with_meta=True, with_chunks=True)
+    valid_dir = _make_cache_dir(
+        tmp_path, "valid-exec", project_path=valid_project, with_meta=True, with_chunks=True
+    )
 
     dry_run = prune_orphans(cache_dir=tmp_path, dry_run=True)
     execute = prune_orphans(cache_dir=tmp_path, dry_run=False)
@@ -230,9 +241,7 @@ def test_prune_execute_refuses_symlink_orphan(tmp_path):
 def test_prune_dry_run_projects_reclaimed_bytes(tmp_path):
     # Review LOG-3: dry-run must report projected reclaim (sum of orphan
     # bytes) so operators see savings before committing to --execute.
-    orphan_dir = _make_cache_dir(
-        tmp_path, "dry-bytes", with_meta=False, with_chunks=True
-    )
+    orphan_dir = _make_cache_dir(tmp_path, "dry-bytes", with_meta=False, with_chunks=True)
     (orphan_dir / "chunks.lance" / "data.bin").write_bytes(b"x" * 1024)
 
     report = prune_orphans(cache_dir=tmp_path, dry_run=True)
@@ -351,6 +360,3 @@ def test_prune_dirs_examined_counts_all_attempted(tmp_path):
     report = prune_orphans(cache_dir=tmp_path, dry_run=True)
 
     assert report["dirs_examined"] == 2
-
-
-

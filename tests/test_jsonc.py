@@ -20,6 +20,7 @@ from lgrep._jsonc import dump_jsonc_text, load_jsonc_text
 # Happy path: valid JSONC constructs
 # ============================================================================
 
+
 class TestLoadJsoncComments:
     """JSONC comment-stripping behavior."""
 

@@ -133,9 +133,7 @@ async def _execute_search(
                 return reindex_result  # type: ignore[return-value]
             # Refresh the cached timestamp so subsequent searches use the
             # post-reindex value without another DB round trip.
-            state.latest_indexed_at = await asyncio.to_thread(
-                state.db.get_latest_indexed_at
-            )
+            state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
 
         query_vector = await app_ctx.embedder.embed_query_async(query)
         if hybrid:
@@ -284,9 +282,7 @@ async def index_semantic(
         status = await asyncio.to_thread(state.indexer.index_all)
         # Refresh cached freshness timestamp so staleness pre-flight sees the
         # just-rebuilt index on the next search call.
-        state.latest_indexed_at = await asyncio.to_thread(
-            state.db.get_latest_indexed_at
-        )
+        state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
         return IndexSemanticResult(
             file_count=status.file_count,
             chunk_count=status.chunk_count,

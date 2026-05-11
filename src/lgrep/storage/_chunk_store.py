@@ -229,9 +229,7 @@ class ChunkStore:
         # self._project_path as None so the metadata side-effect is
         # skipped below. Do not fall back to db_path — it would record
         # the hash dir as the project path and confuse prune_orphans.
-        self._project_path = (
-            Path(project_path).resolve() if project_path is not None else None
-        )
+        self._project_path = Path(project_path).resolve() if project_path is not None else None
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -537,10 +535,7 @@ class ChunkStore:
             if count == 0:
                 return {}
             arrow_table = (
-                self.table.search()
-                .select(["file_path", "file_hash"])
-                .limit(count)
-                .to_arrow()
+                self.table.search().select(["file_path", "file_hash"]).limit(count).to_arrow()
             )
             paths = arrow_table.column("file_path").to_pylist()
             hashes = arrow_table.column("file_hash").to_pylist()
@@ -565,9 +560,7 @@ class ChunkStore:
             count = self.table.count_rows()
             if count == 0:
                 return 0.0
-            arrow_table = (
-                self.table.search().select(["indexed_at"]).limit(count).to_arrow()
-            )
+            arrow_table = self.table.search().select(["indexed_at"]).limit(count).to_arrow()
             values = arrow_table.column("indexed_at").to_pylist()
             return float(max(values)) if values else 0.0
         except Exception as e:

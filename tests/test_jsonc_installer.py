@@ -27,11 +27,7 @@ class TestJsoncConfigHandling:
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
         jsonc_file.write_text(
-            '{\n'
-            '    // This is a line comment\n'
-            '    "mcp": {},\n'
-            '    "instructions": []\n'
-            '}\n'
+            '{\n    // This is a line comment\n    "mcp": {},\n    "instructions": []\n}\n'
         )
         # Mock the global OPENCODE_CONFIG_DIR
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
@@ -51,11 +47,7 @@ class TestJsoncConfigHandling:
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
         jsonc_file.write_text(
-            '{\n'
-            '    /* block comment */\n'
-            '    "mcp": {},\n'
-            '    "instructions": []\n'
-            '}\n'
+            '{\n    /* block comment */\n    "mcp": {},\n    "instructions": []\n}\n'
         )
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
         monkeypatch.setattr(inst, "_REPO_ROOT", tmp_path / "nonexistent")
@@ -71,12 +63,7 @@ class TestJsoncConfigHandling:
         config_dir = tmp_path / ".config" / "opencode"
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
-        jsonc_file.write_text(
-            '{\n'
-            '    "mcp": {},\n'
-            '    "instructions": [],\n'
-            '}\n'
-        )
+        jsonc_file.write_text('{\n    "mcp": {},\n    "instructions": [],\n}\n')
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
         monkeypatch.setattr(inst, "_REPO_ROOT", tmp_path / "nonexistent")
         monkeypatch.setattr(inst, "_PACKAGE_INSTRUCTION", tmp_path / "nonexistent")
@@ -92,15 +79,15 @@ class TestJsoncConfigHandling:
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
         jsonc_file.write_text(
-            '{\n'
+            "{\n"
             '    "mcp": {\n'
             '        "mytool": {\n'
             '            "url": "https://example.com/api",\n'
             '            "enabled": true\n'
-            '        }\n'
-            '    },\n'
+            "        }\n"
+            "    },\n"
             '    "instructions": []\n'
-            '}\n'
+            "}\n"
         )
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
         monkeypatch.setattr(inst, "_REPO_ROOT", tmp_path / "nonexistent")
@@ -120,11 +107,11 @@ class TestJsoncConfigHandling:
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
         jsonc_file.write_text(
-            '{\n'
-            '    // pre-existing comment\n'
+            "{\n"
+            "    // pre-existing comment\n"
             '    "mcp": {"lgrep": {"type": "remote"}},\n'
             '    "instructions": ["~/.config/opencode/instructions/lgrep-tools.md"]\n'
-            '}\n'
+            "}\n"
         )
         # Isolate uninstall() from the real ~/.config/opencode/ paths. If the
         # user has symlinked ~/.config/opencode/skills/lgrep -> this repo's
@@ -148,11 +135,7 @@ class TestJsoncConfigHandling:
         config_dir = tmp_path / ".config" / "opencode"
         config_dir.mkdir(parents=True)
         jsonc_file = config_dir / "opencode.jsonc"
-        jsonc_file.write_text(
-            '{\n'
-            '    "existing_key": "existing_value",\n'
-            '}\n'
-        )
+        jsonc_file.write_text('{\n    "existing_key": "existing_value",\n}\n')
         monkeypatch.setattr(inst, "OPENCODE_CONFIG_DIR", config_dir)
         monkeypatch.setattr(inst, "_REPO_ROOT", tmp_path / "nonexistent")
         monkeypatch.setattr(inst, "_PACKAGE_INSTRUCTION", tmp_path / "nonexistent")
