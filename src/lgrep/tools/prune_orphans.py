@@ -7,7 +7,9 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal
+
+from typing_extensions import TypedDict
 
 from lgrep.storage import (
     CHUNKS_TABLE,

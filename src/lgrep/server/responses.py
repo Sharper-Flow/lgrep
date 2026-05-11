@@ -23,9 +23,10 @@ import functools
 import os
 import time
 from collections.abc import Callable, Coroutine
-from typing import Any, TypedDict, TypeVar
+from typing import Any, TypeVar
 
 import structlog
+from typing_extensions import TypedDict
 
 log: structlog.BoundLogger = structlog.get_logger("lgrep.server")
 
