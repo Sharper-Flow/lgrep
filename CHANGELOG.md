@@ -1,6 +1,53 @@
+<<<<<<< HEAD
 ## 2026-05-20 (v3.0.4)\n\n### Changed\n- align version strings to v3.0.3 released tag
 
 ## 2026-05-20 (v3.0.3)\n\n### Fixed\n- clean up post-merge lint failures + bump to 3.1.0\n\n### Changed\n- replace hardcoded version assertion with pyproject.toml comparison\n- addWorktreeAwareCacheLifecycle\n- expand worktree workflow with concurrency + dual-pass gc
+=======
+<<<<<<< HEAD
+## 2026-05-20 (v3.0.4)\n\n### Changed\n- align version strings to v3.0.3 released tag
+
+## 2026-05-20 (v3.0.3)\n\n### Fixed\n- clean up post-merge lint failures + bump to 3.1.0\n\n### Changed\n- replace hardcoded version assertion with pyproject.toml comparison\n- addWorktreeAwareCacheLifecycle\n- expand worktree workflow with concurrency + dual-pass gc
+=======
+## 2026-05-20 (v3.1.0)
+
+### Added
+
+- **Worktree-aware cache lifecycle** (`LGREP_WORKTREE_DEDUP=1`, opt-in) — git worktrees sharing a common `.git` directory now resolve to the same canonical cache key via `git rev-parse --path-format=absolute --git-common-dir`. One LanceDB index, one `ProjectState`, one `project_meta.json` per repo regardless of worktree count. Bounds disk + memory + Voyage token cost when working across N parallel worktrees of one repository (a common ADV / agent-multi-session pattern).
+- **`invalidate_worktree_cache` MCP tool** — destructive cleanup surface for ADV `/adv-archive` Phase 9 integration. Removes a worktree alias from `project_meta.json` without touching the shared LanceDB cache; deletes the cache dir only when no aliases remain AND the canonical project path is gone. Path-confinement + symlink-refusal guards.
+- **`lgrep gc` CLI subcommand** — runs two passes for cron / systemd timer usage: `prune_orphans` (deletes whole orphan cache dirs) AND `gc_worktree_meta` (removes stale alias entries from `project_meta.json` when worktrees were deleted without calling `invalidate_worktree_cache`). Both honor the 1-hour grace window (`LGREP_PRUNE_MIN_AGE_S`) and active-project skip set.
+- **Background orphan sweep on server start** — one-shot `prune_orphans(dry_run=False)` after a 5-minute warmup delay, scheduled via `asyncio.create_task` in `app_lifespan`. Cancelled cleanly on shutdown.
+- **`alias_paths` in `project_meta.json`** — tracks every worktree path that resolves to a canonical cache. Updates are guarded by `fcntl.flock` on a dedicated `.meta.lock` file so concurrent multi-process writes do not lose entries. Graceful fallback (one-time warning) on non-POSIX platforms.
+- **In-memory `ProjectState` dedup** — `LgrepContext._canonical_to_state` shares one `ProjectState` (one LanceDB connection, one watcher, one indexer) across worktree paths of the same repo. `MAX_PROJECTS` now counts canonical projects, not aliases.
+
+### Fixed
+
+- **Stale-file deletion guard in shared-cache mode** — `Indexer.index_all()` no longer deletes chunks for files absent from the current worktree when dedup is enabled. Prevents cross-worktree corruption where worktree B (on a feature branch without `feature.py`) would silently delete worktree A's `feature.py` chunks from the shared LanceDB. Tradeoff: deleted-file chunks linger until a full rebuild, but search results are correct (extra results, not wrong results).
+- **`test_version_matches_pyproject`** replaces hardcoded version assertion so future version bumps only require updating `pyproject.toml` + `src/lgrep/__init__.py` (no test edit needed).
+
+### Notes
+
+- All worktree-aware behavior is **opt-in** via `LGREP_WORKTREE_DEDUP=1`. Single-checkout users are unaffected; existing cache layout, search latency, and token cost are preserved.
+- See the `Git worktree workflow` section in `README.md` for the full agent-in-worktree integration pattern.
+
+## 2026-05-20 (v3.0.4)
+
+### Changed
+
+- Align version strings to v3.0.3 released tag
+
+## 2026-05-20 (v3.0.3)
+
+### Fixed
+
+- Clean up post-merge lint failures
+
+### Changed
+
+- Replace hardcoded version assertion with `pyproject.toml` comparison
+- Add worktree-aware cache lifecycle (`addWorktreeAwareCacheLifecycle`)
+- Expand worktree workflow docs with concurrency + dual-pass gc
+>>>>>>> 72d618a (chore(release): bump to v3.1.0 — worktree-aware cache lifecycle [skip ci])
+>>>>>>> 72d618a (chore(release): bump to v3.1.0 — worktree-aware cache lifecycle [skip ci])
 
 ## 2026-05-11 (v3.0.2)\n\n### Fixed\n- avoid staleness loop on zero-chunk files
 
