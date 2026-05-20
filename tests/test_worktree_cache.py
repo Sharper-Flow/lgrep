@@ -320,3 +320,83 @@ class TestAliasPaths:
         meta = read_project_meta(db_path)
         assert meta is not None
         assert meta.get("alias_paths", []) == []
+
+
+class TestStartupOrphanSweep:
+    """Tests for background orphan sweep on server start."""
+
+    def test_startup_sweep_called(self, tmp_path, monkeypatch):
+        """_schedule_startup_sweep calls prune_orphans with active projects."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        import asyncio
+        from lgrep.server.lifecycle import _schedule_startup_sweep, LgrepContext
+        from unittest.mock import patch, MagicMock
+
+        ctx = LgrepContext()
+        ctx.projects = {
+            "/active/project": MagicMock(),
+        }
+
+        captured_active = None
+
+        async def fake_sleep(seconds):
+            pass  # Skip the 5-minute delay
+
+        def mock_prune(dry_run, active_set, **kwargs):
+            nonlocal captured_active
+            captured_active = active_set
+            return {
+                "dry_run": dry_run,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+
+        with patch.object(asyncio, "sleep", side_effect=fake_sleep):
+            with patch("lgrep.tools.prune_orphans.prune_orphans", side_effect=mock_prune):
+                asyncio.run(_schedule_startup_sweep(ctx))
+
+        assert captured_active is not None
+        assert "/active/project" in captured_active
+
+    def test_startup_sweep_cancels_on_shutdown(self):
+        """Sweep task is cancelled when server shuts down before 5-min delay."""
+        import asyncio
+        from lgrep.server.lifecycle import _schedule_startup_sweep, LgrepContext
+        from unittest.mock import patch
+
+        ctx = LgrepContext()
+        sweep_ran = False
+
+        def mock_prune(*args, **kwargs):
+            nonlocal sweep_ran
+            sweep_ran = True
+            return {
+                "dry_run": False,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+
+        async def run_and_cancel():
+            # Real sleep that we can cancel
+            task = asyncio.create_task(_schedule_startup_sweep(ctx))
+            await asyncio.sleep(0.01)  # Let it start sleeping
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            return sweep_ran
+
+        with patch("lgrep.tools.prune_orphans.prune_orphans", side_effect=mock_prune):
+            result = asyncio.run(run_and_cancel())
+
+        assert not result, "Sweep should NOT have run prune_orphans after cancellation"

@@ -141,10 +141,40 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
     """Manage application lifecycle with optional eager warming."""
     ctx = await _startup(server)
     await _warm_projects(ctx)
+    sweep_task = asyncio.create_task(_schedule_startup_sweep(ctx))
     try:
         yield ctx
     finally:
+        sweep_task.cancel()
         await _shutdown(ctx)
+
+
+async def _schedule_startup_sweep(ctx: LgrepContext) -> None:
+    """One-shot orphan sweep after a warmup delay.
+
+    Waits 5 minutes for the server to finish warming and initial indexing,
+    then runs ``prune_orphans(dry_run=False)`` with all active projects
+    passed as the skip set.  The existing grace window (default 1 hour)
+    protects caches that were recently written by live indexers.
+    """
+    try:
+        await asyncio.sleep(300)  # 5-minute warmup delay
+    except asyncio.CancelledError:
+        return  # Server shutting down before sweep
+
+    log.info("startup_orphan_sweep_begin")
+    try:
+        from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
+
+        active_set = list(ctx.projects.keys())
+        report = await asyncio.to_thread(_prune_orphans, dry_run=False, active_set=active_set)
+        log.info(
+            "startup_orphan_sweep_done",
+            deleted=report["deleted_dirs"],
+            reclaimed_bytes=report["reclaimed_bytes"],
+        )
+    except Exception as e:
+        log.warning("startup_orphan_sweep_failed", error=str(e))
 
 
 # ---------------------------------------------------------------------------
