@@ -89,7 +89,7 @@ import_module("lgrep.server.tools_symbols")
 import_module("lgrep.server.tools_maintenance")
 
 from lgrep.server.bootstrap import run_server  # noqa: E402
-from lgrep.server.tools_maintenance import prune_orphans  # noqa: E402
+from lgrep.server.tools_maintenance import invalidate_worktree_cache, prune_orphans  # noqa: E402
 from lgrep.server.tools_semantic import (  # noqa: E402
     index_semantic,
     search_semantic,
@@ -170,4 +170,5 @@ __all__ = [
     "get_symbols",
     "invalidate_cache",
     "prune_orphans",
+    "invalidate_worktree_cache",
 ]

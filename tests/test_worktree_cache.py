@@ -400,3 +400,230 @@ class TestStartupOrphanSweep:
             result = asyncio.run(run_and_cancel())
 
         assert not result, "Sweep should NOT have run prune_orphans after cancellation"
+
+
+class TestInvalidateWorktreeCache:
+    """Tests for invalidate_worktree_cache tool implementation."""
+
+    def _make_git_repo(self, tmp_path):
+        """Helper: create a git repo with one empty commit."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@t",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@t",
+            },
+        )
+        return repo
+
+    def test_invalidate_removes_alias(self, tmp_path, monkeypatch):
+        """Invalidation removes the worktree alias from meta, keeps canonical."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+
+        from lgrep.tools.invalidate_worktree import invalidate_worktree_cache
+
+        repo = self._make_git_repo(tmp_path)
+        worktree = tmp_path / "worktree"
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+        try:
+            db_path = get_project_db_path(repo)
+            write_project_meta(
+                repo,
+                db_path=db_path,
+                alias_paths=[str(worktree.resolve())],
+            )
+
+            # Verify alias is there
+            meta = read_project_meta(db_path)
+            assert meta is not None
+            assert str(worktree.resolve()) in meta.get("alias_paths", [])
+
+            # Create placeholder chunks.lance
+            (db_path / "chunks.lance").mkdir(parents=True, exist_ok=True)
+
+            # Invalidate the worktree (resolves to same cache dir via dedup)
+            entries, paths_cleaned, bytes_reclaimed = invalidate_worktree_cache(
+                paths=[str(worktree)],
+                cache_dir=tmp_path / "cache",
+            )
+
+            assert paths_cleaned == 1
+            assert len(entries) == 1
+            entry = entries[0]
+            assert entry["alias_removed"] is True
+            assert entry["cache_deleted"] is False
+            assert entry["error"] is None
+
+            # Verify alias is gone from meta
+            meta_after = read_project_meta(db_path)
+            assert meta_after is not None
+            assert str(worktree.resolve()) not in meta_after.get("alias_paths", [])
+            # Canonical project_path still in meta
+            assert meta_after["project_path"] == str(repo.resolve())
+
+            # Cache dir still exists (canonical project still there)
+            assert db_path.is_dir()
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", str(worktree), "--force"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+
+    def test_invalidate_deletes_orphan_cache(self, tmp_path, monkeypatch):
+        """When canonical is gone and no aliases remain, cache dir is deleted."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.tools.invalidate_worktree import invalidate_worktree_cache
+
+        # Create a project, write meta with the project as canonical
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path)
+
+        # Create a placeholder chunks.lance
+        (db_path / "chunks.lance").mkdir(parents=True, exist_ok=True)
+
+        # Now delete the canonical project dir
+        import shutil
+
+        shutil.rmtree(project)
+        assert not project.exists()
+
+        # Invalidate the project path — canonical is gone, no aliases
+        entries, paths_cleaned, bytes_reclaimed = invalidate_worktree_cache(
+            paths=[str(project)],
+            cache_dir=tmp_path / "cache",
+        )
+
+        assert paths_cleaned == 1
+        entry = entries[0]
+        assert entry["cache_deleted"] is True
+        assert bytes_reclaimed > 0
+
+        # Cache dir should be gone
+        assert not db_path.exists()
+
+    def test_invalidate_refuses_outside_cache(self, tmp_path, monkeypatch):
+        """Path with no cache dir at all returns error."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.tools.invalidate_worktree import invalidate_worktree_cache
+
+        nowhere = tmp_path / "nonexistent" / "deep" / "path"
+        entries, paths_cleaned, bytes_reclaimed = invalidate_worktree_cache(
+            paths=[str(nowhere)],
+            cache_dir=tmp_path / "cache",
+        )
+
+        # No cache dir exists → entry with error
+        assert paths_cleaned == 0
+        assert len(entries) == 1
+        assert entries[0]["error"] is not None
+
+    def test_invalidate_refuses_symlink(self, tmp_path, monkeypatch):
+        """Symlinked path returns error."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.tools.invalidate_worktree import invalidate_worktree_cache
+
+        project = tmp_path / "project"
+        project.mkdir()
+        symlink = tmp_path / "symlink_to_project"
+        symlink.symlink_to(project)
+
+        # Create cache for the real project
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path)
+        (db_path / "chunks.lance").mkdir(parents=True, exist_ok=True)
+
+        entries, paths_cleaned, bytes_reclaimed = invalidate_worktree_cache(
+            paths=[str(symlink)],
+            cache_dir=tmp_path / "cache",
+        )
+
+        assert paths_cleaned == 0
+        assert len(entries) == 1
+        assert entries[0]["error"] is not None
+        assert "symlink" in entries[0]["error"].lower()
+
+    def test_invalidate_batch(self, tmp_path, monkeypatch):
+        """Multiple paths processed in one call."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+
+        from lgrep.tools.invalidate_worktree import invalidate_worktree_cache
+
+        repo = self._make_git_repo(tmp_path)
+        wt1 = tmp_path / "worktree1"
+        wt2 = tmp_path / "worktree2"
+        subprocess.run(
+            ["git", "worktree", "add", str(wt1)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "worktree", "add", str(wt2)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+        try:
+            db_path = get_project_db_path(repo)
+            write_project_meta(
+                repo,
+                db_path=db_path,
+                alias_paths=[str(wt1.resolve()), str(wt2.resolve())],
+            )
+            (db_path / "chunks.lance").mkdir(parents=True, exist_ok=True)
+
+            entries, paths_cleaned, bytes_reclaimed = invalidate_worktree_cache(
+                paths=[str(wt1), str(wt2)],
+                cache_dir=tmp_path / "cache",
+            )
+
+            assert paths_cleaned == 2
+            assert len(entries) == 2
+            for entry in entries:
+                assert entry["alias_removed"] is True
+                assert entry["error"] is None
+
+            # Both aliases gone
+            meta = read_project_meta(db_path)
+            assert meta is not None
+            aliases = meta.get("alias_paths", [])
+            assert str(wt1.resolve()) not in aliases
+            assert str(wt2.resolve()) not in aliases
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", str(wt1), "--force"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "worktree", "remove", str(wt2), "--force"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )

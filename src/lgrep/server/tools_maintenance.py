@@ -1,15 +1,15 @@
 """Maintenance MCP tools for the lgrep server.
 
-Currently exposes a single tool, ``prune_orphans``, which inspects (and
-optionally deletes) orphaned semantic cache directories. Kept in its
-own module because it is neither a semantic-search tool nor a
-symbol-intelligence tool — grouping it with either would confuse the
-response contracts and the tool organisation in ``@mcp.tool`` metadata.
+Currently exposes ``prune_orphans`` and ``invalidate_worktree_cache``.
+Kept in its own module because these are neither semantic-search tools
+nor symbol-intelligence tools — grouping them with either would confuse
+the response contracts and the tool organisation in ``@mcp.tool`` metadata.
 """
 
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Annotated
 
 from mcp.server.fastmcp import Context  # noqa: TC002 — FastMCP evaluates annotations at runtime
@@ -19,6 +19,11 @@ from pydantic import Field
 from lgrep.server import mcp, time_tool
 from lgrep.server.responses import (
     PruneOrphansResult,  # noqa: TC001 — FastMCP evaluates return annotation at runtime
+    WorktreeInvalidationResult,  # noqa: TC001
+)
+from lgrep.tools._meta import make_meta
+from lgrep.tools.invalidate_worktree import (
+    invalidate_worktree_cache as _invalidate_worktree_cache,
 )
 from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
 
@@ -94,4 +99,59 @@ async def prune_orphans(
         _prune_orphans,
         dry_run=effective_dry_run,
         active_set=active_set,
+    )
+
+
+@mcp.tool(
+    description=(
+        "Invalidate worktree-specific cache entries. Removes the "
+        "worktree alias from project_meta.json and unloads from server memory. "
+        "Does NOT delete the canonical LanceDB cache."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+@time_tool
+async def invalidate_worktree_cache(
+    paths: Annotated[
+        list[str],
+        Field(description="Worktree paths to invalidate"),
+    ],
+    ctx: Context | None = None,
+) -> WorktreeInvalidationResult:
+    """Invalidate worktree-specific cache entries.
+
+    For each path: computes its cache dir, removes the path from
+    ``project_meta.json`` alias list, and if the canonical project is gone
+    and no aliases remain, deletes the cache dir. Invalidated paths are
+    also removed from the server's in-memory project state.
+    """
+    t0 = time.monotonic()
+
+    # Run the core invalidation logic in a thread (sync I/O)
+    entries, paths_cleaned, bytes_reclaimed = await asyncio.to_thread(
+        _invalidate_worktree_cache,
+        paths=paths,
+    )
+
+    # Remove invalidated paths from in-memory server state
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+        from pathlib import Path
+
+        for entry in entries:
+            if entry.get("error") is None and entry.get("cache_dir"):
+                resolved = str(Path(entry["path"]).resolve())
+                if resolved in app_ctx.projects:
+                    del app_ctx.projects[resolved]
+
+    return WorktreeInvalidationResult(
+        paths_cleaned=paths_cleaned,
+        bytes_reclaimed=bytes_reclaimed,
+        entries=entries,
+        _meta=make_meta(t0),
     )
