@@ -674,15 +674,138 @@ class TestInvalidateWorktreeCache:
             assert str(wt1.resolve()) not in aliases
             assert str(wt2.resolve()) not in aliases
         finally:
-            subprocess.run(
-                ["git", "worktree", "remove", str(wt1), "--force"],
-                cwd=repo,
-                check=True,
-                capture_output=True,
+            for wt in (wt1, wt2):
+                subprocess.run(
+                    ["git", "worktree", "remove", str(wt), "--force"],
+                    cwd=repo,
+                    check=False,
+                    capture_output=True,
+                )
+
+
+class TestInMemoryDedup:
+    """Tests for shared ProjectState across worktree paths."""
+
+    def _make_repo_with_worktree(self, tmp_path):
+        """Helper: create a git repo + worktree, return (repo, worktree)."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+        (repo / "hello.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@t",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@t",
+            },
+        )
+        worktree = tmp_path / "worktree"
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        return repo, worktree
+
+    def _cleanup_worktree(self, repo, worktree):
+        subprocess.run(
+            ["git", "worktree", "remove", str(worktree), "--force"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+    def test_inmemory_dedup_shares_state(self, tmp_path, monkeypatch):
+        """With dedup on, trunk and worktree get the SAME ProjectState object."""
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
+
+        import asyncio
+        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
+
+        repo, worktree = self._make_repo_with_worktree(tmp_path)
+        try:
+            ctx = LgrepContext(voyage_api_key="fake-key-for-test")
+            with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder:
+                mock_embedder.return_value = MagicMock()
+
+                state_trunk = asyncio.run(_ensure_project_initialized(ctx, repo))
+                state_worktree = asyncio.run(_ensure_project_initialized(ctx, worktree))
+
+            # Both must be ProjectState (not error dicts)
+            from lgrep.server.lifecycle import ProjectState
+
+            assert isinstance(state_trunk, ProjectState)
+            assert isinstance(state_worktree, ProjectState)
+            # AC: same Python object — memory is shared
+            assert state_trunk is state_worktree, (
+                "Trunk and worktree ProjectStates should be the same object when dedup is enabled"
             )
-            subprocess.run(
-                ["git", "worktree", "remove", str(wt2), "--force"],
-                cwd=repo,
-                check=True,
-                capture_output=True,
+        finally:
+            self._cleanup_worktree(repo, worktree)
+
+    def test_inmemory_dedup_disabled_separate_state(self, tmp_path, monkeypatch):
+        """With dedup off, trunk and worktree get DIFFERENT ProjectState objects (no regression)."""
+        monkeypatch.delenv("LGREP_WORKTREE_DEDUP", raising=False)
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
+
+        import asyncio
+        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized, ProjectState
+
+        repo, worktree = self._make_repo_with_worktree(tmp_path)
+        try:
+            ctx = LgrepContext(voyage_api_key="fake-key-for-test")
+            with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder:
+                mock_embedder.return_value = MagicMock()
+
+                state_trunk = asyncio.run(_ensure_project_initialized(ctx, repo))
+                state_worktree = asyncio.run(_ensure_project_initialized(ctx, worktree))
+
+            assert isinstance(state_trunk, ProjectState)
+            assert isinstance(state_worktree, ProjectState)
+            assert state_trunk is not state_worktree, (
+                "With dedup OFF, states should be separate objects"
             )
+        finally:
+            self._cleanup_worktree(repo, worktree)
+
+    def test_inmemory_dedup_removal_safe(self, tmp_path, monkeypatch):
+        """Removing one aliased path doesn't tear down state shared by another."""
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
+
+        import asyncio
+        from lgrep.server import remove_project
+        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
+
+        repo, worktree = self._make_repo_with_worktree(tmp_path)
+        try:
+            ctx = LgrepContext(voyage_api_key="fake-key-for-test")
+            with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder:
+                mock_embedder.return_value = MagicMock()
+
+                state_trunk = asyncio.run(_ensure_project_initialized(ctx, repo))
+                state_worktree = asyncio.run(_ensure_project_initialized(ctx, worktree))
+
+            # Remove worktree path
+            result = remove_project(ctx, str(worktree))
+            assert result["removed"] is True
+
+            # Trunk path should still work
+            trunk_key = str(repo.resolve())
+            assert trunk_key in ctx.projects, (
+                "Trunk should remain accessible after removing aliased worktree path"
+            )
+        finally:
+            self._cleanup_worktree(repo, worktree)

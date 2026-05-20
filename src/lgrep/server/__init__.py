@@ -113,7 +113,12 @@ from lgrep.server.tools_symbols import (  # noqa: E402
 
 
 def remove_project(app_ctx: LgrepContext, path: str) -> dict:
-    """Remove project from server memory, freeing its resource slot."""
+    """Remove project from server memory, freeing its resource slot.
+
+    When worktree dedup is enabled, ProjectState may be shared across multiple
+    paths. We only stop the watcher and drop the canonical entry when the last
+    aliased path is removed. Removing a single alias just unmaps that path.
+    """
     log.info("lgrep_remove", project=path)
 
     project_path = str(Path(path).resolve())
@@ -121,9 +126,29 @@ def remove_project(app_ctx: LgrepContext, path: str) -> dict:
     if not state:
         return {"removed": False, "message": "Project not loaded", "project": project_path}
 
-    _stop_watcher(state, project_path)
+    # Find all paths that point to this same state (alias detection)
+    aliased_paths = [p for p, s in app_ctx.projects.items() if s is state]
+    is_last_reference = len(aliased_paths) == 1
+
+    if is_last_reference:
+        # Last reference — tear down completely
+        _stop_watcher(state, project_path)
+        # Remove the canonical entry too
+        canonical_key = None
+        for ck, st in app_ctx._canonical_to_state.items():
+            if st is state:
+                canonical_key = ck
+                break
+        if canonical_key is not None:
+            del app_ctx._canonical_to_state[canonical_key]
+
     del app_ctx.projects[project_path]
-    log.info("project_removed", project=project_path, remaining=len(app_ctx.projects))
+    log.info(
+        "project_removed",
+        project=project_path,
+        remaining=len(app_ctx.projects),
+        was_last_reference=is_last_reference,
+    )
 
     return {
         "removed": True,
