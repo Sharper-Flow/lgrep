@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,10 +85,60 @@ class SearchResults:
     total_chunks: int = 0
 
 
+def canonical_repo_key(project_path: Path) -> Path:
+    """Resolve the canonical cache key for a project path.
+
+    When ``LGREP_WORKTREE_DEDUP`` is enabled and the path is inside a git
+    worktree, returns the git common-dir parent (i.e., the repo root).
+    Falls back to ``Path.resolve()`` when not under git or when the flag
+    is off.
+
+    Uses ``--path-format=absolute`` to guarantee absolute output
+    (Git >= 2.30, January 2021).
+    """
+    resolved = project_path.resolve()
+
+    if not os.environ.get("LGREP_WORKTREE_DEDUP"):
+        return resolved
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-common-dir",
+            ],
+            cwd=str(resolved),
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            common_dir = Path(result.stdout.strip())
+            # common_dir is typically /path/to/repo/.git
+            # The repo root is its parent
+            if common_dir.name == ".git":
+                return common_dir.parent
+            # Linked worktrees may return paths like
+            # /path/main/.git/worktrees/name — walk up to the .git level
+            for parent in common_dir.parents:
+                if parent.name == ".git":
+                    return parent.parent
+            # Bare repos or unusual layouts — fallback
+            return resolved
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return resolved
+
+
 def get_project_db_path(project_path: str | Path) -> Path:
     """Get the database path for a project.
 
-    Creates a unique path based on the project's absolute path hash.
+    Creates a unique path based on the project's canonical key hash.
+    When ``LGREP_WORKTREE_DEDUP`` is enabled, git worktrees sharing a
+    common ``.git`` directory resolve to the same cache key.
 
     Args:
         project_path: Path to the project directory
@@ -95,8 +146,8 @@ def get_project_db_path(project_path: str | Path) -> Path:
     Returns:
         Path to the project's LanceDB directory
     """
-    project_path = Path(project_path).resolve()
-    path_hash = hashlib.sha256(str(project_path).encode()).hexdigest()[:12]
+    key = canonical_repo_key(Path(project_path))
+    path_hash = hashlib.sha256(str(key).encode()).hexdigest()[:12]
 
     cache_dir = Path(os.environ.get("LGREP_CACHE_DIR", DEFAULT_CACHE_DIR))
     return cache_dir / path_hash
