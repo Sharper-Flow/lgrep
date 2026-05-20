@@ -178,6 +178,7 @@ def write_project_meta(
     project_path: str | Path,
     *,
     db_path: str | Path | None = None,
+    alias_paths: list[str] | None = None,
 ) -> None:
     """Write a metadata file alongside the LanceDB cache for reverse-mapping.
 
@@ -188,13 +189,38 @@ def write_project_meta(
     ``get_project_db_path``; callers that already know the cache
     directory (for example ``ChunkStore.__init__``) may pass it directly
     to avoid recomputing the hash.
+
+    ``alias_paths`` records additional filesystem paths (worktree paths)
+    that resolve to the same canonical cache.  When provided, the new
+    aliases are merged with any existing aliases from a prior write.
+    Within a single lgrep MCP process the ``asyncio.Lock`` in
+    ``_ensure_project_initialized`` serializes all inits, so no race.
+    Across separate processes, a lost alias is possible but self-healing
+    on next init and non-catastrophic (only affects discovery, not
+    search correctness).
     """
     project_path = str(Path(project_path).resolve())
     resolved_db_path = Path(db_path) if db_path is not None else get_project_db_path(project_path)
     meta_path = resolved_db_path / _META_FILENAME
     tmp_path = meta_path.with_suffix(".tmp")
     resolved_db_path.mkdir(parents=True, exist_ok=True)
-    payload = {"project_path": project_path, "updated_at": time.time()}
+
+    # Merge with existing aliases (read-modify-write)
+    existing_aliases: list[str] = []
+    if alias_paths is not None:
+        existing_meta = read_project_meta(resolved_db_path)
+        if existing_meta and "alias_paths" in existing_meta:
+            existing_aliases = list(existing_meta["alias_paths"])
+        # Merge: deduplicate while preserving order
+        seen = set(existing_aliases)
+        for alias in alias_paths:
+            if alias not in seen:
+                existing_aliases.append(alias)
+                seen.add(alias)
+
+    payload: dict = {"project_path": project_path, "updated_at": time.time()}
+    if existing_aliases:
+        payload["alias_paths"] = existing_aliases
     try:
         tmp_path.write_text(json.dumps(payload), encoding="utf-8")
         tmp_path.rename(meta_path)

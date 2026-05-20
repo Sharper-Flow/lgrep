@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lgrep.storage import get_project_db_path
+from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
 from lgrep.storage._chunk_store import canonical_repo_key
 
 
@@ -265,3 +265,58 @@ class TestStaleFileDeletionGuard:
         assert "gone.py" not in indexed_files, (
             "Stale file was NOT deleted when dedup is off — existing behavior should be preserved"
         )
+
+
+class TestAliasPaths:
+    """Tests for alias_paths support in project_meta.json."""
+
+    def test_write_meta_with_aliases(self, tmp_path, monkeypatch):
+        """write_project_meta includes alias_paths field."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+
+        write_project_meta(
+            project,
+            db_path=db_path,
+            alias_paths=["/worktree/a", "/worktree/b"],
+        )
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        assert "alias_paths" in meta
+        assert "/worktree/a" in meta["alias_paths"]
+        assert "/worktree/b" in meta["alias_paths"]
+        assert meta["project_path"] == str(project.resolve())
+
+    def test_write_meta_appends_aliases(self, tmp_path, monkeypatch):
+        """Writing with a new alias preserves existing aliases."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+
+        # First write with one alias
+        write_project_meta(project, db_path=db_path, alias_paths=["/worktree/a"])
+
+        # Second write should append, not replace
+        write_project_meta(project, db_path=db_path, alias_paths=["/worktree/b"])
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        assert "/worktree/a" in meta["alias_paths"]
+        assert "/worktree/b" in meta["alias_paths"]
+
+    def test_write_meta_no_aliases_omits_field(self, tmp_path, monkeypatch):
+        """When no aliases, alias_paths field is absent or empty."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+
+        write_project_meta(project, db_path=db_path)
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        assert meta.get("alias_paths", []) == []
