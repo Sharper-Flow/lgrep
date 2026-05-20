@@ -809,3 +809,132 @@ class TestInMemoryDedup:
             )
         finally:
             self._cleanup_worktree(repo, worktree)
+
+
+class TestGcWorktreeMeta:
+    """Tests for gc_worktree_meta — stale alias cleanup."""
+
+    def test_gc_removes_stale_aliases(self, tmp_path, monkeypatch):
+        """gc_worktree_meta removes alias entries whose paths no longer exist."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
+        from lgrep.tools.prune_orphans import gc_worktree_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        live_alias = tmp_path / "live_worktree"
+        live_alias.mkdir()
+        dead_alias = tmp_path / "dead_worktree"  # never created
+        db_path = get_project_db_path(project)
+
+        write_project_meta(
+            project,
+            db_path=db_path,
+            alias_paths=[str(live_alias), str(dead_alias)],
+        )
+
+        report = gc_worktree_meta(dry_run=False)
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        aliases = meta.get("alias_paths", [])
+        assert str(live_alias) in aliases, "Live alias must be preserved"
+        assert str(dead_alias) not in aliases, "Dead alias must be removed"
+        assert report["aliases_removed"] >= 1
+        assert report["dirs_updated"] >= 1
+
+    def test_gc_keeps_all_when_all_live(self, tmp_path, monkeypatch):
+        """When all aliases point to live dirs, none are removed."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
+        from lgrep.tools.prune_orphans import gc_worktree_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        a = tmp_path / "a"
+        a.mkdir()
+        b = tmp_path / "b"
+        b.mkdir()
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path, alias_paths=[str(a), str(b)])
+
+        report = gc_worktree_meta(dry_run=False)
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        aliases = meta.get("alias_paths", [])
+        assert str(a) in aliases
+        assert str(b) in aliases
+        assert report["aliases_removed"] == 0
+
+    def test_gc_dry_run_no_writes(self, tmp_path, monkeypatch):
+        """Dry-run reports what would be removed but doesn't change meta."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
+        from lgrep.tools.prune_orphans import gc_worktree_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        dead = tmp_path / "dead"
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path, alias_paths=[str(dead)])
+
+        report = gc_worktree_meta(dry_run=True)
+
+        # Dry run reports the find
+        assert report["aliases_removed"] >= 1
+        # But meta is unchanged
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        assert str(dead) in meta.get("alias_paths", [])
+
+    def test_gc_handles_no_meta(self, tmp_path, monkeypatch):
+        """Cache dirs without project_meta.json are gracefully skipped."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        # Create a fake cache dir that looks like a semantic cache but has no meta
+        cache_root = tmp_path / "cache"
+        cache_root.mkdir()
+        fake_dir = cache_root / "abc123def456"  # 12-hex-char name (matches shape filter)
+        fake_dir.mkdir()
+        (fake_dir / "chunks.lance").mkdir()
+
+        from lgrep.tools.prune_orphans import gc_worktree_meta
+
+        report = gc_worktree_meta(dry_run=False)
+        # No error, no work done on dirs without meta
+        assert report["checked"] >= 1
+
+    def test_lgrep_gc_runs_both_passes(self, tmp_path, monkeypatch, capsys):
+        """lgrep gc --execute runs both prune_orphans AND gc_worktree_meta."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.cli import _cmd_gc
+
+        with (
+            patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
+            patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
+        ):
+            mock_prune.return_value = {
+                "dry_run": False,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+            mock_gc.return_value = {
+                "dry_run": False,
+                "checked": 0,
+                "aliases_removed": 0,
+                "dirs_updated": 0,
+            }
+            rc = _cmd_gc(["--execute"])
+
+        assert rc == 0
+        mock_prune.assert_called_once()
+        mock_gc.assert_called_once()

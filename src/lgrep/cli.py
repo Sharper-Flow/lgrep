@@ -360,7 +360,7 @@ def _cmd_gc(args: list[str]) -> int:
 
     from pathlib import Path
 
-    from lgrep.tools.prune_orphans import prune_orphans
+    from lgrep.tools.prune_orphans import gc_worktree_meta, prune_orphans
 
     # Mutual exclusion (same pattern as _cmd_prune_orphans)
     if "--execute" in args and "--dry-run" in args:
@@ -390,8 +390,15 @@ def _cmd_gc(args: list[str]) -> int:
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
 
-    report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
-    print(json.dumps(report))
+    # Run both passes: orphan whole-dir cleanup + alias entry cleanup.
+    prune_report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
+    meta_report = gc_worktree_meta(dry_run=dry_run, cache_dir=cache_dir)
+
+    combined = {
+        "prune_orphans": prune_report,
+        "gc_worktree_meta": meta_report,
+    }
+    print(json.dumps(combined))
     return 0
 
 

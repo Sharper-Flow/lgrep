@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -371,5 +372,130 @@ def prune_orphans(
         "deleted_dirs": deleted_dirs,
         "reclaimed_bytes": reclaimed_bytes,
         "failures": failures,
+        "_meta": make_meta(t0),
+    }
+
+
+class GcWorktreeMetaReport(TypedDict):
+    dry_run: bool
+    checked: int
+    aliases_removed: int
+    dirs_updated: int
+    _meta: dict
+
+
+def gc_worktree_meta(
+    cache_dir: Path | None = None,
+    dry_run: bool = True,
+) -> GcWorktreeMetaReport:
+    """Sweep ``project_meta.json`` files and remove stale worktree aliases.
+
+    For each semantic cache directory:
+    - Read ``project_meta.json``
+    - For each path in ``alias_paths``, check whether the directory still exists
+    - Remove paths whose directories are gone
+    - If aliases changed, rewrite the meta atomically
+
+    This complements ``prune_orphans`` (which deletes whole cache dirs) by
+    cleaning up *partial* staleness — aliases inside a canonical cache that
+    still has a valid root. Useful when worktrees were deleted without calling
+    ``invalidate_worktree_cache``.
+
+    Returns a report counting directories examined, aliases removed, and
+    cache directories updated.
+    """
+    from lgrep.storage._chunk_store import write_project_meta as _write_meta
+
+    t0 = time.monotonic()
+    root = _resolve_cache_dir(cache_dir)
+
+    if not root.is_dir():
+        return {
+            "dry_run": dry_run,
+            "checked": 0,
+            "aliases_removed": 0,
+            "dirs_updated": 0,
+            "_meta": make_meta(t0),
+        }
+
+    checked = 0
+    aliases_removed = 0
+    dirs_updated = 0
+
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return {
+            "dry_run": dry_run,
+            "checked": 0,
+            "aliases_removed": 0,
+            "dirs_updated": 0,
+            "_meta": make_meta(t0),
+        }
+
+    for child in entries:
+        if not _CACHE_DIR_NAME_RE.match(child.name):
+            continue
+        try:
+            if child.is_symlink() or not child.is_dir():
+                continue
+        except OSError:
+            continue
+
+        checked += 1
+        meta = read_project_meta(child)
+        if meta is None:
+            continue
+
+        aliases = meta.get("alias_paths", [])
+        if not aliases:
+            continue
+
+        # Filter aliases: keep only those whose directories still exist.
+        # PermissionError or transient FS errors → preserve (defensive).
+        live_aliases: list[str] = []
+        for alias in aliases:
+            try:
+                if Path(alias).is_dir():
+                    live_aliases.append(alias)
+                else:
+                    aliases_removed += 1
+            except OSError:
+                # Transient — preserve
+                live_aliases.append(alias)
+
+        if len(live_aliases) == len(aliases):
+            # No change for this dir
+            continue
+
+        if not dry_run:
+            project_path = meta.get("project_path")
+            if project_path:
+                # Rewrite meta with filtered aliases.
+                # write_project_meta MERGES with existing — to truly replace
+                # alias_paths we need to write the file directly.
+                meta_path = child / "project_meta.json"
+                tmp_path = meta_path.with_suffix(".tmp")
+                payload = {
+                    "project_path": project_path,
+                    "updated_at": time.time(),
+                }
+                if live_aliases:
+                    payload["alias_paths"] = live_aliases
+                try:
+                    tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+                    tmp_path.rename(meta_path)
+                    dirs_updated += 1
+                except OSError:
+                    # Best-effort, keep going
+                    continue
+        else:
+            dirs_updated += 1  # would-be update
+
+    return {
+        "dry_run": dry_run,
+        "checked": checked,
+        "aliases_removed": aliases_removed,
+        "dirs_updated": dirs_updated,
         "_meta": make_meta(t0),
     }
