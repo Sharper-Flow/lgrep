@@ -25,11 +25,22 @@ def test_pathspec_importable():
     assert hasattr(pathspec, "patterns")
 
 
-def test_version_is_3_0_0():
-    """lgrep package version should match the current release."""
+def test_version_matches_pyproject():
+    """lgrep package __version__ should match the pyproject.toml version."""
+    import tomllib
+    from pathlib import Path
+
     from lgrep import __version__
 
-    assert __version__ == "3.0.0", f"Expected 3.0.0, got {__version__}"
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    with pyproject.open("rb") as f:
+        data = tomllib.load(f)
+    expected = data["project"]["version"]
+    assert __version__ == expected, (
+        f"src/lgrep/__init__.py:__version__ ({__version__!r}) "
+        f"does not match pyproject.toml version ({expected!r}). "
+        f"Bump both together when releasing."
+    )
 
 
 def test_tree_sitter_language_pack_python_parser():
