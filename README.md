@@ -426,6 +426,7 @@ Security notes:
 | `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
+| `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
 | `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
 
 ### Ignore behavior
@@ -456,6 +457,28 @@ Typical operating profile:
 
 - **Semantic engine** - AST-aware chunking for 30+ languages, with text fallback when needed
 - **Symbol engine** - tree-sitter-language-pack support across 165+ languages
+
+## Git worktree workflow
+
+When using git worktrees (e.g., ADV's per-change worktree isolation), multiple checkouts of the same repository can accumulate duplicate semantic indexes — one per worktree path. This wastes disk space (hundreds of MB per worktree) and Voyage API tokens.
+
+**Enable worktree dedup** by setting `LGREP_WORKTREE_DEDUP=1` in your environment:
+
+```bash
+export LGREP_WORKTREE_DEDUP=1
+```
+
+With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share one semantic index.
+
+**Tradeoff:** When dedup is enabled, stale-file cleanup during indexing is skipped. Deleted-file chunks remain in the shared cache until a full rebuild. This is benign (extra search results, not wrong results).
+
+**ADV integration:** Call the `invalidate_worktree_cache` MCP tool during `/adv-archive` Phase 9 (before `adv_worktree_delete`) to remove the worktree's alias from the shared cache metadata:
+
+```
+invalidate_worktree_cache(paths: ["/path/to/worktree"])
+```
+
+**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer) to prune orphan caches and clean stale worktree aliases.
 
 ## Troubleshooting
 
