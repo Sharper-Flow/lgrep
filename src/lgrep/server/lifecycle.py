@@ -15,6 +15,7 @@ from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
 from lgrep.storage import (
     ChunkStore,
+    canonical_repo_key,
     discover_cached_projects,
     get_project_db_path,
     has_disk_cache,
@@ -91,6 +92,11 @@ class LgrepContext:
     """
 
     projects: dict[str, ProjectState] = field(default_factory=dict)
+    # Canonical-key index for worktree dedup: maps str(canonical_repo_key) → ProjectState.
+    # Multiple paths in `projects` may point to the SAME ProjectState when they
+    # share a git common-dir and LGREP_WORKTREE_DEDUP is enabled. This bounds
+    # memory growth: one ProjectState per repo, regardless of worktree count.
+    _canonical_to_state: dict[str, ProjectState] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     transport: str | None = None
@@ -125,13 +131,25 @@ async def _startup(server: FastMCP) -> LgrepContext:
 
 
 async def _shutdown(ctx: LgrepContext) -> None:
-    """Gracefully shut down all projects: stop watchers and release resources."""
+    """Gracefully shut down all projects: stop watchers and release resources.
+
+    When worktree dedup is enabled, ProjectState may be shared across multiple
+    paths. We stop watchers on the canonical states (one per repo) to avoid
+    double-stopping the same watcher via aliased paths.
+    """
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
 
+    # Iterate canonical states (deduped) to stop each watcher exactly once.
+    # Fall back to projects when _canonical_to_state is empty (legacy / pre-dedup).
+    seen_states: set[int] = set()
     for proj_path, state in ctx.projects.items():
+        if id(state) in seen_states:
+            continue
+        seen_states.add(id(state))
         _stop_watcher(state, proj_path)
 
     ctx.projects.clear()
+    ctx._canonical_to_state.clear()
     ctx.embedder = None
     log.info("lgrep_shutdown_complete")
 
@@ -141,10 +159,40 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
     """Manage application lifecycle with optional eager warming."""
     ctx = await _startup(server)
     await _warm_projects(ctx)
+    sweep_task = asyncio.create_task(_schedule_startup_sweep(ctx))
     try:
         yield ctx
     finally:
+        sweep_task.cancel()
         await _shutdown(ctx)
+
+
+async def _schedule_startup_sweep(ctx: LgrepContext) -> None:
+    """One-shot orphan sweep after a warmup delay.
+
+    Waits 5 minutes for the server to finish warming and initial indexing,
+    then runs ``prune_orphans(dry_run=False)`` with all active projects
+    passed as the skip set.  The existing grace window (default 1 hour)
+    protects caches that were recently written by live indexers.
+    """
+    try:
+        await asyncio.sleep(300)  # 5-minute warmup delay
+    except asyncio.CancelledError:
+        return  # Server shutting down before sweep
+
+    log.info("startup_orphan_sweep_begin")
+    try:
+        from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
+
+        active_set = list(ctx.projects.keys())
+        report = await asyncio.to_thread(_prune_orphans, dry_run=False, active_set=active_set)
+        log.info(
+            "startup_orphan_sweep_done",
+            deleted=report["deleted_dirs"],
+            reclaimed_bytes=report["reclaimed_bytes"],
+        )
+    except Exception as e:
+        log.warning("startup_orphan_sweep_failed", error=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -179,22 +227,45 @@ async def _ensure_project_initialized(
     Uses double-checked locking: fast lock-free path for already-cached projects,
     asyncio.Lock only for first-time initialization.
 
+    When ``LGREP_WORKTREE_DEDUP`` is enabled, this function shares ProjectState
+    across worktree paths of the same repo: the first path to initialize creates
+    the state, and subsequent paths with the same canonical_repo_key alias to
+    the SAME ProjectState object. This bounds in-memory growth to one
+    ProjectState per repo regardless of worktree count.
+
     Returns ProjectState on success, or a ToolError dict on failure.
     """
     path_key = str(project_path)
 
-    # Fast path: already initialized (no lock needed)
+    # Fast path: already initialized by this exact path (no lock needed)
     if path_key in app_ctx.projects:
         return app_ctx.projects[path_key]
 
-    # Slow path: need to create (under lock to prevent duplicate entries)
+    # Slow path: need to create or alias (under lock to prevent duplicate entries)
     async with app_ctx._lock:
         # Double-check after acquiring lock
         if path_key in app_ctx.projects:
             return app_ctx.projects[path_key]
 
-        # Check MAX_PROJECTS limit
-        count = len(app_ctx.projects)
+        # Compute canonical key — when dedup is on, this collapses worktrees
+        # of the same repo to a single shared state. When dedup is off,
+        # canonical_repo_key returns Path.resolve(), so each path is its own key.
+        canonical_str = str(canonical_repo_key(Path(project_path)))
+
+        # Alias path: another path already initialized the same canonical repo.
+        # Share the existing ProjectState — DO NOT create a duplicate.
+        existing_state = app_ctx._canonical_to_state.get(canonical_str)
+        if existing_state is not None:
+            app_ctx.projects[path_key] = existing_state
+            log.info(
+                "project_aliased",
+                project=path_key,
+                canonical=canonical_str,
+            )
+            return existing_state
+
+        # Check MAX_PROJECTS limit (counts canonical projects, not aliases)
+        count = len(app_ctx._canonical_to_state)
         if count >= MAX_PROJECTS:
             return _error_response(
                 f"Maximum project limit ({MAX_PROJECTS}) reached. "
@@ -220,7 +291,12 @@ async def _ensure_project_initialized(
             )
             state = ProjectState(db=db, indexer=indexer)
             app_ctx.projects[path_key] = state
-            log.info("project_initialized", project=path_key)
+            app_ctx._canonical_to_state[canonical_str] = state
+            log.info(
+                "project_initialized",
+                project=path_key,
+                canonical=canonical_str,
+            )
             return state
         except Exception as e:
             log.exception("initialization_failed", project=path_key, error=str(e))

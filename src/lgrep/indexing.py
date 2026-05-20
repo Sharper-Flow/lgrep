@@ -6,6 +6,7 @@ Wires together file discovery, chunking, embedding, and storage.
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 import uuid
 from dataclasses import dataclass
@@ -58,6 +59,7 @@ class Indexer:
         self.embedder = embedder
         self.chunker = CodeChunker(chunk_size=chunk_size)
         self.discovery = FileDiscovery(self.project_path)
+        self._dedup_enabled = bool(os.environ.get("LGREP_WORKTREE_DEDUP"))
 
         log.info("indexer_initialized", project=str(self.project_path))
 
@@ -75,16 +77,21 @@ class Indexer:
         all_files = list(self.discovery.find_files())
         status.file_count = len(all_files)
 
-        # Remove stale chunks for files that no longer exist on disk
-        try:
-            indexed_files = self.storage.get_indexed_files()
-            current_rel_paths = {str(Path(f).relative_to(self.project_path)) for f in all_files}
-            stale_files = indexed_files - current_rel_paths
-            for stale_path in stale_files:
-                self.storage.delete_by_file(stale_path)
-                log.info("stale_file_removed", file=stale_path)
-        except Exception as e:
-            log.warning("stale_cleanup_failed", error=str(e))
+        # Remove stale chunks for files that no longer exist on disk.
+        # SKIP when worktree dedup is enabled — shared LanceDB means files
+        # absent from THIS worktree may be present in another worktree's
+        # checkout. Deleting them would corrupt search results across
+        # worktrees (validator CONFLICT, design §2).
+        if not self._dedup_enabled:
+            try:
+                indexed_files = self.storage.get_indexed_files()
+                current_rel_paths = {str(Path(f).relative_to(self.project_path)) for f in all_files}
+                stale_files = indexed_files - current_rel_paths
+                for stale_path in stale_files:
+                    self.storage.delete_by_file(stale_path)
+                    log.info("stale_file_removed", file=stale_path)
+            except Exception as e:
+                log.warning("stale_cleanup_failed", error=str(e))
 
         for file_path in all_files:
             file_status = self.index_file(file_path)

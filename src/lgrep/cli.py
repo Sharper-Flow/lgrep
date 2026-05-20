@@ -38,6 +38,9 @@ def main() -> int:
     if args and args[0] == "prune-orphans":
         return _cmd_prune_orphans(args[1:])
 
+    if args and args[0] == "gc":
+        return _cmd_gc(args[1:])
+
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
@@ -99,6 +102,7 @@ def _print_help() -> None:
     print("  index-symbols [path]           index symbols for a project")
     print("  init-ignore [path]             create recommended .lgrepignore")
     print("  prune-orphans                  inspect or delete orphan semantic caches")
+    print("  gc                             prune orphans + clean worktree aliases")
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
@@ -337,6 +341,64 @@ def _cmd_prune_orphans(args: list[str]) -> int:
 
     report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
     print(json.dumps(report))
+    return 0
+
+
+def _cmd_gc(args: list[str]) -> int:
+    """Run garbage collection: prune orphans + clean worktree aliases."""
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR]")
+        print()
+        print("Run garbage collection on semantic caches.")
+        print("Combines orphan pruning with worktree alias cleanup.")
+        print()
+        print("options:")
+        print("  --execute                      actually delete orphan caches")
+        print("  --dry-run                      preview only (default)")
+        print("  --cache-dir DIR                override semantic cache directory")
+        return 0
+
+    from pathlib import Path
+
+    from lgrep.tools.prune_orphans import gc_worktree_meta, prune_orphans
+
+    # Mutual exclusion (same pattern as _cmd_prune_orphans)
+    if "--execute" in args and "--dry-run" in args:
+        print(
+            "error: --execute and --dry-run are mutually exclusive",
+            file=sys.stderr,
+        )
+        return 2
+
+    dry_run = True
+    cache_dir = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--execute":
+            dry_run = False
+            i += 1
+        elif args[i] == "--dry-run":
+            dry_run = True
+            i += 1
+        elif args[i] == "--cache-dir" and i + 1 < len(args):
+            cache_dir = Path(args[i + 1]).resolve()
+            i += 2
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+
+    # Run both passes: orphan whole-dir cleanup + alias entry cleanup.
+    prune_report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
+    meta_report = gc_worktree_meta(dry_run=dry_run, cache_dir=cache_dir)
+
+    combined = {
+        "prune_orphans": prune_report,
+        "gc_worktree_meta": meta_report,
+    }
+    print(json.dumps(combined))
     return 0
 
 

@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "id": "ws-1auGxw",
+      "type": "gotcha",
+      "content": "asyncio.create_task + cancellation pattern: when the task catches CancelledError internally and returns gracefully, the awaiting code does NOT see CancelledError — it just gets the normal return value. Test the behavioral effect (sweep didn't run) rather than the exception type.",
+      "source_task": "tk-b2f80213a2ce",
+      "recorded_at": "2026-05-20T06:27:57.875Z"
+    },
+    {
+      "id": "ws--gSCnJ",
+      "type": "pattern",
+      "content": "When dedup'ing in-memory dict values across multiple keys (one ProjectState shared by many path keys), use `id(obj)` set to deduplicate iterations like teardown loops. Avoids double-stopping the same watcher.",
+      "source_task": "tk-07acc6829af0",
+      "recorded_at": "2026-05-20T06:57:21.160Z"
+    },
+    {
+      "id": "ws-3fI_fd",
+      "type": "pattern",
+      "content": "fcntl.flock on a file you intend to atomically replace (via tmp+rename) is broken: rename swaps the inode out from under the lock, so a second locker holds a lock on the OLD file. Solution: lock on a separate dedicated lock file (e.g. `.meta.lock`) that NEVER gets renamed, while the protected payload file gets the atomic write.",
+      "source_task": "tk-b8bdceed5685",
+      "recorded_at": "2026-05-20T07:02:02.944Z"
+    }
+  ],
+  "count": 3
+}

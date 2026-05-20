@@ -283,6 +283,26 @@ class PruneOrphansResult(TypedDict):
     _meta: _Meta
 
 
+class WorktreeInvalidationEntry(TypedDict):
+    """Single worktree invalidation result entry."""
+
+    path: str
+    cache_dir: str
+    alias_removed: bool
+    cache_deleted: bool
+    bytes_reclaimed: int
+    error: str | None
+
+
+class WorktreeInvalidationResult(TypedDict):
+    """Response for invalidate_worktree_cache."""
+
+    paths_cleaned: int
+    bytes_reclaimed: int
+    entries: list[WorktreeInvalidationEntry]
+    _meta: _Meta
+
+
 class _Meta(TypedDict):
     """Envelope metadata attached to symbol-tool responses."""
 

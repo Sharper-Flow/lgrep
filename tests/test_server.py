@@ -854,11 +854,14 @@ class TestMaxProjectsLimit:
         """Should reject new projects when MAX_PROJECTS limit is reached."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
-        # Pre-fill projects dict to MAX_PROJECTS
+        # Pre-fill projects dict to MAX_PROJECTS.
+        # After in-memory dedup, the limit applies to unique canonical projects,
+        # so we populate _canonical_to_state too.
         for i in range(MAX_PROJECTS):
-            app_ctx.projects[f"/fake/project/{i}"] = ProjectState(
-                db=MagicMock(), indexer=MagicMock()
-            )
+            state = ProjectState(db=MagicMock(), indexer=MagicMock())
+            path = f"/fake/project/{i}"
+            app_ctx.projects[path] = state
+            app_ctx._canonical_to_state[path] = state
 
         assert len(app_ctx.projects) == MAX_PROJECTS
 

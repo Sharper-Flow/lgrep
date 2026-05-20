@@ -1,0 +1,428 @@
+{
+  "id": "addWorktreeAwareCacheLifecycle",
+  "title": "Add worktree-aware cache lifecycle",
+  "status": "archived",
+  "created_at": "2026-05-20T05:49:22.927Z",
+  "tasks": [
+    {
+      "id": "tk-3bb3cafa9e05",
+      "title": "## Add `canonical_repo_key()` and refactor `get_project_db_path()`",
+      "type": "code",
+      "section": "Core",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-05-20T06:11:41.583Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:14:40.874Z",
+      "verification": "Added canonical_repo_key() with git rev-parse --path-format=absolute --git-common-dir. Refactored get_project_db_path() to use canonical key. 10 new tests, 85 existing tests pass.",
+      "summary": "Added canonical_repo_key() with git rev-parse --path-format=absolute --git-common-dir. Refactored get_project_db_path() to use canonical key. 10 new tests, 85 existing tests pass.",
+      "implementation_summary": "Added canonical_repo_key() with git rev-parse --path-format=absolute --git-common-dir. Refactored get_project_db_path() to use canonical key. 10 new tests, 85 existing tests pass.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:19:04.688Z",
+      "completed_at": "2026-05-20T06:19:04.688Z"
+    },
+    {
+      "id": "tk-2230956ee19f",
+      "title": "## Guard stale-file deletion when worktree dedup is enabled",
+      "type": "code",
+      "section": "Core",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-05-20T06:11:50.172Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bb3cafa9e05"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:19:14.411Z",
+      "verification": "Added _dedup_enabled flag to Indexer.__init__. Guarded stale-file deletion in index_all() with if not self._dedup_enabled. 2 new tests pass. Prevents cross-worktree chunk corruption in shared LanceDB.",
+      "summary": "Added _dedup_enabled flag to Indexer.__init__. Guarded stale-file deletion in index_all() with if not self._dedup_enabled. 2 new tests pass. Prevents cross-worktree chunk corruption in shared LanceDB.",
+      "implementation_summary": "Added _dedup_enabled flag to Indexer.__init__. Guarded stale-file deletion in index_all() with if not self._dedup_enabled. 2 new tests pass. Prevents cross-worktree chunk corruption in shared LanceDB.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:21:58.390Z",
+      "completed_at": "2026-05-20T06:21:58.390Z"
+    },
+    {
+      "id": "tk-ce6829b84c5d",
+      "title": "## Add `alias_paths` support to `project_meta.json`",
+      "type": "code",
+      "section": "Core",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-05-20T06:12:04.110Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bb3cafa9e05"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:22:08.400Z",
+      "verification": "Extended write_project_meta with alias_paths parameter. Implements read-modify-write merge with deduplication. Documented concurrent-write race in docstring. 3 new tests pass.",
+      "summary": "Extended write_project_meta with alias_paths parameter. Implements read-modify-write merge with deduplication. Documented concurrent-write race in docstring. 3 new tests pass.",
+      "implementation_summary": "Extended write_project_meta with alias_paths parameter. Implements read-modify-write merge with deduplication. Documented concurrent-write race in docstring. 3 new tests pass.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:24:22.410Z",
+      "completed_at": "2026-05-20T06:24:22.410Z"
+    },
+    {
+      "id": "tk-5760688dc9a6",
+      "title": "## Add `invalidate_worktree_cache` MCP tool",
+      "type": "code",
+      "section": "MCP Tools",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-05-20T06:12:33.214Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bb3cafa9e05"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-ce6829b84c5d"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:28:13.934Z",
+      "verification": "Implemented by adv-engineer: WorktreeInvalidationEntry/Result TypedDicts, invalidate_worktree.py with path confinement + symlink guards, MCP tool in tools_maintenance.py with in-memory project eviction, wired in __init__.py. 5 new tests pass, 124 total.",
+      "summary": "Implemented by adv-engineer: WorktreeInvalidationEntry/Result TypedDicts, invalidate_worktree.py with path confinement + symlink guards, MCP tool in tools_maintenance.py with in-memory project eviction, wired in __init__.py. 5 new tests pass, 124 total.",
+      "implementation_summary": "Implemented by adv-engineer: WorktreeInvalidationEntry/Result TypedDicts, invalidate_worktree.py with path confinement + symlink guards, MCP tool in tools_maintenance.py with in-memory project eviction, wired in __init__.py. 5 new tests pass, 124 total.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:38:11.795Z",
+      "completed_at": "2026-05-20T06:38:11.795Z"
+    },
+    {
+      "id": "tk-b2f80213a2ce",
+      "title": "## Add background orphan sweep on server start",
+      "type": "code",
+      "section": "Lifecycle",
+      "status": "done",
+      "priority": 4,
+      "created_at": "2026-05-20T06:12:49.574Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:24:33.998Z",
+      "verification": "Added _schedule_startup_sweep() to lifecycle.py: 5-min delayed one-shot prune_orphans(dry_run=False). Scheduled via asyncio.create_task in app_lifespan, cancelled on shutdown. 2 new tests pass.",
+      "summary": "Added _schedule_startup_sweep() to lifecycle.py: 5-min delayed one-shot prune_orphans(dry_run=False). Scheduled via asyncio.create_task in app_lifespan, cancelled on shutdown. 2 new tests pass.",
+      "implementation_summary": "Added _schedule_startup_sweep() to lifecycle.py: 5-min delayed one-shot prune_orphans(dry_run=False). Scheduled via asyncio.create_task in app_lifespan, cancelled on shutdown. 2 new tests pass.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:27:41.782Z",
+      "completed_at": "2026-05-20T06:27:41.782Z"
+    },
+    {
+      "id": "tk-154cc8d57f62",
+      "title": "## Add `lgrep gc` CLI subcommand",
+      "type": "code",
+      "section": "CLI",
+      "status": "done",
+      "priority": 5,
+      "created_at": "2026-05-20T06:13:03.118Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-b2f80213a2ce"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:38:28.339Z",
+      "verification": "Added _cmd_gc to cli.py wrapping prune_orphans. Flag parsing (--execute, --dry-run, --cache-dir) matches _cmd_prune_orphans pattern. Help text updated. 5 new tests pass.",
+      "summary": "Added _cmd_gc to cli.py wrapping prune_orphans. Flag parsing (--execute, --dry-run, --cache-dir) matches _cmd_prune_orphans pattern. Help text updated. 5 new tests pass.",
+      "implementation_summary": "Added _cmd_gc to cli.py wrapping prune_orphans. Flag parsing (--execute, --dry-run, --cache-dir) matches _cmd_prune_orphans pattern. Help text updated. 5 new tests pass.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:41:39.803Z",
+      "completed_at": "2026-05-20T06:41:39.803Z"
+    },
+    {
+      "id": "tk-f5c5ecea7b76",
+      "title": "## Cross-cutting integration tests",
+      "type": "code",
+      "section": "Tests",
+      "status": "done",
+      "priority": 6,
+      "created_at": "2026-05-20T06:13:16.366Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bb3cafa9e05"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-2230956ee19f"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-ce6829b84c5d"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-5760688dc9a6"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-b2f80213a2ce"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-154cc8d57f62"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:42:54.446Z",
+      "verification": "E2E dedup test (two git worktrees → one cache dir). Campsite fixes for tool registration (17→18). 477 passed, 0 failures.",
+      "summary": "E2E dedup test (two git worktrees → one cache dir). Campsite fixes for tool registration (17→18). 477 passed, 0 failures.",
+      "implementation_summary": "E2E dedup test (two git worktrees → one cache dir). Campsite fixes for tool registration (17→18). 477 passed, 0 failures.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:44:47.472Z",
+      "completed_at": "2026-05-20T06:44:47.472Z"
+    },
+    {
+      "id": "tk-13b11c02511a",
+      "title": "## Documentation: README, ADV integration, CLI help",
+      "type": "code",
+      "section": "Docs",
+      "status": "done",
+      "priority": 7,
+      "created_at": "2026-05-20T06:13:28.122Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bb3cafa9e05"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-5760688dc9a6"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-b2f80213a2ce"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-154cc8d57f62"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:44:59.479Z",
+      "verification": "Added LGREP_WORKTREE_DEDUP to env var table. Added 'Git worktree workflow' section to README with dedup explanation, stale-file tradeoff, ADV integration pattern, and gc usage.",
+      "summary": "Added LGREP_WORKTREE_DEDUP to env var table. Added 'Git worktree workflow' section to README with dedup explanation, stale-file tradeoff, ADV integration pattern, and gc usage.",
+      "implementation_summary": "Added LGREP_WORKTREE_DEDUP to env var table. Added 'Git worktree workflow' section to README with dedup explanation, stale-file tradeoff, ADV integration pattern, and gc usage.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:46:24.405Z",
+      "completed_at": "2026-05-20T06:46:24.405Z"
+    },
+    {
+      "id": "tk-07acc6829af0",
+      "title": "## In-memory ProjectState dedup via canonical-key sharing",
+      "type": "code",
+      "section": "Core",
+      "status": "done",
+      "priority": 8,
+      "created_at": "2026-05-20T06:52:15.471Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:52:55.776Z",
+      "verification": "In-memory dedup via _canonical_to_state on LgrepContext. _ensure_project_initialized aliases shared state when canonical key already exists. remove_project preserves state if other refs remain. _shutdown stops each watcher exactly once via id() dedup. MAX_PROJECTS counts canonical projects, not aliases. 3 new tests + 1 campsite fix. 480 passed.",
+      "summary": "In-memory dedup via _canonical_to_state on LgrepContext. _ensure_project_initialized aliases shared state when canonical key already exists. remove_project preserves state if other refs remain. _shutdown stops each watcher exactly once via id() dedup. MAX_PROJECTS counts canonical projects, not aliases. 3 new tests + 1 campsite fix. 480 passed.",
+      "implementation_summary": "In-memory dedup via _canonical_to_state on LgrepContext. _ensure_project_initialized aliases shared state when canonical key already exists. remove_project preserves state if other refs remain. _shutdown stops each watcher exactly once via id() dedup. MAX_PROJECTS counts canonical projects, not aliases. 3 new tests + 1 campsite fix. 480 passed.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:57:11.971Z",
+      "completed_at": "2026-05-20T06:57:11.971Z"
+    },
+    {
+      "id": "tk-4c4c05ed95af",
+      "title": "## Add `gc_worktree_meta` helper + integrate into `lgrep gc`",
+      "type": "code",
+      "section": "Lifecycle",
+      "status": "done",
+      "priority": 9,
+      "created_at": "2026-05-20T06:52:25.897Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T06:57:25.309Z",
+      "verification": "Added gc_worktree_meta to prune_orphans.py: scans all project_meta.json files, removes alias entries whose dirs no longer exist. Atomic rewrite via tmp+rename. _cmd_gc now runs BOTH prune_orphans AND gc_worktree_meta. 5 new tests, 485 passed.",
+      "summary": "Added gc_worktree_meta to prune_orphans.py: scans all project_meta.json files, removes alias entries whose dirs no longer exist. Atomic rewrite via tmp+rename. _cmd_gc now runs BOTH prune_orphans AND gc_worktree_meta. 5 new tests, 485 passed.",
+      "implementation_summary": "Added gc_worktree_meta to prune_orphans.py: scans all project_meta.json files, removes alias entries whose dirs no longer exist. Atomic rewrite via tmp+rename. _cmd_gc now runs BOTH prune_orphans AND gc_worktree_meta. 5 new tests, 485 passed.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T06:59:54.814Z",
+      "completed_at": "2026-05-20T06:59:54.814Z"
+    },
+    {
+      "id": "tk-b8bdceed5685",
+      "title": "## fcntl.flock guard around `write_project_meta` read-modify-write",
+      "type": "code",
+      "section": "Core",
+      "status": "done",
+      "priority": 10,
+      "created_at": "2026-05-20T06:52:34.619Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-20T07:00:04.170Z",
+      "verification": "fcntl.flock guard around write_project_meta read-modify-write. Lock on dedicated .meta.lock file (not meta itself, since atomic rename would invalidate). Graceful fallback to unguarded write on non-POSIX (Windows) with one-time warning. Verified with 4-process × 20-write concurrency test. 488 passed.",
+      "summary": "fcntl.flock guard around write_project_meta read-modify-write. Lock on dedicated .meta.lock file (not meta itself, since atomic rename would invalidate). Graceful fallback to unguarded write on non-POSIX (Windows) with one-time warning. Verified with 4-process × 20-write concurrency test. 488 passed.",
+      "implementation_summary": "fcntl.flock guard around write_project_meta read-modify-write. Lock on dedicated .meta.lock file (not meta itself, since atomic rename would invalidate). Graceful fallback to unguarded write on non-POSIX (Windows) with one-time warning. Verified with 4-process × 20-write concurrency test. 488 passed.",
+      "filesTouched": [],
+      "touched_files": [],
+      "completedAt": "2026-05-20T07:01:49.067Z",
+      "completed_at": "2026-05-20T07:01:49.067Z"
+    }
+  ],
+  "deltas": {},
+  "wisdom": [
+    {
+      "id": "ws-1auGxw",
+      "type": "gotcha",
+      "content": "asyncio.create_task + cancellation pattern: when the task catches CancelledError internally and returns gracefully, the awaiting code does NOT see CancelledError — it just gets the normal return value. Test the behavioral effect (sweep didn't run) rather than the exception type.",
+      "source_task": "tk-b2f80213a2ce",
+      "recorded_at": "2026-05-20T06:27:57.875Z"
+    },
+    {
+      "id": "ws--gSCnJ",
+      "type": "pattern",
+      "content": "When dedup'ing in-memory dict values across multiple keys (one ProjectState shared by many path keys), use `id(obj)` set to deduplicate iterations like teardown loops. Avoids double-stopping the same watcher.",
+      "source_task": "tk-07acc6829af0",
+      "recorded_at": "2026-05-20T06:57:21.160Z"
+    },
+    {
+      "id": "ws-3fI_fd",
+      "type": "pattern",
+      "content": "fcntl.flock on a file you intend to atomically replace (via tmp+rename) is broken: rename swaps the inode out from under the lock, so a second locker holds a lock on the OLD file. Solution: lock on a separate dedicated lock file (e.g. `.meta.lock`) that NEVER gets renamed, while the protected payload file gets the atomic write.",
+      "source_task": "tk-b8bdceed5685",
+      "recorded_at": "2026-05-20T07:02:02.944Z"
+    }
+  ],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-05-20T05:56:44.673Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved. 2 MEDIUM ambiguity findings (F1: project-config vs env var, M1: cache-hit telemetry) to resolve in discovery."
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-05-20T05:58:05.900Z",
+      "completed_by": "agent",
+      "approval_evidence": "Discovery complete. F1 resolved: env-var only (LGREP_WORKTREE_DEDUP), no project-config. M1 resolved: structural cache-key identity verification replaces token telemetry. Agreement produced with 10 AC, 6 constraints, 7 avoidances."
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-05-20T06:11:13.575Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved design. Validator CONFLICT (stale-file deletion) resolved with mandatory fix. All CAUTION items addressed. Design document updated with --path-format=absolute, stale-file guard, alias race documentation."
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-05-20T06:52:44.495Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approval evidence: 'address all remaining concerns -- make sure its all cleared fully, and that lgrep remains an ideal tool for agents working in worktrees'. Added 3 tasks: in-memory dedup, gc_worktree_meta, flock guard. All tasks 1-8 already done."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-05-20T07:02:50.282Z",
+      "completed_by": "agent",
+      "approval_evidence": "All 11 tasks done. 488 tests pass, 2 skipped, 0 failures. All three remaining concerns from prior execution closed: in-memory dedup via _canonical_to_state, gc_worktree_meta integrated into lgrep gc, fcntl.flock guard on alias writes. README updated."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-05-20T07:04:20.802Z",
+      "completed_by": "agent",
+      "approval_evidence": "User sign-off received. All 11 tasks done, 488 tests pass, all prior concerns resolved."
+    },
+    "release": {
+      "status": "done",
+      "completed_at": "2026-05-20T07:04:26.505Z",
+      "completed_by": "agent",
+      "approval_evidence": "User signed off. Ready to archive."
+    }
+  },
+  "reentry_history": [
+    {
+      "from_gate": "design",
+      "reason": "Design gate completed prematurely — design document not yet produced and mandatory independent validator (adv-researcher) not yet run per gate rules.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-05-20T06:00:07.074Z",
+      "gates_reset": [
+        "design",
+        "planning",
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    },
+    {
+      "from_gate": "planning",
+      "reason": "Three remaining concerns from execution undermine 'ideal for agents in worktrees': (1) in-memory project dedup deferred → linear memory growth per worktree, (2) gc_worktree_meta missing → stale aliases accumulate, (3) alias_paths concurrent-write race unguarded → multi-process data loss. User wants all cleared.",
+      "scope_delta": "Add 3 tasks: (1) in-memory dedup via canonical-key-keyed projects map, (2) gc_worktree_meta helper integrated into lgrep gc, (3) fcntl.flock guard around alias_paths read-modify-write.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-05-20T06:51:27.612Z",
+      "gates_reset": [
+        "planning",
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    }
+  ],
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_MISSING_SUCCESS_CRITERIA",
+      "severity": "warning",
+      "message": "Proposal has no Success Criteria section. How will we know this change is done?",
+      "recorded_at": "2026-05-20T05:51:40.345Z"
+    },
+    {
+      "code": "CLARIFY_UNCLEAR_SCOPE",
+      "severity": "warning",
+      "message": "Proposal has no Scope section. What files and modules will be affected?",
+      "recorded_at": "2026-05-20T05:51:40.345Z"
+    },
+    {
+      "code": "CLARIFY_ASSUMPTION_HEAVY",
+      "severity": "warning",
+      "message": "Proposal references authentication/authorization without specifying the model. What auth mechanism will be used?",
+      "recorded_at": "2026-05-20T05:51:40.345Z"
+    }
+  ]
+}

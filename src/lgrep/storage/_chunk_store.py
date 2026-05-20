@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,10 +85,60 @@ class SearchResults:
     total_chunks: int = 0
 
 
+def canonical_repo_key(project_path: Path) -> Path:
+    """Resolve the canonical cache key for a project path.
+
+    When ``LGREP_WORKTREE_DEDUP`` is enabled and the path is inside a git
+    worktree, returns the git common-dir parent (i.e., the repo root).
+    Falls back to ``Path.resolve()`` when not under git or when the flag
+    is off.
+
+    Uses ``--path-format=absolute`` to guarantee absolute output
+    (Git >= 2.30, January 2021).
+    """
+    resolved = project_path.resolve()
+
+    if not os.environ.get("LGREP_WORKTREE_DEDUP"):
+        return resolved
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-common-dir",
+            ],
+            cwd=str(resolved),
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            common_dir = Path(result.stdout.strip())
+            # common_dir is typically /path/to/repo/.git
+            # The repo root is its parent
+            if common_dir.name == ".git":
+                return common_dir.parent
+            # Linked worktrees may return paths like
+            # /path/main/.git/worktrees/name — walk up to the .git level
+            for parent in common_dir.parents:
+                if parent.name == ".git":
+                    return parent.parent
+            # Bare repos or unusual layouts — fallback
+            return resolved
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return resolved
+
+
 def get_project_db_path(project_path: str | Path) -> Path:
     """Get the database path for a project.
 
-    Creates a unique path based on the project's absolute path hash.
+    Creates a unique path based on the project's canonical key hash.
+    When ``LGREP_WORKTREE_DEDUP`` is enabled, git worktrees sharing a
+    common ``.git`` directory resolve to the same cache key.
 
     Args:
         project_path: Path to the project directory
@@ -95,8 +146,8 @@ def get_project_db_path(project_path: str | Path) -> Path:
     Returns:
         Path to the project's LanceDB directory
     """
-    project_path = Path(project_path).resolve()
-    path_hash = hashlib.sha256(str(project_path).encode()).hexdigest()[:12]
+    key = canonical_repo_key(Path(project_path))
+    path_hash = hashlib.sha256(str(key).encode()).hexdigest()[:12]
 
     cache_dir = Path(os.environ.get("LGREP_CACHE_DIR", DEFAULT_CACHE_DIR))
     return cache_dir / path_hash
@@ -127,6 +178,7 @@ def write_project_meta(
     project_path: str | Path,
     *,
     db_path: str | Path | None = None,
+    alias_paths: list[str] | None = None,
 ) -> None:
     """Write a metadata file alongside the LanceDB cache for reverse-mapping.
 
@@ -137,19 +189,86 @@ def write_project_meta(
     ``get_project_db_path``; callers that already know the cache
     directory (for example ``ChunkStore.__init__``) may pass it directly
     to avoid recomputing the hash.
+
+    ``alias_paths`` records additional filesystem paths (worktree paths)
+    that resolve to the same canonical cache.  When provided, the new
+    aliases are merged with any existing aliases from a prior write.
+    Within a single lgrep MCP process the ``asyncio.Lock`` in
+    ``_ensure_project_initialized`` serializes all inits, so no race.
+    Across separate processes, the read-modify-write block is guarded by
+    ``fcntl.flock`` on ``<cache_dir>/.meta.lock`` (POSIX advisory lock) so
+    concurrent multi-process writes do not lose aliases. On platforms
+    without ``fcntl`` (Windows), a one-time warning is logged and the
+    write proceeds without locking (single-developer / single-process
+    deployments stay unaffected).
     """
     project_path = str(Path(project_path).resolve())
     resolved_db_path = Path(db_path) if db_path is not None else get_project_db_path(project_path)
     meta_path = resolved_db_path / _META_FILENAME
     tmp_path = meta_path.with_suffix(".tmp")
+    lock_path = resolved_db_path / ".meta.lock"
     resolved_db_path.mkdir(parents=True, exist_ok=True)
-    payload = {"project_path": project_path, "updated_at": time.time()}
+
+    # Acquire POSIX advisory lock on a dedicated lock file. We lock on a
+    # SEPARATE file (not the meta itself) because the atomic rename in
+    # the write step would otherwise replace the file we hold open,
+    # invalidating the lock identity.
+    fcntl_mod = None
+    lock_fd = None
     try:
-        tmp_path.write_text(json.dumps(payload), encoding="utf-8")
-        tmp_path.rename(meta_path)
-    except OSError:
-        # Best-effort — never block startup
-        log.warning("write_project_meta_failed", project=project_path)
+        import fcntl as _fcntl
+
+        fcntl_mod = _fcntl
+    except ImportError:
+        log.warning(
+            "fcntl_unavailable_alias_writes_unguarded",
+            note="non-POSIX platform; alias_paths writes unguarded across processes",
+        )
+
+    if fcntl_mod is not None:
+        try:
+            # Open with O_CREAT so the lock file is created on first use.
+            # Keep open for the duration of the read-modify-write.
+            lock_fd = open(lock_path, "a+")  # noqa: SIM115 — closed in finally
+            fcntl_mod.flock(lock_fd.fileno(), fcntl_mod.LOCK_EX)
+        except OSError:
+            # Lock setup failed — proceed unguarded rather than block writes
+            log.warning("flock_setup_failed", project=project_path)
+            if lock_fd is not None:
+                lock_fd.close()
+                lock_fd = None
+
+    try:
+        # Merge with existing aliases (read-modify-write)
+        # — protected by flock above when available.
+        existing_aliases: list[str] = []
+        if alias_paths is not None:
+            existing_meta = read_project_meta(resolved_db_path)
+            if existing_meta and "alias_paths" in existing_meta:
+                existing_aliases = list(existing_meta["alias_paths"])
+            # Merge: deduplicate while preserving order
+            seen = set(existing_aliases)
+            for alias in alias_paths:
+                if alias not in seen:
+                    existing_aliases.append(alias)
+                    seen.add(alias)
+
+        payload: dict = {"project_path": project_path, "updated_at": time.time()}
+        if existing_aliases:
+            payload["alias_paths"] = existing_aliases
+        try:
+            tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+            tmp_path.rename(meta_path)
+        except OSError:
+            # Best-effort — never block startup
+            log.warning("write_project_meta_failed", project=project_path)
+    finally:
+        if lock_fd is not None and fcntl_mod is not None:
+            try:
+                fcntl_mod.flock(lock_fd.fileno(), fcntl_mod.LOCK_UN)
+            except OSError:
+                pass
+            lock_fd.close()
 
 
 def read_project_meta(db_path: Path) -> dict | None:
