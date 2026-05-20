@@ -1,3 +1,5 @@
+## 2026-05-20 (v3.0.3)\n\n### Fixed\n- clean up post-merge lint failures + bump to 3.1.0\n\n### Changed\n- replace hardcoded version assertion with pyproject.toml comparison\n- addWorktreeAwareCacheLifecycle\n- expand worktree workflow with concurrency + dual-pass gc
+
 ## 2026-05-11 (v3.0.2)\n\n### Fixed\n- avoid staleness loop on zero-chunk files
 
 ## 2026-05-11 (v3.0.1)\n\n### Fixed\n- pin compatible tree-sitter language pack\n- support pydantic TypedDict on Python 3.11\n- move dependencies out of [project.urls] section\n\n### Changed\n- use setup-python for test matrix\n- install dev extras with uv\n- add lgrep ignore defaults\n- format codebase for CI\n- add auto release workflow
