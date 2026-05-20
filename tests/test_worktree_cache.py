@@ -3,7 +3,7 @@
 import os
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -150,3 +150,118 @@ class TestDbPathDedup:
         db1 = get_project_db_path(tmp_path / "a")
         db2 = get_project_db_path(tmp_path / "b")
         assert db1 != db2
+
+
+class TestStaleFileDeletionGuard:
+    """Tests for the stale-file deletion guard when dedup is enabled."""
+
+    def test_stale_deletion_skipped_with_dedup(self, tmp_path, monkeypatch):
+        """When dedup is on, stale files are NOT deleted from shared cache."""
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore, get_project_db_path, EMBEDDING_DIM
+
+        # Set up a project with one file
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "real.py").write_text("print('hello')")
+
+        # Create a store with a "stale" file chunk that doesn't exist on disk
+        db_path = get_project_db_path(project)
+        store = ChunkStore(db_path, project_path=project)
+
+        # Manually insert a chunk for a file that doesn't exist
+        stale_chunk = MagicMock()
+        stale_chunk.file_path = "gone.py"
+        stale_chunk.chunk_index = 0
+        stale_chunk.start_line = 1
+        stale_chunk.end_line = 5
+        stale_chunk.text = "# stale content"
+        stale_chunk.file_hash = "abc123"
+        import hashlib
+        import uuid
+        from lgrep.storage import CodeChunk
+
+        store.add_chunks(
+            [
+                CodeChunk(
+                    id=str(uuid.uuid4()),
+                    file_path="gone.py",
+                    chunk_index=0,
+                    start_line=1,
+                    end_line=5,
+                    content="# stale content",
+                    vector=[0.1] * EMBEDDING_DIM,
+                    file_hash="abc123",
+                    indexed_at=1000.0,
+                )
+            ]
+        )
+
+        assert store.count_chunks() == 1
+
+        # Create a mock embedder that returns zeros
+        embedder = MagicMock()
+        embed_result = MagicMock()
+        embed_result.embeddings = [[0.0] * EMBEDDING_DIM]
+        embed_result.token_usage = 0
+        embedder.embed_documents.return_value = embed_result
+
+        indexer = Indexer(project, store, embedder)
+        indexer.index_all()
+
+        # The stale chunk should still exist because dedup is on
+        indexed_files = store.get_indexed_files()
+        assert "gone.py" in indexed_files, (
+            "Stale file was deleted despite dedup being on — "
+            "this would corrupt shared cache across worktrees"
+        )
+
+    def test_stale_deletion_runs_without_dedup(self, tmp_path, monkeypatch):
+        """When dedup is off, stale files ARE deleted (existing behavior)."""
+        monkeypatch.delenv("LGREP_WORKTREE_DEDUP", raising=False)
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore, get_project_db_path, EMBEDDING_DIM, CodeChunk
+        import uuid
+
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "real.py").write_text("print('hello')")
+
+        db_path = get_project_db_path(project)
+        store = ChunkStore(db_path, project_path=project)
+
+        # Insert stale chunk
+        store.add_chunks(
+            [
+                CodeChunk(
+                    id=str(uuid.uuid4()),
+                    file_path="gone.py",
+                    chunk_index=0,
+                    start_line=1,
+                    end_line=5,
+                    content="# stale",
+                    vector=[0.1] * EMBEDDING_DIM,
+                    file_hash="abc123",
+                    indexed_at=1000.0,
+                )
+            ]
+        )
+
+        embedder = MagicMock()
+        embed_result = MagicMock()
+        embed_result.embeddings = [[0.0] * EMBEDDING_DIM]
+        embed_result.token_usage = 0
+        embedder.embed_documents.return_value = embed_result
+
+        indexer = Indexer(project, store, embedder)
+        indexer.index_all()
+
+        indexed_files = store.get_indexed_files()
+        assert "gone.py" not in indexed_files, (
+            "Stale file was NOT deleted when dedup is off — existing behavior should be preserved"
+        )
