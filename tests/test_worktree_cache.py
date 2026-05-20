@@ -938,3 +938,110 @@ class TestGcWorktreeMeta:
         assert rc == 0
         mock_prune.assert_called_once()
         mock_gc.assert_called_once()
+
+
+class TestAliasFlock:
+    """Tests for fcntl.flock guard on write_project_meta read-modify-write."""
+
+    def test_concurrent_alias_writes_no_data_loss(self, tmp_path, monkeypatch):
+        """Two concurrent processes writing different aliases — both land in final meta."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from multiprocessing import Process
+        from lgrep.storage import get_project_db_path, read_project_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+        db_path.mkdir(parents=True, exist_ok=True)
+
+        def writer(project_str: str, db_path_str: str, alias: str, cache_dir: str):
+            import os
+
+            os.environ["LGREP_CACHE_DIR"] = cache_dir
+            from lgrep.storage import write_project_meta
+            from pathlib import Path
+
+            for _ in range(20):  # Multiple writes to maximize race window
+                write_project_meta(
+                    project_str,
+                    db_path=Path(db_path_str),
+                    alias_paths=[alias],
+                )
+
+        procs = []
+        for i in range(4):
+            p = Process(
+                target=writer,
+                args=(
+                    str(project),
+                    str(db_path),
+                    f"/worktree/alias_{i}",
+                    str(tmp_path / "cache"),
+                ),
+            )
+            procs.append(p)
+            p.start()
+
+        for p in procs:
+            p.join(timeout=10)
+            assert p.exitcode == 0, f"Writer process failed: exitcode={p.exitcode}"
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        aliases = set(meta.get("alias_paths", []))
+        # All 4 aliases must be present — flock prevents lost updates
+        for i in range(4):
+            assert f"/worktree/alias_{i}" in aliases, (
+                f"Lost alias /worktree/alias_{i} due to concurrent-write race (got {aliases})"
+            )
+
+    def test_flock_called_during_rmw(self, tmp_path, monkeypatch):
+        """fcntl.flock is called with LOCK_EX before read, LOCK_UN after rename."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.storage import get_project_db_path, write_project_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+
+        with patch("fcntl.flock") as mock_flock:
+            write_project_meta(project, db_path=db_path, alias_paths=["/wt/a"])
+
+        # Must have been called at least twice: LOCK_EX then LOCK_UN
+        assert mock_flock.call_count >= 2
+        # First call should request LOCK_EX (some integer >= 2)
+        import fcntl as _fcntl
+
+        first_call_op = mock_flock.call_args_list[0][0][1]
+        assert first_call_op == _fcntl.LOCK_EX
+        last_call_op = mock_flock.call_args_list[-1][0][1]
+        assert last_call_op == _fcntl.LOCK_UN
+
+    def test_flock_unavailable_graceful(self, tmp_path, monkeypatch):
+        """When fcntl is unavailable (Windows), write still succeeds with warning."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
+
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+
+        # Patch the import inside write_project_meta to raise ImportError
+        import sys
+
+        original_fcntl = sys.modules.get("fcntl")
+        sys.modules["fcntl"] = None  # type: ignore[assignment]
+        try:
+            # Force re-import path by patching the lookup
+            with patch.dict(sys.modules, {"fcntl": None}):
+                write_project_meta(project, db_path=db_path, alias_paths=["/wt/no_lock"])
+        finally:
+            if original_fcntl is not None:
+                sys.modules["fcntl"] = original_fcntl
+
+        meta = read_project_meta(db_path)
+        assert meta is not None
+        assert "/wt/no_lock" in meta.get("alias_paths", [])
