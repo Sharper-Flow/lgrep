@@ -8,6 +8,7 @@ from lgrep.cli import _cmd_index_semantic as _cmd_index
 from lgrep.cli import _cmd_init_ignore, main
 from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
+from lgrep.cli import _cmd_gc
 from lgrep.indexing import IndexStatus
 from lgrep.storage import SearchResult, SearchResults
 
@@ -593,3 +594,74 @@ class TestCmdPruneOrphans:
         assert "mutually exclusive" in err
         # And the prune tool must not have been invoked.
         mock_prune.assert_not_called()
+
+
+class TestGcSubcommand:
+    """Tests for lgrep gc CLI subcommand."""
+
+    def test_gc_help(self, capsys):
+        """lgrep gc --help should print usage text."""
+        rc = _cmd_gc(["--help"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "gc" in out
+        assert "--execute" in out
+        assert "--dry-run" in out
+
+    def test_gc_dry_run_default(self, tmp_path, monkeypatch, capsys):
+        """lgrep gc (no flags) runs prune_orphans with dry_run=True."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        with patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune:
+            mock_prune.return_value = {
+                "dry_run": True,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+            rc = _cmd_gc([])
+
+        assert rc == 0
+        mock_prune.assert_called_once()
+        assert mock_prune.call_args[1]["dry_run"] is True
+
+    def test_gc_execute(self, tmp_path, monkeypatch, capsys):
+        """lgrep gc --execute runs prune_orphans with dry_run=False."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        with patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune:
+            mock_prune.return_value = {
+                "dry_run": False,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+            rc = _cmd_gc(["--execute"])
+
+        assert rc == 0
+        mock_prune.assert_called_once()
+        assert mock_prune.call_args[1]["dry_run"] is False
+
+    def test_gc_mutual_exclusion(self, capsys):
+        """lgrep gc --execute --dry-run returns exit code 2."""
+        with patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune:
+            rc = _cmd_gc(["--execute", "--dry-run"])
+
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "mutually exclusive" in err
+        mock_prune.assert_not_called()
+
+    def test_gc_dispatch(self, capsys):
+        """main() dispatches 'gc' subcommand."""
+        with patch("sys.argv", ["lgrep", "gc", "--help"]):
+            rc = main()
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "gc" in out
