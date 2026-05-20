@@ -20,9 +20,8 @@ from pathlib import Path
 
 import structlog
 
-from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
+from lgrep.storage import get_project_db_path, read_project_meta
 from lgrep.storage._chunk_store import DEFAULT_CACHE_DIR
-from lgrep.tools._meta import make_meta
 
 log = structlog.get_logger()
 
@@ -77,9 +76,8 @@ def invalidate_worktree_cache(
         Tuple of (entries, paths_cleaned, bytes_reclaimed) where entries
         is a list of dicts matching ``WorktreeInvalidationEntry`` shape.
     """
-    import time
+    import time  # noqa: F401  — used by meta payload writes below
 
-    t0 = time.monotonic()
     root = _resolve_cache_dir(cache_dir)
     try:
         root_resolved = root.resolve()

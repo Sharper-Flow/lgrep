@@ -6,6 +6,7 @@ Supports hybrid search (vector + FTS) with RRF reranking.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -264,10 +265,8 @@ def write_project_meta(
             log.warning("write_project_meta_failed", project=project_path)
     finally:
         if lock_fd is not None and fcntl_mod is not None:
-            try:
+            with contextlib.suppress(OSError):
                 fcntl_mod.flock(lock_fd.fileno(), fcntl_mod.LOCK_UN)
-            except OSError:
-                pass
             lock_fd.close()
 
 

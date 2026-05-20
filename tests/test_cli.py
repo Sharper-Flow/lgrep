@@ -4,11 +4,10 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from lgrep.cli import _cmd_gc, _cmd_init_ignore, main
 from lgrep.cli import _cmd_index_semantic as _cmd_index
-from lgrep.cli import _cmd_init_ignore, main
 from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
-from lgrep.cli import _cmd_gc
 from lgrep.indexing import IndexStatus
 from lgrep.storage import SearchResult, SearchResults
 

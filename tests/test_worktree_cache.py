@@ -1,11 +1,10 @@
 """Tests for worktree-aware cache key resolution and lifecycle."""
 
+import contextlib
 import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
 from lgrep.storage._chunk_store import canonical_repo_key
@@ -161,7 +160,7 @@ class TestStaleFileDeletionGuard:
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         from lgrep.indexing import Indexer
-        from lgrep.storage import ChunkStore, get_project_db_path, EMBEDDING_DIM
+        from lgrep.storage import EMBEDDING_DIM, ChunkStore, get_project_db_path
 
         # Set up a project with one file
         project = tmp_path / "project"
@@ -180,8 +179,8 @@ class TestStaleFileDeletionGuard:
         stale_chunk.end_line = 5
         stale_chunk.text = "# stale content"
         stale_chunk.file_hash = "abc123"
-        import hashlib
         import uuid
+
         from lgrep.storage import CodeChunk
 
         store.add_chunks(
@@ -224,9 +223,10 @@ class TestStaleFileDeletionGuard:
         monkeypatch.delenv("LGREP_WORKTREE_DEDUP", raising=False)
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
-        from lgrep.indexing import Indexer
-        from lgrep.storage import ChunkStore, get_project_db_path, EMBEDDING_DIM, CodeChunk
         import uuid
+
+        from lgrep.indexing import Indexer
+        from lgrep.storage import EMBEDDING_DIM, ChunkStore, CodeChunk, get_project_db_path
 
         project = tmp_path / "project"
         project.mkdir()
@@ -330,8 +330,9 @@ class TestStartupOrphanSweep:
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         import asyncio
-        from lgrep.server.lifecycle import _schedule_startup_sweep, LgrepContext
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
+        from lgrep.server.lifecycle import LgrepContext, _schedule_startup_sweep
 
         ctx = LgrepContext()
         ctx.projects = {
@@ -356,9 +357,11 @@ class TestStartupOrphanSweep:
                 "failures": [],
             }
 
-        with patch.object(asyncio, "sleep", side_effect=fake_sleep):
-            with patch("lgrep.tools.prune_orphans.prune_orphans", side_effect=mock_prune):
-                asyncio.run(_schedule_startup_sweep(ctx))
+        with (
+            patch.object(asyncio, "sleep", side_effect=fake_sleep),
+            patch("lgrep.tools.prune_orphans.prune_orphans", side_effect=mock_prune),
+        ):
+            asyncio.run(_schedule_startup_sweep(ctx))
 
         assert captured_active is not None
         assert "/active/project" in captured_active
@@ -366,8 +369,9 @@ class TestStartupOrphanSweep:
     def test_startup_sweep_cancels_on_shutdown(self):
         """Sweep task is cancelled when server shuts down before 5-min delay."""
         import asyncio
-        from lgrep.server.lifecycle import _schedule_startup_sweep, LgrepContext
         from unittest.mock import patch
+
+        from lgrep.server.lifecycle import LgrepContext, _schedule_startup_sweep
 
         ctx = LgrepContext()
         sweep_ran = False
@@ -390,10 +394,8 @@ class TestStartupOrphanSweep:
             task = asyncio.create_task(_schedule_startup_sweep(ctx))
             await asyncio.sleep(0.01)  # Let it start sleeping
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
             return sweep_ran
 
         with patch("lgrep.tools.prune_orphans.prune_orphans", side_effect=mock_prune):
@@ -730,6 +732,7 @@ class TestInMemoryDedup:
         monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
 
         import asyncio
+
         from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
 
         repo, worktree = self._make_repo_with_worktree(tmp_path)
@@ -760,7 +763,8 @@ class TestInMemoryDedup:
         monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
 
         import asyncio
-        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized, ProjectState
+
+        from lgrep.server.lifecycle import LgrepContext, ProjectState, _ensure_project_initialized
 
         repo, worktree = self._make_repo_with_worktree(tmp_path)
         try:
@@ -786,6 +790,7 @@ class TestInMemoryDedup:
         monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
 
         import asyncio
+
         from lgrep.server import remove_project
         from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
 
@@ -795,8 +800,8 @@ class TestInMemoryDedup:
             with patch("lgrep.server.lifecycle.VoyageEmbedder") as mock_embedder:
                 mock_embedder.return_value = MagicMock()
 
-                state_trunk = asyncio.run(_ensure_project_initialized(ctx, repo))
-                state_worktree = asyncio.run(_ensure_project_initialized(ctx, worktree))
+                asyncio.run(_ensure_project_initialized(ctx, repo))
+                asyncio.run(_ensure_project_initialized(ctx, worktree))
 
             # Remove worktree path
             result = remove_project(ctx, str(worktree))
@@ -948,6 +953,7 @@ class TestAliasFlock:
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         from multiprocessing import Process
+
         from lgrep.storage import get_project_db_path, read_project_meta
 
         project = tmp_path / "project"
@@ -959,8 +965,9 @@ class TestAliasFlock:
             import os
 
             os.environ["LGREP_CACHE_DIR"] = cache_dir
-            from lgrep.storage import write_project_meta
             from pathlib import Path
+
+            from lgrep.storage import write_project_meta
 
             for _ in range(20):  # Multiple writes to maximize race window
                 write_project_meta(

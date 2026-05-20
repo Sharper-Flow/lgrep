@@ -404,7 +404,6 @@ def gc_worktree_meta(
     Returns a report counting directories examined, aliases removed, and
     cache directories updated.
     """
-    from lgrep.storage._chunk_store import write_project_meta as _write_meta
 
     t0 = time.monotonic()
     root = _resolve_cache_dir(cache_dir)
