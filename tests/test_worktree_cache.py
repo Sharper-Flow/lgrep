@@ -402,6 +402,65 @@ class TestStartupOrphanSweep:
         assert not result, "Sweep should NOT have run prune_orphans after cancellation"
 
 
+class TestWorktreeDedupE2E:
+    """End-to-end integration test for worktree dedup."""
+
+    def test_two_worktrees_one_cache_dir(self, tmp_path, monkeypatch):
+        """Two git worktrees of the same repo produce one cache dir with dedup."""
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        # Create a real git repo + worktree
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+        (repo / "hello.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@t",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@t",
+            },
+        )
+
+        worktree = tmp_path / "worktree"
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+        try:
+            from lgrep.storage import get_project_db_path
+
+            db_trunk = get_project_db_path(repo)
+            db_worktree = get_project_db_path(worktree)
+
+            # AC#1: Same cache dir
+            assert db_trunk == db_worktree, f"Cache dirs differ: {db_trunk} vs {db_worktree}"
+
+            # AC#10: Non-git paths still produce different caches (no regression)
+            random_path = tmp_path / "random"
+            random_path.mkdir()
+            db_random = get_project_db_path(random_path)
+            assert db_random != db_trunk
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", str(worktree), "--force"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+
+
 class TestInvalidateWorktreeCache:
     """Tests for invalidate_worktree_cache tool implementation."""
 
