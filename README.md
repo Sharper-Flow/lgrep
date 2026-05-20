@@ -468,9 +468,15 @@ When using git worktrees (e.g., ADV's per-change worktree isolation), multiple c
 export LGREP_WORKTREE_DEDUP=1
 ```
 
-With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share one semantic index.
+With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share:
 
-**Tradeoff:** When dedup is enabled, stale-file cleanup during indexing is skipped. Deleted-file chunks remain in the shared cache until a full rebuild. This is benign (extra search results, not wrong results).
+- One LanceDB cache directory (disk dedup)
+- One `ProjectState` object in memory (memory dedup — RSS stays bounded regardless of worktree count)
+- One `project_meta.json` with `alias_paths` tracking every worktree that uses the canonical cache
+
+**Concurrency:** Cross-process alias updates to `project_meta.json` are guarded by a POSIX advisory lock (`fcntl.flock`) on a dedicated `.meta.lock` file, so simultaneous writes from multiple lgrep instances do not lose alias entries.
+
+**Tradeoff:** When dedup is enabled, stale-file cleanup during indexing is skipped. Deleted-file chunks remain in the shared cache until a full rebuild. This is benign (extra search results, not wrong results) and avoids cross-worktree corruption.
 
 **ADV integration:** Call the `invalidate_worktree_cache` MCP tool during `/adv-archive` Phase 9 (before `adv_worktree_delete`) to remove the worktree's alias from the shared cache metadata:
 
@@ -478,7 +484,12 @@ With this flag, lgrep resolves each project path through `git rev-parse --git-co
 invalidate_worktree_cache(paths: ["/path/to/worktree"])
 ```
 
-**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer) to prune orphan caches and clean stale worktree aliases.
+**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs two passes:
+
+1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
+2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files (worktrees that were deleted without calling `invalidate_worktree_cache`)
+
+Both passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects.
 
 ## Troubleshooting
 
