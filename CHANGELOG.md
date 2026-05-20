@@ -1,3 +1,5 @@
+## 2026-05-20 (v3.0.4)\n\n### Changed\n- align version strings to v3.0.3 released tag
+
 ## 2026-05-20 (v3.0.3)\n\n### Fixed\n- clean up post-merge lint failures + bump to 3.1.0\n\n### Changed\n- replace hardcoded version assertion with pyproject.toml comparison\n- addWorktreeAwareCacheLifecycle\n- expand worktree workflow with concurrency + dual-pass gc
 
 ## 2026-05-11 (v3.0.2)\n\n### Fixed\n- avoid staleness loop on zero-chunk files
