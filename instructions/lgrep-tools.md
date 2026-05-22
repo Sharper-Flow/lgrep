@@ -27,7 +27,8 @@ the question:
 ### When to Use Built-in grep/glob Instead
 
 - The query is explicitly an exact-match text/regex search
-- lgrep failed or timed out once this turn; fall back immediately, do not retry
+- `lgrep_search_semantic` with the default hybrid search timed out or hit a deadline: retry once with `hybrid:false` and a small limit (for example `limit:5`), then fall back to symbols/text/read if that also fails
+- A non-semantic lgrep tool failed or timed out once this turn; fall back immediately, do not retry
 - lgrep MCP server is not running or not configured
 
 ### Anti-Patterns (Do NOT Do These)

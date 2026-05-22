@@ -67,6 +67,19 @@ the `lgrep_*` tool definitions in its tool manifest.
 - If using **Vision / open-chad**: set `VOYAGE_API_KEY` under `lgrep.env` in `~/.config/vision/servers.yaml`.
 - If using **raw OpenCode MCP config**: set `VOYAGE_API_KEY` in `mcp.lgrep.env` in `~/.config/opencode/opencode.json`.
 
+**Vision / OpenCode tuning for agent-heavy worktrees:**
+```yaml
+lgrep:
+  env:
+    VOYAGE_API_KEY: "${VOYAGE_API_KEY}"
+    LGREP_WORKTREE_DEDUP: "1"
+    LGREP_WARM_PATHS: "/abs/path/to/primary-repo:/abs/path/to/tooling-repo"
+    LGREP_AUTO_WARM_DISK: "false"
+    LGREP_TOOL_TIMEOUT_S: "8"
+```
+
+Use explicit `LGREP_WARM_PATHS` for repos agents actively use. Do not warm every cached repo by default on large multi-repo machines. Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client deadline so agents receive structured lgrep errors instead of transport-level deadline failures.
+
 **Recommended — one command:**
 ```bash
 lgrep install-opencode
@@ -117,6 +130,8 @@ Searches a project semantically.
 - `path` (string, **required**): Absolute path to the project to search. Auto-loads from disk if previously indexed in a prior session.
 - `m` (int): Maximum results (default 10). Alias: `limit`.
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
+
+If a default hybrid semantic search times out or hits a deadline, retry once with `hybrid:false` and a small limit (for example `m=5` / `limit=5`) before falling back to symbol/text/read tools.
 
 **Example usage:**
 ```python

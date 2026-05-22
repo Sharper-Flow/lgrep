@@ -429,6 +429,33 @@ Security notes:
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
 | `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
 
+### Vision / OpenCode tuning
+
+For agent-heavy local setups that route lgrep through a Vision-managed MCP
+server, prefer explicit warm paths over warming every cached repository:
+
+```yaml
+lgrep:
+  port: 6278
+  command: /home/you/.local/bin/lgrep
+  env:
+    VOYAGE_API_KEY: "${VOYAGE_API_KEY}"
+    LGREP_WORKTREE_DEDUP: "1"
+    LGREP_WARM_PATHS: "/home/you/dev/primary:/home/you/dev/tooling"
+    LGREP_AUTO_WARM_DISK: "false"
+    LGREP_TOOL_TIMEOUT_S: "8"
+```
+
+- `LGREP_WORKTREE_DEDUP=1` avoids duplicate semantic caches for git worktrees.
+- `LGREP_WARM_PATHS` should name only repos agents actively search.
+- `LGREP_AUTO_WARM_DISK=false` prevents surprise startup work from old cache entries.
+- Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client timeout so callers get a structured lgrep error before a transport deadline.
+
+Agent fallback rule: if a default hybrid `lgrep_search_semantic` call times out
+or hits a deadline, retry once with `hybrid:false` and a small limit such as
+`limit=5`, then fall back to `lgrep_search_symbols`, `lgrep_search_text`, or
+direct file reads.
+
 ### Ignore behavior
 
 - `.gitignore` is respected automatically
