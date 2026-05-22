@@ -98,6 +98,8 @@ class Indexer:
             status.chunk_count += file_status.chunk_count
             status.total_tokens += file_status.total_tokens
 
+        self.storage.prepare_hybrid_indexes()
+
         status.duration_ms = (time.perf_counter() - start_time) * 1000
 
         log.info(

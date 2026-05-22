@@ -302,6 +302,7 @@ class TestSearch:
     def test_search_hybrid(self, chunk_store, sample_chunks):
         """Should perform hybrid search with RRF reranking."""
         chunk_store.add_chunks(sample_chunks)
+        chunk_store.ensure_fts_index()
         query_vector = [0.1] * EMBEDDING_DIM
 
         results = chunk_store.search_hybrid(query_vector, "def pass", limit=2)
@@ -333,7 +334,7 @@ class TestSearch:
         assert results.results[0].match_type == "vector"
 
     def test_search_hybrid_large_table_creates_vector_index(self, temp_db_path):
-        """Vector index should be auto-created when row count exceeds threshold."""
+        """Vector index should be prepared outside the live query path."""
         store = ChunkStore(temp_db_path)
         # Need at least 256 rows to train PQ index in LanceDB
         chunks = [make_chunk(content=f"content {i}", chunk_index=i) for i in range(260)]
@@ -343,13 +344,8 @@ class TestSearch:
         def fake_count():
             return 1500
 
-        import random
-
-        query_vector = [random.random() for _ in range(EMBEDDING_DIM)]
-
         with patch.object(store.table, "count_rows", side_effect=fake_count):
-            # This should not raise
-            store.search_hybrid(query_vector, "test query", limit=3)
+            store.prepare_hybrid_indexes()
             assert store._vector_indexed is True
 
     def test_ensure_fts_index_idempotent(self, chunk_store):

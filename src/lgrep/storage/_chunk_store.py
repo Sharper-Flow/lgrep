@@ -391,6 +391,7 @@ class ChunkStore:
     def table(self) -> Table:
         """Get or create the chunks table."""
         if self._table is None:
+            created = False
             try:
                 # Use open_table directly (EAFP) — avoids lancedb
                 # list_tables() returning ListTablesResponse which
@@ -403,6 +404,7 @@ class ChunkStore:
                     CHUNKS_TABLE,
                     schema=CodeChunk.to_arrow_schema(),
                 )
+                created = True
                 log.info("chunk_table_created")
             except Exception as open_err:
                 # Unexpected error (corruption, permission, etc.)
@@ -419,8 +421,32 @@ class ChunkStore:
                     CHUNKS_TABLE,
                     schema=CodeChunk.to_arrow_schema(),
                 )
+                created = True
                 log.info("chunk_table_recreated_after_corruption")
+            if not created:
+                self._probe_existing_indexes()
         return self._table
+
+    def _probe_existing_indexes(self) -> None:
+        """Best-effort probe for indexes persisted by LanceDB.
+
+        LanceDB versions expose index metadata with slightly different object
+        shapes, so this method only promotes positive readiness signals. Failure
+        leaves both flags unchanged and search still degrades safely to vector.
+        """
+        if self._table is None or not hasattr(self._table, "list_indices"):
+            return
+        try:
+            indexes = self._table.list_indices()
+        except Exception as e:
+            log.debug("index_readiness_probe_failed", error=str(e))
+            return
+
+        rendered = " ".join(str(index).lower() for index in indexes)
+        if "content" in rendered and ("fts" in rendered or "inverted" in rendered):
+            self._fts_indexed = True
+        if "vector" in rendered or "ivf" in rendered or "hnsw" in rendered:
+            self._vector_indexed = True
 
     def add_chunks(self, chunks: list[CodeChunk]) -> int:
         """Add chunks to the store.
@@ -485,11 +511,26 @@ class ChunkStore:
         """Ensure the FTS index exists on the content column."""
         if not self._fts_indexed:
             try:
-                self.table.create_fts_index("content", replace=True)
+                self.table.create_fts_index("content")
                 self._fts_indexed = True
                 log.info("fts_index_created")
             except Exception as e:
                 log.warning("fts_index_failed", error=str(e))
+
+    def prepare_hybrid_indexes(self, vector_index_row_threshold: int = 1000) -> None:
+        """Prepare hybrid-search indexes outside the live query path."""
+        self.ensure_fts_index()
+        row_count = self.table.count_rows()
+        if row_count > vector_index_row_threshold and not self._vector_indexed:
+            try:
+                self.table.create_index(
+                    metric="cosine",
+                    vector_column_name="vector",
+                )
+                self._vector_indexed = True
+                log.info("vector_index_created", rows=row_count)
+            except Exception as idx_err:
+                log.debug("vector_index_create_skipped", error=str(idx_err))
 
     def search_hybrid(
         self,
@@ -509,22 +550,13 @@ class ChunkStore:
         """
         start = time.perf_counter()
 
-        # Ensure FTS index exists
-        self.ensure_fts_index()
-
-        # Create vector index if needed (for large tables, once per session)
-        row_count = self.table.count_rows()
-        if row_count > 1000 and not self._vector_indexed:
-            try:
-                self.table.create_index(
-                    metric="cosine",
-                    vector_column_name="vector",
-                    replace=True,
-                )
-                self._vector_indexed = True
-                log.info("vector_index_created", rows=row_count)
-            except Exception as idx_err:
-                log.debug("vector_index_create_skipped", error=str(idx_err))
+        if not self._fts_indexed:
+            log.info(
+                "hybrid_search_degraded_to_vector",
+                reason="fts_index_not_ready",
+                action="prepare_hybrid_indexes_outside_query_path",
+            )
+            return self.search_vector(query_vector, limit)
 
         # Hybrid search with RRF reranking
         reranker = RRFReranker()
@@ -554,7 +586,7 @@ class ChunkStore:
         return SearchResults(
             results=results,
             query_time_ms=elapsed_ms,
-            total_chunks=row_count,
+            total_chunks=self.table.count_rows(),
         )
 
     def search_vector(
