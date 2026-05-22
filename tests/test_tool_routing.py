@@ -265,6 +265,13 @@ class TestPackagedInstructionRouting:
             "lgrep-tools.md does not mention lgrep_search_semantic"
         )
 
+    def test_packaged_instruction_retries_vector_only_after_semantic_timeout(self):
+        """lgrep-tools.md must give agents the bounded timeout fallback."""
+        content = _PACKAGE_INSTRUCTION.read_text(encoding="utf-8")
+        assert "hybrid:false" in content or "hybrid: false" in content
+        assert "timeout" in content.lower() or "deadline" in content.lower()
+        assert "retry once" in content.lower()
+
     def test_packaged_instruction_routes_symbols_to_lgrep(self):
         """lgrep-tools.md must route symbol queries to lgrep_search_symbols."""
         content = _PACKAGE_INSTRUCTION.read_text(encoding="utf-8")

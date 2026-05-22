@@ -310,6 +310,28 @@ class TestSearch:
         assert results.results[0].match_type == "hybrid"
         assert chunk_store._fts_indexed is True
 
+    def test_search_hybrid_does_not_create_indexes_on_query_path(self, chunk_store, sample_chunks):
+        """Hybrid search must not create or replace indexes during a live query."""
+        chunk_store.add_chunks(sample_chunks)
+        query_vector = [0.1] * EMBEDDING_DIM
+
+        with (
+            patch.object(
+                chunk_store.table,
+                "create_fts_index",
+                side_effect=AssertionError("create_fts_index called on query path"),
+            ),
+            patch.object(
+                chunk_store.table,
+                "create_index",
+                side_effect=AssertionError("create_index called on query path"),
+            ),
+        ):
+            results = chunk_store.search_hybrid(query_vector, "def pass", limit=2)
+
+        assert len(results.results) == 2
+        assert results.results[0].match_type == "vector"
+
     def test_search_hybrid_large_table_creates_vector_index(self, temp_db_path):
         """Vector index should be auto-created when row count exceeds threshold."""
         store = ChunkStore(temp_db_path)
