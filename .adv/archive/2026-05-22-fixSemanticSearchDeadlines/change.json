@@ -1,0 +1,626 @@
+{
+  "id": "fixSemanticSearchDeadlines",
+  "title": "Fix semantic search deadlines",
+  "status": "archived",
+  "created_at": "2026-05-22T04:46:03.377Z",
+  "tasks": [
+    {
+      "id": "tk-7c7b948984cb",
+      "title": "Add regression tests for semantic deadline behavior",
+      "type": "code",
+      "section": "Testing",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-05-22T04:53:44.753Z",
+      "deps": [],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC6",
+          "C4"
+        ],
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC5",
+          "AC6"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "DONT1",
+          "DONT2"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-22T04:54:31.163Z",
+      "verification": "RED evidence: `uv run --extra dev python -m pytest tests/test_storage.py::TestSearch::test_search_hybrid_does_not_create_indexes_on_query_path tests/test_tool_routing.py -q` failed with the new hot-path guard and fallback-guidance tests while existing surrounding routing tests passed.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added storage test asserting live hybrid search does not call `create_fts_index`/`create_index` and falls back to vector results. Added tool-routing test asserting packaged instructions mention timeout/deadline retry with `hybrid:false`. RED run failed as expected before implementation.",
+      "filesTouched": [
+        "tests/test_storage.py",
+        "tests/test_tool_routing.py"
+      ],
+      "touched_files": [
+        "tests/test_storage.py",
+        "tests/test_tool_routing.py"
+      ],
+      "checkpointSha": "32e335fde7d35d56ecb0f28bd579021c232d1037",
+      "completedAt": "2026-05-22T04:56:02.142Z",
+      "completed_at": "2026-05-22T04:56:02.142Z",
+      "notes": "Added failing regression tests for hybrid search hot-path index creation and timeout fallback guidance. Checkpoint commit 32e335f.",
+      "error_recovery": {
+        "last_error": "Initial `python -m pytest` lacked pytest; `uv run pytest` without dev extra collected with system pytest and missed lancedb. Switched to `uv run --extra dev python -m pytest`.",
+        "retry_count": 1,
+        "max_retries": 3,
+        "error_class": "ENVIRONMENTAL",
+        "next_strategy": "Use `uv run --extra dev python -m pytest` for project tests.",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "No module named pytest / ModuleNotFoundError: lancedb under wrong pytest invocation",
+            "diagnosis": "Test environment needed uv dev extra and python -m pytest to use project venv.",
+            "fix_tried": "Reran with `uv run --extra dev python -m pytest`.",
+            "strategy_label": "use_uv_dev_extra",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-22T04:55:45Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-22T04:56:14.581Z"
+    },
+    {
+      "id": "tk-b64c3b80d421",
+      "title": "Refactor hybrid index readiness and fallback",
+      "type": "code",
+      "section": "Implementation",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-05-22T04:53:54.389Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-7c7b948984cb"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "C4"
+        ],
+        "verifies": [
+          "AC1",
+          "AC2"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "DONT1",
+          "DONT2"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-22T04:56:27.699Z",
+      "verification": "GREEN evidence: `uv run --extra dev python -m pytest tests/test_storage.py -q` passed: 33 passed in 1.73s. Focused hot-path tests also passed.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added best-effort LanceDB index readiness probing on table open. Added `prepare_hybrid_indexes()` for explicit indexing paths and invoked it after `Indexer.index_all()`. Removed `replace=True` hot-path index creation from `search_hybrid`; when FTS is not ready, search degrades to `search_vector()` with log context. Updated storage tests to reflect explicit preparation.",
+      "filesTouched": [
+        "src/lgrep/indexing.py",
+        "src/lgrep/storage/_chunk_store.py",
+        "tests/test_storage.py"
+      ],
+      "touched_files": [
+        "src/lgrep/indexing.py",
+        "src/lgrep/storage/_chunk_store.py",
+        "tests/test_storage.py"
+      ],
+      "checkpointSha": "840eaea7ee17a041a2beec8ca4d1e36b262290cd",
+      "completedAt": "2026-05-22T04:58:22.351Z",
+      "completed_at": "2026-05-22T04:58:22.351Z",
+      "notes": "Refactored hybrid search to avoid live query index creation and fall back to vector when FTS is not ready. Checkpoint commit 840eaea.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-22T04:58:30.460Z"
+    },
+    {
+      "id": "tk-9bd42b3be86a",
+      "title": "Update setup and agent guidance for Vision/OpenCode lgrep usage",
+      "type": "code",
+      "section": "Documentation",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-05-22T04:54:03.084Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-7c7b948984cb"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC3",
+          "AC4",
+          "AC5"
+        ],
+        "verifies": [
+          "AC3",
+          "AC4",
+          "AC5"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "DONT3"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-22T04:58:46.586Z",
+      "verification": "GREEN evidence: `uv run --extra dev python -m pytest tests/test_tool_routing.py -q` passed: 43 passed, 2 skipped in 0.04s.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Documented Vision/OpenCode tuning in README and skill docs: worktree dedup, explicit warm paths, no auto-warm-all-disk, and lgrep timeout below proxy deadline. Updated always-on instruction and skill usage to retry once with `hybrid:false` after hybrid semantic timeout/deadline, then fall back to symbols/text/read.",
+      "filesTouched": [
+        "README.md",
+        "instructions/lgrep-tools.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "touched_files": [
+        "README.md",
+        "instructions/lgrep-tools.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "checkpointSha": "609f3f5c89292f816294f3f5e5badfd77f4f4044",
+      "completedAt": "2026-05-22T04:59:59.428Z",
+      "completed_at": "2026-05-22T04:59:59.428Z",
+      "notes": "Updated Vision/OpenCode setup guidance and agent timeout fallback. Checkpoint commit 609f3f5.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-22T05:00:07.419Z"
+    },
+    {
+      "id": "tk-58996ac72ca1",
+      "title": "Verify semantic search behavior end-to-end",
+      "type": "code",
+      "section": "Verification",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-05-22T04:54:11.532Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-b64c3b80d421"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-9bd42b3be86a"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC6"
+        ],
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "DONT1",
+          "DONT2",
+          "DONT3"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-22T05:00:26.614Z",
+      "verification": "Verification evidence: focused suite `uv run --extra dev python -m pytest tests/test_storage.py tests/test_tool_routing.py -q` passed 76 passed, 2 skipped; full suite `uv run --extra dev python -m pytest -q` passed 575 passed, 2 skipped; `uv run --extra dev ruff check .` passed; worktree CLI probe against `/home/jon/dev/advance` returned vector results without timeout.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Ran focused and full test suites, lint, and a worktree lgrep CLI probe against `/home/jon/dev/advance`. No additional code changes were needed for verification.",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "609f3f5c89292f816294f3f5e5badfd77f4f4044",
+      "completedAt": "2026-05-22T05:01:37.897Z",
+      "completed_at": "2026-05-22T05:01:37.897Z",
+      "notes": "Completed end-to-end verification. Worktree clean at 609f3f5.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-22T05:01:45.510Z"
+    }
+  ],
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-05-22T04:46:23.510Z",
+      "completed_by": "adv-proposal",
+      "approval_evidence": "User approved execution with 'execute all'; proposal captures the lgrep semantic timeout problem and success criteria.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/proposal.md",
+        "content_hash": "660a42b2304ec396836f0226b11892e1bbe3464e3056d789ff7ef7c69e57e4f6",
+        "non_whitespace_chars": 1444,
+        "checked_at": "2026-05-22T04:46:23.563Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "started_at": "2026-05-22T04:52:22.517Z",
+      "completed_at": "2026-05-22T04:53:09.820Z",
+      "completed_by": "adv-discover",
+      "approval_evidence": "Agreement artifact captures objectives, AC, constraints, and avoidances; typed contract minted.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/agreement.md",
+        "content_hash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "non_whitespace_chars": 1663,
+        "checked_at": "2026-05-22T04:53:09.917Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-05-22T04:53:16.781Z",
+      "completed_by": "adv-design",
+      "approval_evidence": "Design validator returned PASS WITH CONCERNS; required refinements were incorporated: index probing, index_all/warmup creation, and server-side fallback primary.",
+      "artifact_evidence": {
+        "kind": "design",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/design.md",
+        "content_hash": "5ff889f364f8b1ac9039ef984e60f5afa6339a5ae22fb39b1d7cfcb3a773b193",
+        "non_whitespace_chars": 1540,
+        "checked_at": "2026-05-22T04:53:16.831Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-05-22T04:54:17.017Z",
+      "completed_by": "adv-prep",
+      "approval_evidence": "Task graph created with TDD intent, dependencies, and contract refs. User already approved execution with 'execute all'."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-05-22T05:01:53.961Z",
+      "completed_by": "adv-apply",
+      "approval_evidence": "All planned tasks completed with checkpoints. Verification: full pytest 575 passed, 2 skipped; ruff passed; worktree CLI probe returned vector results without timeout."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-05-22T05:07:33.996Z",
+      "completed_by": "adv-review",
+      "approval_evidence": "User approved acceptance with 'approve'. Contract review matrix has 13 rows, 0 failing; independent reviewer verdict READY / PASS; tests and probes passed.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/acceptance.md",
+        "content_hash": "b7f7016410ffc3a3744f906cf1e5dcba0079edcbb0137db7f81c651b09be37dd",
+        "non_whitespace_chars": 3152,
+        "checked_at": "2026-05-22T05:07:34.099Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [],
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+      "approvedAt": "2026-05-22T04:53:04.159Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "`lgrep_search_semantic` on a populated cache with >10k chunks does not create/replace FTS/vector indexes on the live query hot path.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "If hybrid search cannot use ready indexes, lgrep returns useful vector-only results or a structured, actionable error within the configured lgrep timeout.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "The configured lgrep server timeout is lower than the proxy/tool deadline so agents see lgrep-owned errors instead of `context deadline exceeded` where possible.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "Local setup docs or checked-in examples include `LGREP_WORKTREE_DEDUP`, explicit warm paths, and timeout guidance for Vision/OpenCode usage.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "Tool-selection guidance says: after one hybrid semantic timeout/deadline, retry once with `hybrid:false` and a small limit, then fall back to symbol/text/read.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "Tests cover the hybrid hot-path guard/fallback and timeout guidance.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Preserve existing semantic and symbol MCP tool names.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Preserve stdio/local defaults for general users.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Do not add symlink/env hacks as substitutes for code-level latency control.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Keep behavior structural: readiness state, config, tests; no prose-only fix.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "Do not mask all search failures as generic timeouts.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "Do not require users/agents to manually run indexing before first semantic search.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "Do not make every cached repo warm automatically in this local setup.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "84732614d5fd55e3e2fb510461fab76320e0480bfdf44605e5cc2b72d7acb7e0",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_storage.py::TestSearch::test_search_hybrid_does_not_create_indexes_on_query_path passed; reviewer confirmed `search_hybrid` no longer creates indexes on live query path.",
+          "notes": "Implemented in `src/lgrep/storage/_chunk_store.py`."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Vector fallback path exercised by storage test and worktree CLI probe against `/home/jon/dev/advance` returned vector results without timeout.",
+          "notes": "Structured timeout was also verified after Vision config with LGREP_TOOL_TIMEOUT_S=8."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "`~/.config/vision/servers.yaml` was updated, validated, reloaded, and lgrep restarted with `LGREP_TOOL_TIMEOUT_S=8`; hybrid probe returned lgrep-owned structured timeout instead of Vision context deadline.",
+          "notes": "Repo docs describe setting timeout below proxy/client deadline."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "static_check",
+          "evidence": "README.md and skills/lgrep/SKILL.md include `LGREP_WORKTREE_DEDUP`, explicit `LGREP_WARM_PATHS`, `LGREP_AUTO_WARM_DISK=false`, and `LGREP_TOOL_TIMEOUT_S` guidance.",
+          "notes": "Local Vision config was applied first."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_tool_routing.py::TestPackagedInstructionRouting::test_packaged_instruction_retries_vector_only_after_semantic_timeout passed.",
+          "notes": "Guidance present in instructions, README, and skill docs."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Focused suite passed 76 passed, 2 skipped; full suite passed 575 passed, 2 skipped; ruff passed.",
+          "notes": "Regression tests cover hot-path guard and timeout guidance."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No MCP tool names or public tool registrations changed; changes are storage/indexing/docs/tests only.",
+          "notes": ""
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Docs preserve stdio/local defaults and present Vision tuning as agent-heavy setup guidance.",
+          "notes": ""
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No symlink/wrapper workaround introduced; code-level fallback and index-preparation changes were implemented.",
+          "notes": ""
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Behavior encoded in `ChunkStore.prepare_hybrid_indexes`, `search_hybrid` fallback, and regression tests.",
+          "notes": "Not prose-only."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Existing structured `ToolError` timeout remains; search failures are not globally masked. Hybrid missing-index case degrades specifically to vector results.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "First semantic search still auto-loads/auto-indexes; users are not required to manually index before searching.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Vision/OpenCode docs and applied config use explicit warm paths plus `LGREP_AUTO_WARM_DISK=false`, not warm-all-caches.",
+          "notes": ""
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "`lgrep_search_semantic` on a populated cache with >10k chunks does not create/replace FTS/vector indexes on the live query hot path.",
+    "If hybrid search cannot use ready indexes, lgrep returns useful vector-only results or a structured, actionable error within the configured lgrep timeout.",
+    "The configured lgrep server timeout is lower than the proxy/tool deadline so agents see lgrep-owned errors instead of `context deadline exceeded` where possible.",
+    "Local setup docs or checked-in examples include `LGREP_WORKTREE_DEDUP`, explicit warm paths, and timeout guidance for Vision/OpenCode usage.",
+    "Tool-selection guidance says: after one hybrid semantic timeout/deadline, retry once with `hybrid:false` and a small limit, then fall back to symbol/text/read.",
+    "Tests cover the hybrid hot-path guard/fallback and timeout guidance."
+  ],
+  "documents": {},
+  "artifacts": {
+    "proposal": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/proposal.md",
+      "updatedAt": "2026-05-22T05:06:17.189Z"
+    },
+    "problemStatement": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/problem-statement.md",
+      "updatedAt": "2026-05-22T05:06:17.200Z"
+    },
+    "agreement": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/agreement.md",
+      "updatedAt": "2026-05-22T05:06:17.210Z"
+    },
+    "design": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixSemanticSearchDeadlines/design.md",
+      "updatedAt": "2026-05-22T05:06:17.218Z"
+    }
+  },
+  "lastSignalAt": "2026-05-22T05:07:33.996Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true
+}
