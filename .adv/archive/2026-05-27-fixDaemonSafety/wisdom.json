@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "id": "ws-uFiILg",
+      "type": "gotcha",
+      "content": "For Python 3.13/Ruff TCH rules with `from __future__ import annotations`, `collections.abc.Callable` used only in annotations must be imported inside `if TYPE_CHECKING:`. Ruff may report both UP035 and TC003 in sequence.",
+      "source_task": "tk-a1e4017119bb",
+      "recorded_at": "2026-05-27T21:31:47.052Z"
+    },
+    {
+      "id": "ws-Q1VW6q",
+      "type": "pattern",
+      "content": "When adding an MCP tool in this repo, update both the server import/export surface and the explicit server tool registration/count test; otherwise focused tool-list tests fail even if the tool implementation is correct.",
+      "source_task": "tk-6f319f8a3370",
+      "recorded_at": "2026-05-27T21:39:08.012Z"
+    },
+    {
+      "id": "ws-_i94Ws",
+      "type": "pattern",
+      "content": "For status APIs that must become cheap by default while preserving compatibility, keep legacy required fields and add explicit optional fields like `summary_only`/`detail` so callers can distinguish omitted expensive counts from real zero counts.",
+      "source_task": "tk-477891c5555a",
+      "recorded_at": "2026-05-27T21:46:19.786Z"
+    }
+  ],
+  "count": 3
+}

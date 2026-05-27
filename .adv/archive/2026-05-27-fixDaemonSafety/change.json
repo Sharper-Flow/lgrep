@@ -1,0 +1,1347 @@
+{
+  "id": "fixDaemonSafety",
+  "title": "Fix daemon safety",
+  "status": "archived",
+  "created_at": "2026-05-27T20:41:52.803Z",
+  "tasks": [
+    {
+      "id": "tk-158349582402",
+      "title": "Add lgrepDaemonOperationalSafety spec",
+      "type": "code",
+      "section": "Spec / Contracts",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-05-27T21:14:43.359Z",
+      "deps": [],
+      "metadata": {
+        "tdd_intent": "not_applicable",
+        "delegation_hint": "inline_required"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6",
+          "AC7"
+        ],
+        "verifies": [],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "C6",
+          "DONT1",
+          "DONT2",
+          "DONT3",
+          "DONT4",
+          "DONT5"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:18:09.607Z",
+      "verification": "Verified new daemon operational safety spec JSON parses with `python -m json.tool .adv/specs/lgrepDaemonOperationalSafety/spec.json`; confirmed ADV specs remain searchable with `uv run --extra dev python -m pytest tests/test_discovery.py::TestDefaultTemplateAdvIgnore::test_template_keeps_adv_specs_searchable`.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added `.adv/specs/lgrepDaemonOperationalSafety/spec.json` with requirements covering structured runtime jobs, timeout/cancellation terminal states, cheap global status, operator-safe diagnostics, bounded executor ownership, shared HTTP/Vision guidance, and conflict-marker guard behavior. Verified JSON syntax and that `.adv/specs/` remains searchable by default ignore template.",
+      "filesTouched": [
+        ".adv/specs/lgrepDaemonOperationalSafety/spec.json"
+      ],
+      "touched_files": [
+        ".adv/specs/lgrepDaemonOperationalSafety/spec.json"
+      ],
+      "checkpointSha": "63682c2a79c03c224eb017c0492fc6c26c3b986f",
+      "completedAt": "2026-05-27T21:20:30.765Z",
+      "completed_at": "2026-05-27T21:20:30.765Z",
+      "notes": "Completed spec creation. Checkpoint committed 63682c2a79c03c224eb017c0492fc6c26c3b986f.",
+      "error_recovery": {
+        "last_error": "Initial targeted pytest attempts failed because native python lacked pytest and then used an incorrect test class path; corrected by running via `uv run --extra dev` with the actual class name.",
+        "retry_count": 2,
+        "max_retries": 3,
+        "error_class": "ENVIRONMENTAL",
+        "next_strategy": "No further recovery needed; corrected command passed.",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "`python -m pytest ...` failed: No module named pytest",
+            "diagnosis": "The base Python environment did not have dev test dependencies installed.",
+            "fix_tried": "Retry through uv-managed dev environment.",
+            "strategy_label": "use-uv-dev-env",
+            "outcome": "failed",
+            "attempted_at": "2026-05-27T21:20:00Z"
+          },
+          {
+            "attempt_number": 2,
+            "error": "`uv run --extra dev python -m pytest tests/test_discovery.py::TestDefaultLgrepIgnore::...` collected 0 tests",
+            "diagnosis": "The test class name was incorrect; actual class is `TestDefaultTemplateAdvIgnore`.",
+            "fix_tried": "Retry with corrected test node id.",
+            "strategy_label": "correct-test-nodeid",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:21:00Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-27T21:20:43.276Z"
+    },
+    {
+      "id": "tk-a1e4017119bb",
+      "title": "Add RuntimeSupervisor and unit tests",
+      "type": "code",
+      "section": "Runtime Supervision",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-05-27T21:14:54.759Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-158349582402"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC3",
+          "AC4"
+        ],
+        "verifies": [
+          "AC1",
+          "AC4"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C4",
+          "DONT1",
+          "DONT4"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:25:29.530Z",
+      "verification": "Verified RuntimeSupervisor with `uv run --extra dev python -m pytest tests/test_daemon_runtime.py tests/test_server.py::TestToolTimeout::test_search_semantic_returns_error_on_timeout`; verified lint with `uv run --extra dev python -m ruff check src/lgrep/server/runtime.py tests/test_daemon_runtime.py src/lgrep/server/lifecycle.py`.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added `src/lgrep/server/runtime.py` with `RuntimeSupervisor`, `JobStatus`, bounded `ThreadPoolExecutor`, active/recent job snapshots, cancellation/abandonment handling, and shutdown cleanup. Integrated `RuntimeSupervisor` into `LgrepContext` and shutdown. Added `tests/test_daemon_runtime.py` covering timeout abandonment then terminal state, worker-limit/history bounding, and sync exception terminal summaries.",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/runtime.py",
+        "tests/test_daemon_runtime.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/runtime.py",
+        "tests/test_daemon_runtime.py"
+      ],
+      "checkpointSha": "43ecabc686ccd0faaeeb9e6b1da0b8ecfd621fc8",
+      "completedAt": "2026-05-27T21:31:18.977Z",
+      "completed_at": "2026-05-27T21:31:18.977Z",
+      "notes": "Completed RuntimeSupervisor and lifecycle ownership. Checkpoint committed 43ecabc686ccd0faaeeb9e6b1da0b8ecfd621fc8.",
+      "error_recovery": {
+        "last_error": "Initial green test hit a syntax error from invalid keyword-only signature with `*args`; lint then found UP035/F401 and TC003.",
+        "retry_count": 3,
+        "max_retries": 3,
+        "error_class": "SEMANTIC",
+        "next_strategy": "No further recovery needed; focused tests and lint now pass.",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "SyntaxError: * argument may appear only once in RuntimeSupervisor.run_blocking signature.",
+            "diagnosis": "The signature attempted to combine keyword-only marker with variadic args incorrectly.",
+            "fix_tried": "Removed the keyword-only marker while preserving keyword-call compatibility for named parameters before `*args`.",
+            "strategy_label": "fix-run-blocking-signature",
+            "outcome": "failed",
+            "attempted_at": "2026-05-27T21:33:00Z"
+          },
+          {
+            "attempt_number": 2,
+            "error": "Ruff UP035/F401 for Callable import and unused time in tests.",
+            "diagnosis": "New module/test did not meet repo Ruff lint rules.",
+            "fix_tried": "Moved Callable to collections.abc and removed unused test import.",
+            "strategy_label": "lint-import-cleanup",
+            "outcome": "failed",
+            "attempted_at": "2026-05-27T21:34:00Z"
+          },
+          {
+            "attempt_number": 3,
+            "error": "Ruff TC003 requested Callable under TYPE_CHECKING.",
+            "diagnosis": "With future annotations, Callable is type-only and repo enables TCH rules.",
+            "fix_tried": "Moved Callable import into TYPE_CHECKING block and reran lint/tests.",
+            "strategy_label": "type-checking-import",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:35:00Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-27T21:31:35.874Z"
+    },
+    {
+      "id": "tk-477891c5555a",
+      "title": "Integrate supervisor into semantic lifecycle and bounded global status",
+      "type": "code",
+      "section": "Semantic / Status",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-05-27T21:15:07.086Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-a1e4017119bb"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC4"
+        ],
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC4"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "DONT1",
+          "DONT2",
+          "DONT3"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:39:08.126Z",
+      "verification": "uv run --extra dev python -m pytest tests/test_server.py tests/test_daemon_runtime.py tests/test_diagnostics.py -> 68 passed; uv run --extra dev python -m ruff check src/lgrep/server/tools_semantic.py src/lgrep/server/lifecycle.py src/lgrep/server/responses.py tests/test_server.py -> All checks passed",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added _run_blocking helper for semantic tools and routed staleness checks, DB search, explicit indexing, latest-index timestamp reads, scoped status DB counts, and disk-cache status reads through LgrepContext.runtime. Changed no-arg lgrep_status_semantic to return memory-only summary entries with additive summary_only/detail fields instead of global LanceDB count fanout. Updated lifecycle single-flight auto-index and scoped project stats to use RuntimeSupervisor. Added tests proving global status avoids DB calls, scoped status/index/search use runtime supervision, and error/compatibility fields remain present.",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_semantic.py",
+        "tests/test_server.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_semantic.py",
+        "tests/test_server.py"
+      ],
+      "checkpointSha": "fbdc6180145ceab956575f7d64ec50af10a0c5da",
+      "completedAt": "2026-05-27T21:45:52.740Z",
+      "completed_at": "2026-05-27T21:45:52.740Z",
+      "notes": "Integrated semantic/index/status blocking work with RuntimeSupervisor and made no-arg global status cheap; verified server/runtime/diagnostics tests and ruff; checkpoint fbdc6180145ceab956575f7d64ec50af10a0c5da.",
+      "error_recovery": {
+        "last_error": "Initial focused pytest selectors used wrong class names and returned exit 4; ruff then caught one unused asyncio import after replacing to_thread calls.",
+        "retry_count": 2,
+        "max_retries": 3,
+        "error_class": "SEMANTIC",
+        "next_strategy": "",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "pytest selectors referenced TestLgrepTools/TestServerTools methods that were actually under TestServerErrorPaths or had different names; pytest collected 0 and exited 4.",
+            "diagnosis": "Selector/class lookup mismatch, not code failure.",
+            "fix_tried": "Indexed/searched test symbols/text, corrected selectors to TestServerErrorPaths and test_lgrep_status_format.",
+            "strategy_label": "correct test selectors",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:47:00Z"
+          },
+          {
+            "attempt_number": 2,
+            "error": "ruff F401: asyncio imported but unused in src/lgrep/server/tools_semantic.py.",
+            "diagnosis": "Replacing asyncio.to_thread calls removed the last asyncio use in tools_semantic.",
+            "fix_tried": "Removed unused asyncio import and reran ruff.",
+            "strategy_label": "lint cleanup",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:49:00Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-27T21:46:06.822Z"
+    },
+    {
+      "id": "tk-6f319f8a3370",
+      "title": "Add lgrep_diagnostics tool and typed diagnostics tests",
+      "type": "code",
+      "section": "Diagnostics",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-05-27T21:15:19.466Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-a1e4017119bb"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC3",
+          "AC4"
+        ],
+        "verifies": [
+          "AC3"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C4",
+          "DONT1",
+          "DONT4"
+        ],
+        "not_applicable_reason": ""
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixDaemonSafety",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixDaemonSafety",
+          "task_id": "tk-6f319f8a3370",
+          "scope": "Add lgrep_diagnostics tool and typed diagnostics tests",
+          "agent": "adv-engineer",
+          "status": "complete",
+          "files_touched": [
+            "src/lgrep/server/tools_diagnostics.py",
+            "src/lgrep/server/responses.py",
+            "src/lgrep/server/__init__.py",
+            "tests/test_diagnostics.py",
+            "tests/test_server_tools.py"
+          ],
+          "verification": [
+            {
+              "command": "uv run --extra dev pytest tests/test_diagnostics.py tests/test_server_tools.py tests/test_daemon_runtime.py -v",
+              "exit_code": 0,
+              "summary": "29 passed: 10 diagnostics tests, 16 server_tools tests, 3 daemon_runtime tests"
+            },
+            {
+              "command": "uv run --extra dev ruff check src/lgrep/server/tools_diagnostics.py src/lgrep/server/responses.py src/lgrep/server/__init__.py tests/test_diagnostics.py tests/test_server_tools.py",
+              "exit_code": 0,
+              "summary": "All ruff checks passed"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Added typed response contracts (DiagnosticsResult, LoadedProjectEntry, TimeoutAbandonmentSummary) to responses.py",
+              "why": "Maintains consistency with existing tool response patterns and provides type safety"
+            },
+            {
+              "what": "Created separate tools_diagnostics.py module",
+              "why": "Follows existing module organization (tools_semantic, tools_symbols, tools_maintenance) and keeps diagnostics concerns isolated"
+            },
+            {
+              "what": "Used RuntimeSupervisor snapshots directly without expensive disk work",
+              "why": "Per task requirement; supervisor already maintains active/recent job state in memory"
+            },
+            {
+              "what": "Updated test_server_tools.py to expect 19 tools instead of 18",
+              "why": "The new lgrep_diagnostics tool is now registered alongside existing 18 tools"
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "Updated test_server_tools.py tool count from 18 to 19 to account for new diagnostics tool registration. No other same-pattern fixes needed.",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "lgrep_diagnostics tool implemented and registered. Returns pid, uptime_seconds, transport, worker_max_threads, active/recent job counts, loaded projects with full paths/watching status, active/recent jobs with kind/status/age, and timeout/abandonment summary. No secrets or env vars exposed. All 29 related tests pass.",
+            "suggested_next_action": "Run full test suite (bin/oc-test full) to confirm no regressions before acceptance"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run --extra dev pytest tests/test_diagnostics.py tests/test_server_tools.py tests/test_daemon_runtime.py -v"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run --extra dev ruff check src/lgrep/server/tools_diagnostics.py src/lgrep/server/responses.py src/lgrep/server/__init__.py tests/test_diagnostics.py tests/test_server_tools.py"
+            }
+          ]
+        }
+      ],
+      "verification": "uv run --extra dev python -m pytest tests/test_diagnostics.py tests/test_server_tools.py tests/test_daemon_runtime.py -> 29 passed; uv run --extra dev python -m ruff check src/lgrep/server/tools_diagnostics.py src/lgrep/server/responses.py src/lgrep/server/__init__.py tests/test_diagnostics.py tests/test_server_tools.py -> All checks passed",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Added src/lgrep/server/tools_diagnostics.py with lgrep_diagnostics using LgrepContext.runtime snapshots and loaded project state without expensive disk work. Added DiagnosticsResult/LoadedProjectEntry/TimeoutAbandonmentSummary TypedDicts, registered/exported diagnostics tool, updated server tool count, and added diagnostics tests covering shape, loaded projects, job snapshots, abandonment summary, and secret/env exclusion.",
+      "filesTouched": [
+        "src/lgrep/server/__init__.py",
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_diagnostics.py",
+        "tests/test_diagnostics.py",
+        "tests/test_server_tools.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/__init__.py",
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_diagnostics.py",
+        "tests/test_diagnostics.py",
+        "tests/test_server_tools.py"
+      ],
+      "checkpointSha": "9523b8e99fce37c6a2b284c1781e115f43798c7c",
+      "completedAt": "2026-05-27T21:38:47.466Z",
+      "completed_at": "2026-05-27T21:38:47.466Z",
+      "notes": "Implemented read-only lgrep_diagnostics and typed diagnostics response contracts; verified focused pytest and ruff; checkpoint 9523b8e99fce37c6a2b284c1781e115f43798c7c.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-27T21:38:54.663Z"
+    },
+    {
+      "id": "tk-8f61c34f4fd8",
+      "title": "Route watcher and maintenance blocking work through supervisor",
+      "type": "code",
+      "section": "Watcher / Maintenance",
+      "status": "done",
+      "priority": 4,
+      "created_at": "2026-05-27T21:15:30.698Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-a1e4017119bb"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC4",
+          "AC5"
+        ],
+        "verifies": [
+          "AC5"
+        ],
+        "respects": [
+          "C3",
+          "C5",
+          "DONT2",
+          "DONT3",
+          "DONT4"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:46:19.892Z",
+      "verification": "uv run --extra dev python -m pytest tests/test_server.py tests/test_server_tools.py tests/test_watcher.py tests/test_worktree_cache.py tests/test_daemon_runtime.py tests/test_diagnostics.py tests/test_prune_orphans.py -> 141 passed, 5 warnings; uv run --extra dev python -m ruff check src/lgrep/watcher.py src/lgrep/server/tools_maintenance.py src/lgrep/server/tools_semantic.py src/lgrep/server/lifecycle.py tests/test_watcher.py tests/test_server.py tests/test_worktree_cache.py -> All checks passed",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Passed LgrepContext.runtime into FileWatcher from watch_start_semantic and routed watcher incremental index/delete work through RuntimeSupervisor when available. Routed MCP prune_orphans, invalidate_worktree_cache, and startup orphan sweep through RuntimeSupervisor while keeping ctx=None test fallback and HTTP destructive prune dry-run coercion intact. Added watcher and maintenance tests proving runtime routing and preserved cache/prune safety behavior.",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "src/lgrep/server/tools_semantic.py",
+        "src/lgrep/watcher.py",
+        "tests/test_server.py",
+        "tests/test_watcher.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "src/lgrep/server/tools_semantic.py",
+        "src/lgrep/watcher.py",
+        "tests/test_server.py",
+        "tests/test_watcher.py"
+      ],
+      "checkpointSha": "b71114ed41a16d64ba97afed5d88230759c58307",
+      "completedAt": "2026-05-27T21:49:42.716Z",
+      "completed_at": "2026-05-27T21:49:42.716Z",
+      "notes": "Routed watcher and maintenance blocking work through RuntimeSupervisor while preserving prune transport safety; verified broad watcher/server/cache/prune suite and ruff; checkpoint b71114ed41a16d64ba97afed5d88230759c58307.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-27T21:49:51.159Z"
+    },
+    {
+      "id": "tk-83b6a4a2bfd0",
+      "title": "Add conflict-marker guard and clean CHANGELOG.md",
+      "type": "code",
+      "section": "Release Hygiene",
+      "status": "done",
+      "priority": 5,
+      "created_at": "2026-05-27T21:15:40.130Z",
+      "deps": [],
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC6",
+          "AC8"
+        ],
+        "verifies": [
+          "AC6",
+          "AC8"
+        ],
+        "respects": [
+          "C1",
+          "C2"
+        ],
+        "not_applicable_reason": ""
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixDaemonSafety",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixDaemonSafety",
+          "task_id": "tk-83b6a4a2bfd0",
+          "scope": "Add conflict-marker guard to tests and resolve CHANGELOG.md markers",
+          "agent": "adv-engineer",
+          "status": "complete",
+          "files_touched": [
+            "tests/test_conflict_markers.py",
+            "CHANGELOG.md"
+          ],
+          "verification": [
+            {
+              "command": "uv run --extra dev python -m pytest tests/test_conflict_markers.py -v",
+              "exit_code": 0,
+              "summary": "Conflict-marker guard test passes (GREEN) after resolving CHANGELOG.md markers"
+            },
+            {
+              "command": "uv run --extra dev python -m pytest tests/test_deps.py tests/test_security.py -v --tb=short",
+              "exit_code": 0,
+              "summary": "22 regression tests pass — no breakage from edits"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Implemented guard as pytest test rather than CI workflow",
+              "why": "Design excerpt explicitly prefers test-based guard; test is self-contained and runs in local dev + CI alike"
+            },
+            {
+              "what": "Used git ls-files + binary/cache path skip-list for file enumeration",
+              "why": "Respects .gitignore automatically; avoids false positives on .lock, .pyc, __pycache__, .venv, node_modules, etc."
+            },
+            {
+              "what": "Resolved CHANGELOG by keeping v3.1.0 formatted content and dropping duplicate compact HEAD blocks",
+              "why": "v3.1.0 side contained the same information in proper markdown format; HEAD blocks were malformed (literal \\n instead of real newlines) and nested"
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "No other tracked files contained conflict markers; test comprehensively scans all 124+ text files",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Conflict-marker guard test (test_conflict_markers.py) is now part of test suite and passes. CHANGELOG.md resolved cleanly — kept v3.1.0 release content with proper formatting.",
+            "suggested_next_action": "Run full test suite with bin/oc-test or targeted pytest run to confirm no regressions, then proceed to next task in fixDaemonSafety"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run --extra dev python -m pytest tests/test_conflict_markers.py -v"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run --extra dev python -m pytest tests/test_deps.py tests/test_security.py -v --tb=short"
+            }
+          ]
+        }
+      ],
+      "verification": "Verified conflict-marker guard with `uv run --extra dev python -m pytest tests/test_conflict_markers.py`; verified lint with `uv run --extra dev python -m ruff check tests/test_conflict_markers.py`. CHANGELOG.md conflict markers removed.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Resolved nested conflict markers in `CHANGELOG.md` and added `tests/test_conflict_markers.py`, a tracked-file guard using `git ls-files` that reports file:line evidence for unresolved Git conflict markers while skipping binary/cache/generated paths. Orchestrator adjusted the delegated test to include line numbers and pass Ruff import/style checks.",
+      "filesTouched": [
+        "CHANGELOG.md",
+        "tests/test_conflict_markers.py"
+      ],
+      "touched_files": [
+        "CHANGELOG.md",
+        "tests/test_conflict_markers.py"
+      ],
+      "checkpointSha": "e740426ed9833a054bb287d11a098b99ff9eb93b",
+      "completedAt": "2026-05-27T21:27:30.776Z",
+      "completed_at": "2026-05-27T21:27:30.776Z",
+      "notes": "Completed via adv-engineer delegation plus orchestrator review fixes. Checkpoint committed e740426ed9833a054bb287d11a098b99ff9eb93b.",
+      "error_recovery": {
+        "last_error": "Ruff found import ordering, SIM110, and UP024 issues in delegated test; then one import-order issue after manual patch.",
+        "retry_count": 2,
+        "max_retries": 3,
+        "error_class": "SEMANTIC",
+        "next_strategy": "No further recovery needed; ruff and pytest now pass.",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "`uv run --extra dev python -m ruff check tests/test_conflict_markers.py` failed with I001, SIM110, UP024.",
+            "diagnosis": "Delegated implementation was functionally correct but did not meet repository Ruff lint style and did not report line evidence initially.",
+            "fix_tried": "Patched test to return line numbers, simplify path skip logic, and catch OSError only.",
+            "strategy_label": "lint-and-evidence-fix",
+            "outcome": "failed",
+            "attempted_at": "2026-05-27T21:27:00Z"
+          },
+          {
+            "attempt_number": 2,
+            "error": "Ruff still reported I001 import block issue.",
+            "diagnosis": "Manual import ordering still did not match Ruff/isort formatting exactly.",
+            "fix_tried": "Ran Ruff auto-fix for import organization, then reran lint and focused test.",
+            "strategy_label": "ruff-autofix-imports",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:28:00Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-27T21:27:43.496Z"
+    },
+    {
+      "id": "tk-e91fbaeb6a94",
+      "title": "Update shared HTTP/Vision docs and installer guidance",
+      "type": "code",
+      "section": "Docs / Operator Guidance",
+      "status": "done",
+      "priority": 6,
+      "created_at": "2026-05-27T21:15:51.145Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-477891c5555a"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-6f319f8a3370"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "not_applicable",
+        "delegation_hint": "delegate_allowed"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC7"
+        ],
+        "verifies": [
+          "AC7"
+        ],
+        "respects": [
+          "C1",
+          "C4",
+          "C6",
+          "DONT4",
+          "DONT5"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:50:06.320Z",
+      "verification": "uv run --extra dev python -m pytest tests/test_tool_routing.py tests/test_jsonc_installer.py tests/test_server.py::TestAcceptanceToolChoiceAndOnboarding -> 65 passed, 2 skipped; uv run --extra dev python -m ruff check tests/test_server.py tests/test_jsonc_installer.py src/lgrep/install_opencode.py -> All checks passed",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Updated README and lgrep skill guidance to position stdio as local default and shared HTTP as intentional daemon mode; documented LGREP_AUTO_WARM_DISK, LGREP_WORKER_MAX_THREADS, bounded warm paths, diagnostics, cheap no-arg status, timeout fallback, and shared-HTTP prune dry-run behavior. Updated install_opencode systemd/manual guidance with safe shared daemon defaults and troubleshooting steps. Added tests asserting README and installer include the daemon safety controls.",
+      "filesTouched": [
+        "README.md",
+        "skills/lgrep/SKILL.md",
+        "src/lgrep/install_opencode.py",
+        "tests/test_jsonc_installer.py",
+        "tests/test_server.py"
+      ],
+      "touched_files": [
+        "README.md",
+        "skills/lgrep/SKILL.md",
+        "src/lgrep/install_opencode.py",
+        "tests/test_jsonc_installer.py",
+        "tests/test_server.py"
+      ],
+      "checkpointSha": "dac4f70b7f046045573ce00f3c6d852bab6ea4e2",
+      "completedAt": "2026-05-27T21:52:55.397Z",
+      "completed_at": "2026-05-27T21:52:55.397Z",
+      "notes": "Updated shared HTTP/Vision safety docs and installer guidance; verified docs/installer tests and ruff; checkpoint dac4f70b7f046045573ce00f3c6d852bab6ea4e2.",
+      "error_recovery": {
+        "last_error": "",
+        "retry_count": 0,
+        "max_retries": 3,
+        "error_class": "TRANSIENT",
+        "next_strategy": "",
+        "attempts": []
+      },
+      "updatedAt": "2026-05-27T21:53:03.566Z"
+    },
+    {
+      "id": "tk-b3a825d40742",
+      "title": "Run full contract verification sweep",
+      "type": "code",
+      "section": "Verification",
+      "status": "done",
+      "priority": 7,
+      "created_at": "2026-05-27T21:16:03.715Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-477891c5555a"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-6f319f8a3370"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-8f61c34f4fd8"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-83b6a4a2bfd0"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-e91fbaeb6a94"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "separate_verification",
+        "delegation_hint": "delegate_allowed"
+      },
+      "contract_refs": {
+        "implements": [],
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6",
+          "AC7",
+          "AC8"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "C6",
+          "DONT1",
+          "DONT2",
+          "DONT3",
+          "DONT4",
+          "DONT5"
+        ],
+        "not_applicable_reason": ""
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-05-27T21:53:16.979Z",
+      "verification": "uv run --extra dev python -m pytest -> 597 passed, 2 skipped, 5 warnings; uv run --extra dev python -m ruff check . -> All checks passed; python -m json.tool .adv/specs/lgrepDaemonOperationalSafety/spec.json -> valid JSON",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Executed full test and lint verification. Initial full pytest exposed stale registration expectations (18 tools and missing lgrep_diagnostics); updated tests/test_server_registration.py to expect 19 tools and include lgrep_diagnostics. Reran registration tests, full pytest, full ruff, and daemon spec JSON validation successfully.",
+      "filesTouched": [
+        "tests/test_server_registration.py"
+      ],
+      "touched_files": [
+        "tests/test_server_registration.py"
+      ],
+      "checkpointSha": "b95ed0784ef763e268c4910245b9582978c121b0",
+      "completedAt": "2026-05-27T21:54:43.007Z",
+      "completed_at": "2026-05-27T21:54:43.007Z",
+      "notes": "Ran full verification sweep; fixed stale server registration test for new lgrep_diagnostics tool; full pytest and ruff pass; checkpoint b95ed0784ef763e268c4910245b9582978c121b0.",
+      "error_recovery": {
+        "last_error": "Full pytest initially failed because tests/test_server_registration.py still expected 18 tools and omitted lgrep_diagnostics.",
+        "retry_count": 1,
+        "max_retries": 3,
+        "error_class": "SEMANTIC",
+        "next_strategy": "",
+        "attempts": [
+          {
+            "attempt_number": 1,
+            "error": "uv run --extra dev python -m pytest -> 2 failed: test_server_has_18_tools expected 18 got 19; test_all_expected_tools_present had extra lgrep_diagnostics.",
+            "diagnosis": "Registration contract test was stale after adding lgrep_diagnostics; implementation and other tool-count tests already expected 19.",
+            "fix_tried": "Updated tests/test_server_registration.py docstring/test name/count and expected tool set; reran focused registration tests, full pytest, and full ruff.",
+            "strategy_label": "align registration test contract",
+            "outcome": "succeeded",
+            "attempted_at": "2026-05-27T21:55:00Z"
+          }
+        ]
+      },
+      "updatedAt": "2026-05-27T21:54:55.296Z",
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixDaemonSafety",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixDaemonSafety",
+          "task_id": "tk-b3a825d40742",
+          "scope": "review analysis of full fixDaemonSafety branch for daemon safety contract conformance",
+          "agent": "adv-reviewer",
+          "phase": "review",
+          "verdict": "READY",
+          "blocking_findings": [],
+          "nonblocking_findings": [],
+          "changes_made": [],
+          "wisdom_candidates": [],
+          "verification": {
+            "tests_run": [
+              "test -e CHANGELOG.md and .adv/specs/lgrepDaemonOperationalSafety/spec.json preflight",
+              "git status --short && git branch --show-current && git rev-parse HEAD && git merge-base HEAD main",
+              "git diff --stat main...HEAD && git diff --name-status main...HEAD",
+              "lgrep_search_text query='<<<<<<<'",
+              "uv run --extra dev python -m pytest tests/test_daemon_runtime.py tests/test_diagnostics.py tests/test_conflict_markers.py tests/test_server.py -q",
+              "git status --short"
+            ],
+            "results": "pass",
+            "evidence": "Targeted daemon-safety verification passed: 72 passed in 3.35s. Worktree remained clean after tests. Diff reviewed across runtime supervision, status, diagnostics, maintenance, watcher, docs, and tests."
+          },
+          "scope_drift": null,
+          "risks": [
+            "Full suite was not rerun during this reviewer pass; relied on supplied recent evidence of 597 passed / 2 skipped plus targeted rerun.",
+            "Runtime cannot forcibly stop an already-running Python thread; timed-out work is marked abandoned and reported until underlying sync call returns."
+          ],
+          "required_main_agent_actions": [
+            "Record acceptance evidence from this REVIEWER_REPORT.",
+            "No code changes required from review."
+          ],
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: test -e CHANGELOG.md and .adv/specs/lgrepDaemonOperationalSafety/spec.json preflight"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: git status --short && git branch --show-current && git rev-parse HEAD && git merge-base HEAD main"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: git diff --stat main...HEAD && git diff --name-status main...HEAD"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: lgrep_search_text query='<<<<<<<'"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run --extra dev python -m pytest tests/test_daemon_runtime.py tests/test_diagnostics.py tests/test_conflict_markers.py tests/test_server.py -q"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: git status --short"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "deltas": {},
+  "wisdom": [
+    {
+      "id": "ws-uFiILg",
+      "type": "gotcha",
+      "content": "For Python 3.13/Ruff TCH rules with `from __future__ import annotations`, `collections.abc.Callable` used only in annotations must be imported inside `if TYPE_CHECKING:`. Ruff may report both UP035 and TC003 in sequence.",
+      "source_task": "tk-a1e4017119bb",
+      "recorded_at": "2026-05-27T21:31:47.052Z"
+    },
+    {
+      "id": "ws-Q1VW6q",
+      "type": "pattern",
+      "content": "When adding an MCP tool in this repo, update both the server import/export surface and the explicit server tool registration/count test; otherwise focused tool-list tests fail even if the tool implementation is correct.",
+      "source_task": "tk-6f319f8a3370",
+      "recorded_at": "2026-05-27T21:39:08.012Z"
+    },
+    {
+      "id": "ws-_i94Ws",
+      "type": "pattern",
+      "content": "For status APIs that must become cheap by default while preserving compatibility, keep legacy required fields and add explicit optional fields like `summary_only`/`detail` so callers can distinguish omitted expensive counts from real zero counts.",
+      "source_task": "tk-477891c5555a",
+      "recorded_at": "2026-05-27T21:46:19.786Z"
+    }
+  ],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-05-27T20:44:33.789Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved proposal with Tier A reply: continue",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/proposal.md",
+        "content_hash": "0a846488709a2ce82d940e832f7fae6ee594b969b64656e5acb0e3de566bfa85",
+        "non_whitespace_chars": 8194,
+        "checked_at": "2026-05-27T20:44:33.859Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-05-27T21:09:28.340Z",
+      "completed_by": "agent",
+      "approval_evidence": "Discovery findings recorded, user approved acceptance criteria via `approve`, agreement persisted, and ChangeContract minted with 19 items.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/agreement.md",
+        "content_hash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "non_whitespace_chars": 3403,
+        "checked_at": "2026-05-27T21:09:28.400Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-05-27T21:14:03.075Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design recorded. Independent validator returned VALIDATED; caution about no-arg deep mode incorporated by keeping no-arg status cheap-only and requiring scoped path for deep stats. No unresolved conflicts or contract-compromise risk.",
+      "artifact_evidence": {
+        "kind": "design",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/design.md",
+        "content_hash": "189d08936a6c37ff56bdd5bca8fcc0d7c0a289f72e753614fdfca6f36606d856",
+        "non_whitespace_chars": 10974,
+        "checked_at": "2026-05-27T21:14:03.117Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-05-27T21:17:04.803Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved prep plan via inline reply `approve`. Task graph has 8 tasks with contract refs and validation passed; warning NO_DELTAS is expected because spec delta task owns new daemon spec."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-05-27T21:55:20.112Z",
+      "completed_by": "agent",
+      "approval_evidence": "All 8 planned tasks are complete with checkpoints. Full verification passed: `uv run --extra dev python -m pytest` -> 597 passed, 2 skipped, 5 warnings; `uv run --extra dev python -m ruff check .` -> All checks passed; daemon spec JSON validates. Working tree clean at b95ed0784ef763e268c4910245b9582978c121b0."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-05-27T22:05:26.011Z",
+      "completed_by": "agent",
+      "approval_evidence": "User accepted delivered work with inline reply `approve`. Acceptance evidence: full pytest 597 passed, full ruff passed, spec JSON valid, independent reviewer READY with no findings, contract review matrix 19/19 pass/respected, clean worktree at b95ed0784ef763e268c4910245b9582978c121b0.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/acceptance.md",
+        "content_hash": "4b19da46d82495f373aaae8b750ccc325555c571e86ca08e2898087039794579",
+        "non_whitespace_chars": 4617,
+        "checked_at": "2026-05-27T22:05:26.132Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [],
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "docs/repo-improve-prep.md"
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+      "approvedAt": "2026-05-27T21:09:13.844Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "Timed-out/cancelled expensive daemon jobs are visible in job state as cancelled/abandoned/finished; never stuck “active” forever.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "`lgrep_status_semantic(path=\"\")` returns cheap bounded summary by default and avoids deep LanceDB per-project counts unless explicitly scoped/deep.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "Diagnostics expose PID/uptime, loaded projects, active/recent jobs, job kind, full local project path, age, and terminal state; no secrets/env values.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "Blocking sync work uses bounded runtime supervision, not unbounded default-executor fanout.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "Shared cache/worktree safety remains intact; no silent chunk deletion/corruption and prune transport guards stay enforced.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "Tests cover timeout/abandonment state, bounded global status, diagnostics shape, and conflict-marker rejection.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC7",
+        "kind": "acceptance_criterion",
+        "text": "Docs explain Vision/shared HTTP safe settings and high-CPU/thread troubleshooting.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC8",
+        "kind": "acceptance_criterion",
+        "text": "`CHANGELOG.md` conflict markers are removed.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Preserve existing MCP tool names and response compatibility unless design explicitly justifies an additive or versioned change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Prefer structural correctness: job registry, typed response contracts, bounded executors, deterministic tests, and explicit runtime state over log scraping or heuristic inference.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Keep shared-cache safety invariants from `lgrepSemanticCacheLifecycle`; do not delete or mutate live cache data implicitly.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Do not expose secrets, environment values, or API keys in diagnostics.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C5",
+        "kind": "constraint",
+        "text": "Do not weaken prune transport-safety guards.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C6",
+        "kind": "constraint",
+        "text": "Avoid product novelty before daemon stability; graph/local-embedding ideas remain out of scope.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "Do not make correctness depend on heuristic process-name/thread-count guessing alone.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "Do not let global status trigger unbounded per-project disk/LanceDB work by default.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "Do not silently discard or corrupt shared worktree cache data while improving cleanup/visibility.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT4",
+        "kind": "avoidance",
+        "text": "Do not restart or destructively clean the live Vision-managed daemon/cache as part of implementation without explicit operator action.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT5",
+        "kind": "avoidance",
+        "text": "Do not broaden into graph/code-impact features, local embedding backend migration, or public internet deployment platform work.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "2026-05-27T22:00:21.754Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_daemon_runtime.py covers timeout/cancellation abandonment and eventual terminal states; full pytest passed 597 tests.",
+          "notes": "RuntimeSupervisor records abandoned/finished_after_abandon/failed_after_abandon rather than leaving active jobs stuck."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_server.py bounded global status test asserts no-arg status does not call DB count methods and returns summary_only entries; full pytest passed.",
+          "notes": "Scoped path status still performs deep counts through runtime supervision."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_diagnostics.py covers diagnostics shape, loaded project paths, active/recent jobs, abandonment summary, and secret/env exclusion; full pytest passed.",
+          "notes": "lgrep_diagnostics registered as 19th MCP tool."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_server.py, tests/test_watcher.py, tests/test_daemon_runtime.py verify semantic/index/status/watcher/maintenance blocking work routes through RuntimeSupervisor; full pytest and ruff passed.",
+          "notes": "Remaining asyncio.to_thread uses are fallback or symbol-tool paths outside this daemon-safety task scope."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_worktree_cache.py, tests/test_prune_orphans.py, and MCP prune transport tests passed in full pytest; destructive shared HTTP prune remains forced dry-run.",
+          "notes": "No live daemon/cache cleanup was performed."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Full pytest passed 597 tests including tests/test_daemon_runtime.py, bounded global status tests, tests/test_diagnostics.py, and tests/test_conflict_markers.py.",
+          "notes": "Full ruff also passed."
+        },
+        {
+          "contractId": "AC7",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "README.md, skills/lgrep/SKILL.md, and src/lgrep/install_opencode.py updated; docs-focused tests passed.",
+          "notes": "Docs cover Vision/shared HTTP, warm paths, auto-warm, worktree dedup, timeouts, worker limit, diagnostics, and troubleshooting."
+        },
+        {
+          "contractId": "AC8",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "CHANGELOG.md conflict markers removed under tk-83b6a4a2bfd0; tests/test_conflict_markers.py passed in full pytest.",
+          "notes": "Full pytest passed with conflict marker guard."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Existing tool names preserved; lgrep_diagnostics added as additive MCP tool. Status response kept legacy fields and added optional summary_only/detail fields.",
+          "notes": "Registration tests updated to 19 tools."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "RuntimeSupervisor, JobStatus enum, TypedDict response contracts, contract tests, and deterministic pytest coverage own correctness.",
+          "notes": "No log scraping or CPU/thread heuristics used for correctness."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Worktree cache and prune suites passed; invalidation and prune safety code routes through runtime without changing deletion invariants.",
+          "notes": "No implicit live cache mutation added."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_diagnostics.py asserts diagnostics exclude VOYAGE_API_KEY and env values; full pytest passed.",
+          "notes": "Diagnostics include worker_max_threads but not raw env variable names/values."
+        },
+        {
+          "contractId": "C5",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Shared HTTP prune dry-run test passed; full prune/worktree suites passed.",
+          "notes": "Shared HTTP destructive prune remains refused/coerced to dry run."
+        },
+        {
+          "contractId": "C6",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Diff is limited to daemon runtime supervision, diagnostics, status, watcher/maintenance routing, docs, and tests.",
+          "notes": "No graph/local embedding/product novelty included."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Reviewer verdict READY; diagnostics are explicit RuntimeSupervisor state, not heuristic process-name/thread-count inference.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "No-arg status test asserts DB count/get_indexed_files are not called.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Worktree cache/prune suites passed; no silent cache deletion behavior added.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT4",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "All work ran in isolated change worktree; no live Vision-managed daemon restart or destructive live cache cleanup was performed.",
+          "notes": ""
+        },
+        {
+          "contractId": "DONT5",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Changed surface remains daemon safety and operator guidance only.",
+          "notes": "No graph/code-impact features or embedding backend migration added."
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "Timed-out/cancelled expensive daemon jobs are visible in job state as cancelled/abandoned/finished; never stuck “active” forever.",
+    "`lgrep_status_semantic(path=\"\")` returns cheap bounded summary by default and avoids deep LanceDB per-project counts unless explicitly scoped/deep.",
+    "Diagnostics expose PID/uptime, loaded projects, active/recent jobs, job kind, full local project path, age, and terminal state; no secrets/env values.",
+    "Blocking sync work uses bounded runtime supervision, not unbounded default-executor fanout.",
+    "Shared cache/worktree safety remains intact; no silent chunk deletion/corruption and prune transport guards stay enforced.",
+    "Tests cover timeout/abandonment state, bounded global status, diagnostics shape, and conflict-marker rejection.",
+    "Docs explain Vision/shared HTTP safe settings and high-CPU/thread troubleshooting.",
+    "`CHANGELOG.md` conflict markers are removed."
+  ],
+  "documents": {},
+  "artifacts": {
+    "proposal": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/proposal.md",
+      "updatedAt": "2026-05-27T20:47:41.776Z",
+      "contentHash": "d6a0a0ab9804127ce6b7fa7b51d9213363ea12f1938779bcfbf109e1dc4f6167"
+    },
+    "agreement": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/agreement.md",
+      "updatedAt": "2026-05-27T21:09:01.733Z",
+      "contentHash": "f2f34652e8eaceb5a54538572408dc1f0f1f0c7b9452175621cfff7a135365dc"
+    },
+    "design": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/design.md",
+      "updatedAt": "2026-05-27T21:13:50.730Z",
+      "contentHash": "189d08936a6c37ff56bdd5bca8fcc0d7c0a289f72e753614fdfca6f36606d856"
+    },
+    "executiveSummary": {
+      "path": "/home/jon/.local/share/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixDaemonSafety/executive-summary.md",
+      "updatedAt": "2026-05-27T22:00:35.212Z",
+      "contentHash": "a872bb22fa205c2c417eb5520cd8da8b9b71820af379329aced954fc7d8e1b26"
+    }
+  },
+  "lastSignalAt": "2026-05-27T22:05:26.011Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_MISSING_SUCCESS_CRITERIA",
+      "severity": "warning",
+      "message": "Success criteria are placeholder or empty. What measurable outcomes define done?",
+      "recorded_at": "2026-05-27T20:42:05.361Z"
+    }
+  ],
+  "worktree_auto_managed": true
+}
