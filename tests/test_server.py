@@ -438,6 +438,23 @@ class TestAcceptanceToolChoiceAndOnboarding:
         assert "local default" in content.lower()
         assert "stdio" in content.lower()
 
+    def test_readme_documents_shared_daemon_safety_controls(self):
+        """README must document shared HTTP/Vision daemon safety controls."""
+        readme_path = Path(__file__).resolve().parents[1] / "README.md"
+        content = readme_path.read_text(encoding="utf-8")
+
+        for token in (
+            "LGREP_WARM_PATHS",
+            "LGREP_AUTO_WARM_DISK",
+            "LGREP_WORKTREE_DEDUP",
+            "LGREP_TOOL_TIMEOUT_S",
+            "LGREP_WORKER_MAX_THREADS",
+            "lgrep_diagnostics",
+            "high CPU",
+            "shared HTTP",
+        ):
+            assert token in content
+
     @pytest.mark.asyncio
     async def test_search_auto_indexes_when_project_not_cached(self, tmp_path):
         """First semantic search in a cold project should auto-index without manual lgrep_index."""

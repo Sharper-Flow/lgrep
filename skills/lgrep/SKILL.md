@@ -76,9 +76,12 @@ lgrep:
     LGREP_WARM_PATHS: "/abs/path/to/primary-repo:/abs/path/to/tooling-repo"
     LGREP_AUTO_WARM_DISK: "false"
     LGREP_TOOL_TIMEOUT_S: "8"
+    LGREP_WORKER_MAX_THREADS: "4"
 ```
 
-Use explicit `LGREP_WARM_PATHS` for repos agents actively use. Do not warm every cached repo by default on large multi-repo machines. Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client deadline so agents receive structured lgrep errors instead of transport-level deadline failures.
+Use explicit `LGREP_WARM_PATHS` for repos agents actively use. Do not warm every cached repo by default on large multi-repo machines. Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client deadline so agents receive structured lgrep errors instead of transport-level deadline failures. Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent sessions cannot create unbounded blocking work.
+
+If a Vision/shared HTTP daemon shows high CPU or many threads, call `lgrep_diagnostics` first. Check `worker_max_threads`, `active_jobs`, `recent_jobs`, and `timeout_abandonment_summary`; do not infer correctness from process names alone. `lgrep_status_semantic(path="")` is cheap/memory-only; pass a specific `path` for deep file/chunk counts. Shared HTTP destructive prune requests are forced to dry-run; run `lgrep prune-orphans --execute` locally for intentional deletion.
 
 **Recommended — one command:**
 ```bash
@@ -294,7 +297,8 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 7. **Auto-fresh by default**: `lgrep_search_semantic` re-indexes drifted files automatically. Only run `lgrep_index_semantic` explicitly to force a full rebuild.
 8. **Always pass `path`**: Both engines require an explicit project path — they do not auto-detect the current project.
 9. **Use `LGREP_WARM_PATHS`**: Set this env var to a colon-separated list of project paths in your MCP config to pre-load semantic indexes at server startup.
-10. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.
+10. **For shared daemons, bound runtime work**: Pair explicit warm paths with `LGREP_AUTO_WARM_DISK=false`, `LGREP_WORKTREE_DEDUP=1`, `LGREP_TOOL_TIMEOUT_S`, and `LGREP_WORKER_MAX_THREADS`.
+11. **MCP registration is transport, not policy**: Keep lgrep registered as MCP and enforce tool-choice behavior via this decision matrix.
 
 ## Supported Languages (Symbol Engine)
 

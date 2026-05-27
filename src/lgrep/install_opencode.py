@@ -89,7 +89,11 @@ Restart=on-failure
 RestartSec=5
 Environment=VOYAGE_API_KEY={api_key_placeholder}
 Environment=LGREP_WARM_PATHS={warm_paths_placeholder}
-Environment=LGREP_AUTO_WATCH=true
+Environment=LGREP_WORKTREE_DEDUP=1
+Environment=LGREP_AUTO_WARM_DISK=false
+Environment=LGREP_AUTO_WATCH=false
+Environment=LGREP_TOOL_TIMEOUT_S=8
+Environment=LGREP_WORKER_MAX_THREADS=4
 StandardOutput=append:$HOME/.cache/lgrep/lgrep.log
 StandardError=append:$HOME/.cache/lgrep/lgrep.log
 
@@ -133,8 +137,18 @@ def _print_daemon_instructions() -> None:
     print()
     print("  VOYAGE_API_KEY=your-key \\")
     print("  LGREP_WARM_PATHS=/path/to/project \\")
-    print("  LGREP_AUTO_WATCH=true \\")
+    print("  LGREP_WORKTREE_DEDUP=1 \\")
+    print("  LGREP_AUTO_WARM_DISK=false \\")
+    print("  LGREP_AUTO_WATCH=false \\")
+    print("  LGREP_TOOL_TIMEOUT_S=8 \\")
+    print("  LGREP_WORKER_MAX_THREADS=4 \\")
     print(f"  {lgrep_bin} --transport streamable-http --port 6285")
+    print()
+    print("Troubleshooting shared daemon load:")
+    print("  - call MCP tool lgrep_diagnostics for PID, worker limit, active/recent jobs")
+    print("  - call lgrep_status_semantic with no path for cheap loaded-project summary")
+    print("  - pass a specific path only when deep file/chunk counts are needed")
+    print("  - run lgrep prune-orphans --execute locally for intentional cache deletion")
     print()
     print("Then open OpenCode — the agent will discover lgrep automatically.")
     print()

@@ -165,6 +165,29 @@ class TestSystemdLogPath:
         output = capsys.readouterr().out
         assert ".cache/lgrep" in output or "~/.cache/lgrep" in output
 
+    def test_daemon_instructions_include_shared_safety_defaults(self, capsys):
+        """Shared daemon guidance must include bounded runtime and diagnostics settings."""
+        inst._print_daemon_instructions()
+        output = capsys.readouterr().out
+
+        for token in (
+            "LGREP_WORKTREE_DEDUP=1",
+            "LGREP_AUTO_WARM_DISK=false",
+            "LGREP_TOOL_TIMEOUT_S=8",
+            "LGREP_WORKER_MAX_THREADS=4",
+            "lgrep_diagnostics",
+            "lgrep_status_semantic",
+        ):
+            assert token in output
+
+        for token in (
+            "Environment=LGREP_WORKTREE_DEDUP=1",
+            "Environment=LGREP_AUTO_WARM_DISK=false",
+            "Environment=LGREP_TOOL_TIMEOUT_S=8",
+            "Environment=LGREP_WORKER_MAX_THREADS=4",
+        ):
+            assert token in inst._SYSTEMD_SERVICE
+
 
 class TestStdioOption:
     """Option C: stdio per-session must be documented in daemon instructions."""

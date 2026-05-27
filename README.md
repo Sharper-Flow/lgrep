@@ -399,7 +399,9 @@ src/auth.py:method:login
 
 ## Transport and security
 
-`lgrep` supports both `stdio` and `streamable-http`, but shared HTTP is the intended deployment mode for OpenCode.
+`lgrep` supports both `stdio` and `streamable-http`. Use `stdio` for the
+local single-session default; use `streamable-http` only when you intentionally
+want one shared local daemon for multiple OpenCode/Vision sessions.
 
 ```bash
 lgrep --transport streamable-http --host 127.0.0.1 --port 6285
@@ -423,8 +425,10 @@ Security notes:
 | `LGREP_LOG_LEVEL` | No | `INFO` | Log verbosity |
 | `LGREP_CACHE_DIR` | No | `~/.cache/lgrep` | Cache directory |
 | `LGREP_WARM_PATHS` | No | none | Colon-separated projects to warm on startup |
+| `LGREP_AUTO_WARM_DISK` | No | `true` | Auto-load all discoverable disk caches on startup when no explicit warm paths are set. Set `false` for large shared machines. |
 | `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
+| `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
 | `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
@@ -444,12 +448,17 @@ lgrep:
     LGREP_WARM_PATHS: "/home/you/dev/primary:/home/you/dev/tooling"
     LGREP_AUTO_WARM_DISK: "false"
     LGREP_TOOL_TIMEOUT_S: "8"
+    LGREP_WORKER_MAX_THREADS: "4"
 ```
 
 - `LGREP_WORKTREE_DEDUP=1` avoids duplicate semantic caches for git worktrees.
 - `LGREP_WARM_PATHS` should name only repos agents actively search.
 - `LGREP_AUTO_WARM_DISK=false` prevents surprise startup work from old cache entries.
 - Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client timeout so callers get a structured lgrep error before a transport deadline.
+- Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent agents cannot create unbounded blocking work.
+- Use `lgrep_diagnostics` when investigating high CPU/thread count. It reports PID, uptime, loaded projects, worker limit, active jobs, recent abandoned/finished jobs, and full local project paths without exposing API keys or environment values.
+- `lgrep_status_semantic(path="")` is intentionally cheap and memory-only. Pass a specific `path` when you need deep file/chunk counts.
+- Destructive cache cleanup over shared HTTP is forced to dry-run; run `lgrep prune-orphans --execute` from a local shell when an operator intentionally wants deletion.
 
 Agent fallback rule: if a default hybrid `lgrep_search_semantic` call times out
 or hits a deadline, retry once with `hybrid:false` and a small limit such as
