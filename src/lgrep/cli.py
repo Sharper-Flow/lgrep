@@ -44,6 +44,9 @@ def main() -> int:
     if args and args[0] == "remove":
         return _cmd_remove(args[1:])
 
+    if args and args[0] in ("status", "status-semantic"):
+        return _cmd_status(args[1:])
+
     if args and args[0] == "install-opencode":
         from lgrep.install_opencode import install
 
@@ -104,6 +107,7 @@ def _print_help() -> None:
     print("  prune-orphans                  inspect or delete orphan semantic caches")
     print("  gc                             prune orphans + clean worktree aliases")
     print("  remove <path>                  show project index info")
+    print("  status [path]                  scoped semantic index status as JSON")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
     print()
@@ -539,6 +543,82 @@ def _cmd_remove(args: list[str]) -> int:
         )
 
     return 0
+
+
+def _cmd_status(args: list[str]) -> int:
+    """Print scoped semantic index status as JSON.
+
+    This command is intentionally scoped to one project path. It never performs
+    the MCP no-argument/global status path, so status producers can poll one
+    workspace without fanning out over every loaded project or touching the
+    running daemon.
+    """
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep status [path] [--json]")
+        print()
+        print("Show scoped semantic index status for one project as JSON.")
+        print()
+        print("arguments:")
+        print("  path                           project path (default: current directory)")
+        print()
+        print("options:")
+        print("  --json                         accepted for explicit producer callers")
+        return 0
+
+    import contextlib
+    from pathlib import Path
+
+    from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
+
+    positional = []
+    for arg in args:
+        if arg == "--json":
+            continue
+        if arg.startswith("-"):
+            print(json.dumps({"error": f"Unknown option: {arg}"}))
+            return 1
+        positional.append(arg)
+
+    project_path = Path(positional[0]).resolve() if positional else Path.cwd().resolve()
+    db_path = get_project_db_path(project_path)
+
+    result = {
+        "schema_version": 1,
+        "producer": "lgrep",
+        "status": "missing",
+        "project": str(project_path),
+        "db_path": str(db_path),
+        "files": 0,
+        "chunks": 0,
+        "watching": False,
+        "disk_cache": False,
+        "summary_only": False,
+        "error": None,
+    }
+
+    try:
+        if not has_disk_cache(project_path):
+            print(json.dumps(result))
+            return 0
+
+        with contextlib.redirect_stdout(sys.stderr):
+            store = ChunkStore(db_path, project_path=project_path)
+            files_set = store.get_indexed_files()
+            chunk_count = store.count_chunks()
+        result.update(
+            {
+                "status": "ok",
+                "files": len(files_set),
+                "chunks": chunk_count,
+                "disk_cache": True,
+            }
+        )
+        print(json.dumps(result))
+        return 0
+    except Exception as e:
+        result.update({"status": "degraded", "disk_cache": None, "error": str(e)})
+        print(json.dumps(result))
+        return 0
 
 
 def _cmd_search_symbols(args: list[str]) -> int:

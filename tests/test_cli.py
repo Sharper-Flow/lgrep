@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lgrep.cli import _cmd_gc, _cmd_init_ignore, main
+from lgrep.cli import _cmd_gc, _cmd_init_ignore, _cmd_status, main
 from lgrep.cli import _cmd_index_semantic as _cmd_index
 from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
@@ -80,6 +80,16 @@ class TestCLIDispatch:
             rc = main()
         assert rc == 0
         mock_prune.assert_called_once_with(["--help"])
+
+    def test_main_dispatches_to_status(self):
+        """'lgrep status' should dispatch to _cmd_status."""
+        with (
+            patch("sys.argv", ["lgrep", "status", "--help"]),
+            patch("lgrep.cli._cmd_status", return_value=0) as mock_status,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_status.assert_called_once_with(["--help"])
 
     def test_main_server_defaults_to_stdio(self):
         """No subcommand should start MCP server with stdio defaults."""
@@ -167,6 +177,80 @@ class TestCmdSearchArgParsing:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "No index found" in data["error"]
+
+
+class TestCmdStatus:
+    """Tests for the scoped status JSON producer command."""
+
+    def test_status_help(self, capsys):
+        rc = _cmd_status(["--help"])
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "usage: lgrep status [path]" in out
+        assert "scoped" in out
+
+    def test_status_no_cache_is_scoped_json(self, capsys, tmp_path):
+        rc = _cmd_status([str(tmp_path)])
+
+        assert rc == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["schema_version"] == 1
+        assert data["producer"] == "lgrep"
+        assert data["status"] == "missing"
+        assert data["project"] == str(tmp_path.resolve())
+        assert data["files"] == 0
+        assert data["chunks"] == 0
+        assert data["watching"] is False
+        assert data["disk_cache"] is False
+        assert data["error"] is None
+        assert "projects" not in data
+
+    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.has_disk_cache", return_value=True)
+    def test_status_reads_scoped_disk_cache(
+        self, _mock_has_cache, mock_get_path, mock_store_cls, capsys, tmp_path
+    ):
+        mock_get_path.return_value = tmp_path / "cache"
+        mock_store = MagicMock()
+        mock_store.count_chunks.return_value = 7
+        mock_store.get_indexed_files.return_value = {"a.py", "b.py"}
+        mock_store_cls.return_value = mock_store
+
+        rc = _cmd_status([str(tmp_path)])
+
+        assert rc == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "ok"
+        assert data["files"] == 2
+        assert data["chunks"] == 7
+        assert data["disk_cache"] is True
+        assert data["error"] is None
+
+    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.has_disk_cache", return_value=True)
+    def test_status_stdout_is_json_only(self, _mock_has_cache, mock_get_path, capsys, tmp_path):
+        class NoisyStore:
+            def __init__(self, *_args, **_kwargs):
+                print("chunk_store_connected noisy log")
+
+            def get_indexed_files(self):
+                return {"a.py"}
+
+            def count_chunks(self):
+                return 1
+
+        mock_get_path.return_value = tmp_path / "cache"
+
+        with patch("lgrep.storage.ChunkStore", NoisyStore):
+            rc = _cmd_status([str(tmp_path)])
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert out.startswith("{")
+        assert "chunk_store_connected" not in out
+        assert json.loads(out)["status"] == "ok"
 
 
 class TestCmdSearchExecution:

@@ -352,6 +352,28 @@ Error responses use the shared `ToolError` shape:
 
 Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If you upgrade from `2.x`, remove any `json.loads(response)` wrappers on tool output. See the [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x) notes in the changelog for the full migration path.
 
+## CLI status producer
+
+`lgrep status [path] --json` prints a scoped semantic index status object for
+one project path. It reads only that project's disk cache and never invokes the
+MCP no-argument/global status path, so status panels can poll it without fanning
+out across every loaded project.
+
+```json
+{
+  "schema_version": 1,
+  "producer": "lgrep",
+  "status": "ok",
+  "project": "/path/to/project",
+  "files": 12,
+  "chunks": 345,
+  "watching": false,
+  "disk_cache": true,
+  "summary_only": false,
+  "error": null
+}
+```
+
 ## MCP tools
 
 ### Semantic tools
