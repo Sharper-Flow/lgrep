@@ -87,8 +87,10 @@ mcp = FastMCP(
 import_module("lgrep.server.tools_semantic")
 import_module("lgrep.server.tools_symbols")
 import_module("lgrep.server.tools_maintenance")
+import_module("lgrep.server.tools_diagnostics")
 
 from lgrep.server.bootstrap import run_server  # noqa: E402
+from lgrep.server.tools_diagnostics import lgrep_diagnostics  # noqa: E402
 from lgrep.server.tools_maintenance import invalidate_worktree_cache, prune_orphans  # noqa: E402
 from lgrep.server.tools_semantic import (  # noqa: E402
     index_semantic,
@@ -178,6 +180,7 @@ __all__ = [
     "app_lifespan",
     "run_server",
     "remove_project",
+    "lgrep_diagnostics",
     "search_semantic",
     "index_semantic",
     "status_semantic",

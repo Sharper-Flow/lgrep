@@ -1,7 +1,7 @@
-"""MCP contract tests for all 18 registered tools.
+"""MCP contract tests for all 19 registered tools.
 
 Verifies:
-- All 18 tools are registered in the MCP server (5 semantic + 13 symbol/admin)
+- All 19 tools are registered in the MCP server (5 semantic + 13 symbol/admin + 1 diagnostics)
 - Renamed semantic tools preserve response shape
 - New symbol/admin tools return valid JSON with _meta envelope
 - Unknown tool returns structured error (via tool dispatch)
@@ -39,7 +39,11 @@ EXPECTED_SYMBOL_TOOLS = {
     "invalidate_worktree_cache",
 }
 
-ALL_EXPECTED_TOOLS = EXPECTED_SEMANTIC_TOOLS | EXPECTED_SYMBOL_TOOLS
+EXPECTED_DIAGNOSTICS_TOOLS = {
+    "lgrep_diagnostics",
+}
+
+ALL_EXPECTED_TOOLS = EXPECTED_SEMANTIC_TOOLS | EXPECTED_SYMBOL_TOOLS | EXPECTED_DIAGNOSTICS_TOOLS
 
 
 def _get_registered_tool_names() -> set[str]:
@@ -48,7 +52,7 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    def test_all_18_tools_registered(self):
+    def test_all_19_tools_registered(self):
         registered = _get_registered_tool_names()
         assert registered == ALL_EXPECTED_TOOLS, (
             f"Missing: {ALL_EXPECTED_TOOLS - registered}\nExtra: {registered - ALL_EXPECTED_TOOLS}"

@@ -303,6 +303,41 @@ class WorktreeInvalidationResult(TypedDict):
     _meta: _Meta
 
 
+class LoadedProjectEntry(TypedDict):
+    """A single loaded project in diagnostics."""
+
+    path: str
+    watching: bool
+
+
+class TimeoutAbandonmentSummary(TypedDict):
+    """Summary of timeout/abandonment states in diagnostics."""
+
+    abandoned_count: int
+    finished_after_abandon_count: int
+    failed_after_abandon_count: int
+
+
+class DiagnosticsResult(TypedDict):
+    """Response for lgrep_diagnostics.
+
+    Read-only diagnostic snapshot of the lgrep daemon state.
+    Contains no secrets, env vars, or raw tracebacks.
+    """
+
+    pid: int
+    uptime_seconds: float
+    transport: str | None
+    worker_max_threads: int
+    active_job_count: int
+    recent_job_count: int
+    loaded_project_count: int
+    loaded_projects: list[LoadedProjectEntry]
+    active_jobs: list[dict[str, Any]]
+    recent_jobs: list[dict[str, Any]]
+    timeout_abandonment_summary: TimeoutAbandonmentSummary
+
+
 class _Meta(TypedDict):
     """Envelope metadata attached to symbol-tool responses."""
 
