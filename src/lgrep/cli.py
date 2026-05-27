@@ -568,7 +568,7 @@ def _cmd_status(args: list[str]) -> int:
     import contextlib
     from pathlib import Path
 
-    from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
+    from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache, read_project_meta
 
     positional = []
     for arg in args:
@@ -593,11 +593,39 @@ def _cmd_status(args: list[str]) -> int:
         "watching": False,
         "disk_cache": False,
         "summary_only": False,
+        "stale_aliases": [],
+        "stale_alias_count": 0,
+        "cache_residue": {"stale_aliases": 0, "count": 0},
         "error": None,
     }
 
+    def add_scoped_cache_residue() -> None:
+        """Annotate stale aliases for this project's cache only."""
+        meta = read_project_meta(db_path) or {}
+        stale_aliases: list[str] = []
+        for alias in meta.get("alias_paths", []) or []:
+            try:
+                if not Path(alias).is_dir():
+                    stale_aliases.append(str(alias))
+            except OSError:
+                # Permission/transient filesystem errors are not residue proof.
+                continue
+
+        stale_alias_count = len(stale_aliases)
+        result.update(
+            {
+                "stale_aliases": stale_aliases,
+                "stale_alias_count": stale_alias_count,
+                "cache_residue": {
+                    "stale_aliases": stale_alias_count,
+                    "count": stale_alias_count,
+                },
+            }
+        )
+
     try:
         if not has_disk_cache(project_path):
+            add_scoped_cache_residue()
             print(json.dumps(result))
             return 0
 
@@ -605,6 +633,7 @@ def _cmd_status(args: list[str]) -> int:
             store = ChunkStore(db_path, project_path=project_path)
             files_set = store.get_indexed_files()
             chunk_count = store.count_chunks()
+        add_scoped_cache_residue()
         result.update(
             {
                 "status": "ok",

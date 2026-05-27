@@ -213,6 +213,18 @@ class TestCmdStatus:
         self, _mock_has_cache, mock_get_path, mock_store_cls, capsys, tmp_path
     ):
         mock_get_path.return_value = tmp_path / "cache"
+        (tmp_path / "cache").mkdir()
+        live_alias = tmp_path / "live-alias"
+        live_alias.mkdir()
+        stale_alias = tmp_path / "deleted-alias"
+        (tmp_path / "cache" / "project_meta.json").write_text(
+            json.dumps(
+                {
+                    "project_path": str(tmp_path),
+                    "alias_paths": [str(live_alias), str(stale_alias)],
+                }
+            )
+        )
         mock_store = MagicMock()
         mock_store.count_chunks.return_value = 7
         mock_store.get_indexed_files.return_value = {"a.py", "b.py"}
@@ -226,6 +238,9 @@ class TestCmdStatus:
         assert data["files"] == 2
         assert data["chunks"] == 7
         assert data["disk_cache"] is True
+        assert data["stale_aliases"] == [str(stale_alias)]
+        assert data["stale_alias_count"] == 1
+        assert data["cache_residue"] == {"stale_aliases": 1, "count": 1}
         assert data["error"] is None
 
     @patch("lgrep.storage.get_project_db_path")

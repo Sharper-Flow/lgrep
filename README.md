@@ -370,9 +370,17 @@ out across every loaded project.
   "watching": false,
   "disk_cache": true,
   "summary_only": false,
+  "stale_aliases": [],
+  "stale_alias_count": 0,
+  "cache_residue": {"stale_aliases": 0, "count": 0},
   "error": null
 }
 ```
+
+`stale_aliases` is scoped to the selected project's cache metadata. It reports
+worktree aliases whose directories no longer exist so status panels can route
+cleanup to `lgrep gc` or `lgrep_invalidate_worktree_cache` without running a
+destructive cleanup from the status path.
 
 ## MCP tools
 
