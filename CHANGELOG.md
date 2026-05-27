@@ -1,3 +1,5 @@
+## 2026-05-27 (v3.1.2)\n\n### Changed\n- refresh repo improvement prep
+
 ## 2026-05-22 (v3.1.1)
 
 ## 2026-05-20 (v3.1.0)
