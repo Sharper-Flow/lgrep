@@ -1,0 +1,178 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anomalyco/oc-plugins/main/advance/plugin/schemas/spec.schema.json",
+  "name": "lgrepDaemonOperationalSafety",
+  "title": "LgrepDaemonOperationalSafety",
+  "purpose": "Capability: LgrepDaemonOperationalSafety — defines runtime invariants and operator-facing diagnostics that keep the shared lgrep MCP daemon bounded, observable, and safe under concurrent OpenCode/Vision sessions.",
+  "version": "1.0.0",
+  "updated_at": "2026-05-27T00:00:00.000Z",
+  "requirements": [
+    {
+      "id": "rq-daemon-jobs01",
+      "title": "Expensive daemon work is tracked as structured runtime jobs",
+      "body": "Every expensive blocking operation submitted by the daemon MUST be represented by a structured runtime job before it enters the blocking executor. Job records MUST include a stable id, kind, caller/tool, project path when applicable, status, created/started/finished timestamps when available, and bounded error summary. Diagnostics MUST read these records directly instead of inferring correctness from process names, thread names, CPU percentage, logs, or prose.",
+      "priority": "must",
+      "tags": ["daemon", "runtime", "observability", "structural-correctness"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-jobs01.1",
+          "title": "Job is visible while running",
+          "given": ["A shared lgrep daemon", "An indexing, search, status, watcher, or maintenance operation that submits blocking work"],
+          "when": "The operation starts running",
+          "then": ["A runtime job record exists before the blocking call runs", "The record includes id, kind, caller, project path when applicable, status, and timestamps", "The diagnostics surface reports the job from runtime state"]
+        },
+        {
+          "id": "rq-daemon-jobs01.2",
+          "title": "Diagnostics do not infer job state heuristically",
+          "given": ["A daemon process with active runtime jobs"],
+          "when": "Diagnostics are requested",
+          "then": ["Job status comes from structured runtime records", "CPU percentage, process names, thread names, and logs are not the authority for job lifecycle correctness"]
+        }
+      ]
+    },
+    {
+      "id": "rq-daemon-cancel01",
+      "title": "Timeout and cancellation leave terminal observable job state",
+      "body": "When a caller times out or cancels while blocking daemon work may still be running, lgrep MUST NOT claim the underlying synchronous work was killed unless it was actually cancelled before starting. Running work that cannot be safely killed MUST be marked abandoned or cancellation-requested, then transitioned to a terminal observed state when the underlying future later finishes or fails. No job may remain active forever after timeout, cancellation, or shutdown cleanup.",
+      "priority": "must",
+      "tags": ["daemon", "cancellation", "timeout", "runtime"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-cancel01.1",
+          "title": "Timed-out running job is marked abandoned",
+          "given": ["A blocking runtime job is running in the daemon executor"],
+          "when": "The awaiting MCP tool coroutine times out before the blocking function returns",
+          "then": ["The tool returns a structured timeout error", "The job status becomes abandoned or cancellation-requested", "Diagnostics show the job is no longer an ordinary active job"]
+        },
+        {
+          "id": "rq-daemon-cancel01.2",
+          "title": "Abandoned job records eventual completion",
+          "given": ["A blocking job was marked abandoned after caller timeout"],
+          "when": "The underlying blocking function later returns or raises",
+          "then": ["The job transitions to a terminal finished-after-abandon or failed-after-abandon state", "The terminal record remains available in bounded recent-job diagnostics"]
+        },
+        {
+          "id": "rq-daemon-cancel01.3",
+          "title": "Queued job cancellation is represented honestly",
+          "given": ["A job is queued but not yet running"],
+          "when": "Shutdown or timeout cancels the queued future before it starts",
+          "then": ["The job reaches a terminal cancelled state", "The response and diagnostics do not imply a running thread was killed"]
+        }
+      ]
+    },
+    {
+      "id": "rq-daemon-status01",
+      "title": "Global semantic status is cheap and bounded by default",
+      "body": "Calling status_semantic with no project path MUST return a cheap bounded summary from in-memory daemon state. It MUST NOT fan out into deep per-project LanceDB counts, disk scans, index refreshes, or other blocking storage work for every loaded project by default. Exact deep file/chunk counts MUST require a scoped project path or another explicit bounded operation.",
+      "priority": "must",
+      "tags": ["daemon", "status", "performance", "mcp"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-status01.1",
+          "title": "No-arg status avoids deep per-project storage calls",
+          "given": ["A daemon with multiple loaded projects"],
+          "when": "status_semantic is called with an empty path",
+          "then": ["The response is produced from in-memory project/runtime state", "The handler does not call LanceDB count/indexed-file methods for every project", "The response indicates that deep stats are omitted or memory-sourced"]
+        },
+        {
+          "id": "rq-daemon-status01.2",
+          "title": "Scoped status remains exact and bounded",
+          "given": ["A daemon with a loaded project"],
+          "when": "status_semantic is called with that project's path",
+          "then": ["The response may perform exact per-project file/chunk reads", "The work is bounded to the requested project", "The response preserves the single-project status contract"]
+        }
+      ]
+    },
+    {
+      "id": "rq-daemon-diagnostics01",
+      "title": "Daemon diagnostics expose operator-safe runtime health",
+      "body": "The daemon MUST expose a cheap read-only diagnostics surface that reports process/runtime identity, loaded projects, active/recent runtime jobs, timeout/abandonment state, and bounded executor configuration. Diagnostics MAY include full local project paths for local support workflows, but MUST NOT include environment variables, API keys, request payload secrets, or raw tracebacks.",
+      "priority": "must",
+      "tags": ["daemon", "diagnostics", "observability", "security"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-diagnostics01.1",
+          "title": "Diagnostics report runtime health",
+          "given": ["A running daemon"],
+          "when": "The diagnostics tool is called",
+          "then": ["The response includes PID or process identity, uptime, transport, worker limit, loaded project count, and job counts", "Active jobs include kind, project path, caller, status, and age", "Recent terminal jobs include final status and bounded error summary when applicable"]
+        },
+        {
+          "id": "rq-daemon-diagnostics01.2",
+          "title": "Diagnostics exclude secrets",
+          "given": ["A daemon with VOYAGE_API_KEY or other environment values configured"],
+          "when": "Diagnostics are returned",
+          "then": ["The response contains no API key values", "The response contains no environment map", "The response contains no raw request payload secrets", "The response contains no raw traceback text"]
+        }
+      ]
+    },
+    {
+      "id": "rq-daemon-executor01",
+      "title": "Blocking daemon work uses bounded executor ownership",
+      "body": "Blocking work submitted by daemon tools and daemon-owned watchers MUST use an lgrep-owned bounded executor or runtime supervisor rather than uncontrolled default-executor fanout. The worker limit MUST be configurable with a safe default. When capacity is exhausted, the daemon MUST queue or reject work with structured state/error information instead of spawning unbounded workers invisibly.",
+      "priority": "must",
+      "tags": ["daemon", "executor", "performance", "concurrency"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-executor01.1",
+          "title": "Worker limit is bounded and visible",
+          "given": ["A daemon starts with default configuration"],
+          "when": "Diagnostics are requested",
+          "then": ["The configured worker limit is reported", "Blocking jobs submitted by semantic/status/watcher/maintenance paths use the owned runtime supervisor"]
+        },
+        {
+          "id": "rq-daemon-executor01.2",
+          "title": "Capacity pressure is explicit",
+          "given": ["The runtime supervisor is at or beyond its configured blocking-work capacity"],
+          "when": "Another blocking job is submitted",
+          "then": ["The job is queued or rejected according to a documented policy", "Diagnostics expose queued/rejected state or error classification", "The daemon does not create unbounded default-executor workers"]
+        }
+      ]
+    },
+    {
+      "id": "rq-daemon-shared-mode01",
+      "title": "Shared HTTP and Vision deployment guidance is explicit",
+      "body": "Documentation and installer guidance for shared streamable-http or Vision-managed deployments MUST describe safe local defaults and troubleshooting for high CPU/thread incidents. Guidance MUST cover explicit warm paths, auto-warm behavior, worktree deduplication, tool timeouts, worker limits, diagnostics, and the distinction between local stdio and shared daemon mode.",
+      "priority": "must",
+      "tags": ["daemon", "documentation", "vision", "operations"],
+      "scenarios": [
+        {
+          "id": "rq-daemon-shared-mode01.1",
+          "title": "Shared deployment settings are documented",
+          "given": ["A user reads lgrep setup documentation for Vision or shared HTTP"],
+          "when": "They look for safe multi-session settings",
+          "then": ["The docs mention LGREP_WARM_PATHS, LGREP_AUTO_WARM_DISK, LGREP_WORKTREE_DEDUP, LGREP_TOOL_TIMEOUT_S, and the worker-limit setting", "The docs explain when to use stdio versus shared HTTP"]
+        },
+        {
+          "id": "rq-daemon-shared-mode01.2",
+          "title": "High CPU/thread troubleshooting uses diagnostics",
+          "given": ["An operator sees high lgrep CPU or thread count"],
+          "when": "They consult the documentation",
+          "then": ["The docs direct them to the diagnostics/status surfaces", "The docs explain how to interpret active/recent jobs and stale loaded projects", "The docs do not require exposing secrets in support output"]
+        }
+      ]
+    },
+    {
+      "id": "rq-conflict-marker01",
+      "title": "Tracked text files reject unresolved merge conflict markers",
+      "body": "The repository MUST have an automated guard that fails when tracked source or documentation text files contain unresolved merge conflict markers such as <<<<<<<, =======, or >>>>>>>. The guard MUST report file and line evidence and SHOULD avoid scanning binary/cache/generated files.",
+      "priority": "must",
+      "tags": ["release-hygiene", "ci", "testing"],
+      "scenarios": [
+        {
+          "id": "rq-conflict-marker01.1",
+          "title": "Conflict marker fails verification",
+          "given": ["A tracked source or documentation text file contains an unresolved merge conflict marker"],
+          "when": "The conflict-marker guard runs in tests or CI",
+          "then": ["The command exits non-zero", "The output includes the file path and line number"]
+        },
+        {
+          "id": "rq-conflict-marker01.2",
+          "title": "Clean tracked text files pass verification",
+          "given": ["Tracked source and documentation text files contain no unresolved conflict markers"],
+          "when": "The conflict-marker guard runs",
+          "then": ["The command exits zero"]
+        }
+      ]
+    }
+  ]
+}
