@@ -542,6 +542,12 @@ With this flag, lgrep resolves each project path through `git rev-parse --git-co
 invalidate_worktree_cache(paths: ["/path/to/worktree"])
 ```
 
+If archive cleanup cannot call the lgrep owner tool, ADV records an owner-routed
+remediation in its worktree cleanup evidence instead of deleting lgrep cache
+state itself. The remediation points back to
+`invalidate_worktree_cache(paths: [...])` for targeted cleanup or
+`lgrep gc --execute` for stale alias garbage collection.
+
 **Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs two passes:
 
 1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
