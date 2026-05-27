@@ -17,6 +17,7 @@ from lgrep.chunking import LANGUAGE_MAP
 
 if TYPE_CHECKING:
     from lgrep.indexing import Indexer
+    from lgrep.server.runtime import RuntimeSupervisor
 
 # Extensions we index (from LANGUAGE_MAP)
 SUPPORTED_EXTENSIONS = frozenset(LANGUAGE_MAP.keys())
@@ -32,6 +33,7 @@ class IndexingHandler(FileSystemEventHandler):
         indexer: Indexer,
         loop: asyncio.AbstractEventLoop,
         debounce_ms: int = 500,
+        runtime: RuntimeSupervisor | None = None,
     ) -> None:
         """Initialize the handler.
 
@@ -39,10 +41,12 @@ class IndexingHandler(FileSystemEventHandler):
             indexer: Indexer instance to call for re-indexing
             loop: Asyncio event loop to schedule tasks
             debounce_ms: Time to wait before indexing after a change
+            runtime: Optional bounded runtime supervisor for blocking work
         """
         self.indexer = indexer
         self.loop = loop
         self.debounce_ms = debounce_ms
+        self.runtime = runtime
         self.pending_files: dict[Path, asyncio.TimerHandle] = {}
 
     def on_modified(self, event):
@@ -101,9 +105,16 @@ class IndexingHandler(FileSystemEventHandler):
 
         log.info("incremental_index_triggered", file=str(path))
         try:
-            # We must run indexer.index_file in a thread if it's blocking,
-            # but currently it's synchronous. Let's run it in an executor.
-            await self.loop.run_in_executor(None, self.indexer.index_file, path)
+            if self.runtime is not None:
+                await self.runtime.run_blocking(
+                    "watch_index_file",
+                    "IndexingHandler._do_index",
+                    str(self.indexer.project_path),
+                    self.indexer.index_file,
+                    path,
+                )
+            else:
+                await self.loop.run_in_executor(None, self.indexer.index_file, path)
         except Exception as e:
             log.error("incremental_index_failed", file=str(path), error=str(e))
 
@@ -111,7 +122,16 @@ class IndexingHandler(FileSystemEventHandler):
         """Delete file from index in a worker thread."""
         try:
             rel_path = str(path.relative_to(self.indexer.project_path))
-            await self.loop.run_in_executor(None, self.indexer.storage.delete_by_file, rel_path)
+            if self.runtime is not None:
+                await self.runtime.run_blocking(
+                    "watch_delete_file",
+                    "IndexingHandler._async_delete_file",
+                    str(self.indexer.project_path),
+                    self.indexer.storage.delete_by_file,
+                    rel_path,
+                )
+            else:
+                await self.loop.run_in_executor(None, self.indexer.storage.delete_by_file, rel_path)
         except Exception as e:
             log.error("delete_from_index_failed", file=str(path), error=str(e))
 
@@ -123,15 +143,18 @@ class FileWatcher:
         self,
         indexer: Indexer,
         debounce_ms: int = 500,
+        runtime: RuntimeSupervisor | None = None,
     ) -> None:
         """Initialize the watcher.
 
         Args:
             indexer: Indexer instance
             debounce_ms: Debounce time for changes
+            runtime: Optional bounded runtime supervisor for blocking work
         """
         self.indexer = indexer
         self.debounce_ms = debounce_ms
+        self.runtime = runtime
         self._observer: Observer | None = None
         self.handler: IndexingHandler | None = None
         self._running = False
@@ -146,6 +169,7 @@ class FileWatcher:
             indexer=self.indexer,
             loop=loop,
             debounce_ms=self.debounce_ms,
+            runtime=self.runtime,
         )
 
         # Create a fresh Observer each time so start/stop is restartable

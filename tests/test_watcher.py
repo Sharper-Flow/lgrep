@@ -39,6 +39,55 @@ class TestFileWatcher:
         assert indexer.index_file.called
 
     @pytest.mark.asyncio
+    async def test_handler_routes_index_through_runtime(self):
+        """Watcher indexing uses the bounded runtime supervisor when provided."""
+        indexer = MagicMock()
+        indexer.discovery.is_ignored.return_value = False
+        indexer.project_path = Path("/project")
+        calls = []
+
+        runtime = MagicMock()
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        runtime.run_blocking = run_blocking
+
+        loop = asyncio.get_running_loop()
+        handler = IndexingHandler(indexer, loop, debounce_ms=10, runtime=runtime)
+
+        event = FileModifiedEvent("/project/test.py")
+        handler.on_modified(event)
+        await asyncio.sleep(0.05)
+
+        assert indexer.index_file.called
+        assert ("watch_index_file", "IndexingHandler._do_index", "/project") in calls
+
+    @pytest.mark.asyncio
+    async def test_handler_routes_delete_through_runtime(self):
+        """Watcher deletion uses the bounded runtime supervisor when provided."""
+        indexer = MagicMock()
+        indexer.project_path = Path("/project")
+        calls = []
+
+        runtime = MagicMock()
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        runtime.run_blocking = run_blocking
+
+        loop = asyncio.get_running_loop()
+        handler = IndexingHandler(indexer, loop, runtime=runtime)
+
+        await handler._async_delete_file(Path("/project/test.py"))
+
+        indexer.storage.delete_by_file.assert_called_once_with("test.py")
+        assert ("watch_delete_file", "IndexingHandler._async_delete_file", "/project") in calls
+
+    @pytest.mark.asyncio
     async def test_handler_respects_ignore(self):
         """Should not schedule re-indexing for ignored files."""
         indexer = MagicMock()

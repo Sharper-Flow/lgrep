@@ -514,7 +514,7 @@ async def watch_start_semantic(
 
     try:
         if not state.watcher:
-            state.watcher = FileWatcher(state.indexer)
+            state.watcher = FileWatcher(state.indexer, runtime=app_ctx.runtime)
 
         state.watcher.start()
         state.watching = True

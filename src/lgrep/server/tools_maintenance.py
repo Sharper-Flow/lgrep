@@ -28,6 +28,29 @@ from lgrep.tools.invalidate_worktree import (
 from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
 
 
+async def _run_blocking(
+    ctx: Context | None,
+    kind: str,
+    project: str | None,
+    fn,
+    *args,
+    **kwargs,
+):
+    app_ctx = None
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+    if app_ctx is not None:
+        return await app_ctx.runtime.run_blocking(
+            kind,
+            "tools_maintenance",
+            project,
+            fn,
+            *args,
+            **kwargs,
+        )
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
 def _transport_is_local(ctx: Context | None) -> bool:
     """Return True when the MCP transport is the local stdio pipe.
 
@@ -95,7 +118,10 @@ async def prune_orphans(
     if not dry_run and not _transport_is_local(ctx):
         effective_dry_run = True
 
-    return await asyncio.to_thread(
+    return await _run_blocking(
+        ctx,
+        "prune_orphans",
+        None,
         _prune_orphans,
         dry_run=effective_dry_run,
         active_set=active_set,
@@ -133,7 +159,10 @@ async def invalidate_worktree_cache(
     t0 = time.monotonic()
 
     # Run the core invalidation logic in a thread (sync I/O)
-    entries, paths_cleaned, bytes_reclaimed = await asyncio.to_thread(
+    entries, paths_cleaned, bytes_reclaimed = await _run_blocking(
+        ctx,
+        "invalidate_worktree_cache",
+        None,
         _invalidate_worktree_cache,
         paths=paths,
     )

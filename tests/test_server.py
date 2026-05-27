@@ -24,6 +24,9 @@ from lgrep.server import (
     index_semantic as lgrep_index,
 )
 from lgrep.server import (
+    invalidate_worktree_cache as lgrep_invalidate_worktree_cache,
+)
+from lgrep.server import (
     prune_orphans as lgrep_prune_orphans,
 )
 from lgrep.server import (
@@ -261,6 +264,61 @@ class TestDiskCacheAutoLoad:
         assert result["dry_run"] is True
         assert result["deleted_dirs"] == 0
         assert orphan.exists()
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_orphans_routes_blocking_work_through_runtime(self):
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(transport="stdio")
+        mock_ctx.request_context.lifespan_context = app_ctx
+        calls = []
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        app_ctx.runtime.run_blocking = run_blocking
+
+        report = {
+            "dry_run": True,
+            "dirs_examined": 0,
+            "orphans": [],
+            "skipped_active": [],
+            "deleted_dirs": 0,
+            "reclaimed_bytes": 0,
+            "failures": [],
+        }
+
+        with patch("lgrep.server.tools_maintenance._prune_orphans", return_value=report):
+            result = await lgrep_prune_orphans(dry_run=True, ctx=mock_ctx)
+
+        assert result is report
+        assert ("prune_orphans", "tools_maintenance", None) in calls
+
+    @pytest.mark.asyncio
+    async def test_invalidate_worktree_cache_routes_blocking_work_through_runtime(self, tmp_path):
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(transport="stdio")
+        mock_ctx.request_context.lifespan_context = app_ctx
+        calls = []
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        app_ctx.runtime.run_blocking = run_blocking
+        worktree = tmp_path / "wt"
+        worktree.mkdir()
+        entry = {"path": str(worktree), "cache_dir": str(tmp_path / "cache"), "error": None}
+
+        with patch(
+            "lgrep.server.tools_maintenance._invalidate_worktree_cache",
+            return_value=([entry], 1, 2),
+        ):
+            result = await lgrep_invalidate_worktree_cache(paths=[str(worktree)], ctx=mock_ctx)
+
+        assert result["paths_cleaned"] == 1
+        assert result["bytes_reclaimed"] == 2
+        assert ("invalidate_worktree_cache", "tools_maintenance", None) in calls
 
 
 class TestAcceptanceToolChoiceAndOnboarding:

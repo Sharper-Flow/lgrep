@@ -189,7 +189,14 @@ async def _schedule_startup_sweep(ctx: LgrepContext) -> None:
         from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
 
         active_set = list(ctx.projects.keys())
-        report = await asyncio.to_thread(_prune_orphans, dry_run=False, active_set=active_set)
+        report = await ctx.runtime.run_blocking(
+            "startup_orphan_sweep",
+            "_schedule_startup_sweep",
+            None,
+            _prune_orphans,
+            dry_run=False,
+            active_set=active_set,
+        )
         log.info(
             "startup_orphan_sweep_done",
             deleted=report["deleted_dirs"],
