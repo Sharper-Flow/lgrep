@@ -13,6 +13,7 @@ import structlog
 
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer
+from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import (
     ChunkStore,
     canonical_repo_key,
@@ -100,6 +101,7 @@ class LgrepContext:
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     transport: str | None = None
+    runtime: RuntimeSupervisor = field(default_factory=RuntimeSupervisor)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
 
@@ -150,6 +152,7 @@ async def _shutdown(ctx: LgrepContext) -> None:
 
     ctx.projects.clear()
     ctx._canonical_to_state.clear()
+    ctx.runtime.shutdown(cancel_futures=True)
     ctx.embedder = None
     log.info("lgrep_shutdown_complete")
 
