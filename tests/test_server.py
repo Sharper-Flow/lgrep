@@ -656,6 +656,13 @@ class TestServerTools:
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext()
         app_ctx.embedder = MagicMock()
+        calls = []
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        app_ctx.runtime.run_blocking = run_blocking
 
         # Set up a ProjectState in the projects dict
         mock_db = MagicMock()
@@ -679,6 +686,8 @@ class TestServerTools:
         assert "results" in data
         assert len(data["results"]) == 1
         assert data["results"][0]["file_path"] == "a.py"
+        assert ("staleness_check", "_execute_search", "/path") in calls
+        assert ("search_hybrid", "_execute_search", "/path") in calls
         # query_time_ms is no longer in the response TypedDict (SearchSemanticResult)
         # — it was an internal storage metric, not part of the MCP contract
 
@@ -753,6 +762,35 @@ class TestServerErrorPaths:
         assert "VOYAGE_API_KEY" in data["error"]
 
     @pytest.mark.asyncio
+    async def test_lgrep_index_routes_blocking_work_through_runtime(self, tmp_path):
+        """Explicit indexing runs sync index/storage calls through RuntimeSupervisor."""
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        project_path = str(tmp_path.resolve())
+
+        calls = []
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        app_ctx.runtime.run_blocking = run_blocking
+
+        status = MagicMock(file_count=2, chunk_count=3, duration_ms=4.5, total_tokens=6)
+        mock_indexer = MagicMock()
+        mock_indexer.index_all.return_value = status
+        mock_db = MagicMock()
+        mock_db.get_latest_indexed_at.return_value = 123.0
+        app_ctx.projects[project_path] = ProjectState(db=mock_db, indexer=mock_indexer)
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        response = await lgrep_index(path=project_path, ctx=mock_ctx)
+
+        assert response["file_count"] == 2
+        assert ("index_all", "index_semantic", project_path) in calls
+        assert ("db_latest_indexed_at", "index_semantic", project_path) in calls
+
+    @pytest.mark.asyncio
     async def test_lgrep_status_no_db(self):
         """Should return empty projects list when no database is initialized."""
         mock_ctx = MagicMock(spec=Context)
@@ -765,20 +803,19 @@ class TestServerErrorPaths:
 
     @pytest.mark.asyncio
     async def test_lgrep_status_all_projects_entries_include_disk_cache_and_error(self):
-        """All-projects status entries MUST include `disk_cache` and `error`.
+        """All-projects status is cheap and includes compatible fields.
 
-        Regression for the missing-field bug that produced 23 pydantic
-        validation errors when more than one project was loaded — the
-        StatusSemanticResult TypedDict requires both keys, and the
-        all-projects path passes _get_project_stats() output directly.
+        No-arg status must not fan out into per-project LanceDB counts. Entries
+        keep the legacy fields and add ``summary_only`` so callers know deep
+        counts were intentionally omitted.
         """
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext()
 
         for proj_path in ("/proj/a", "/proj/b"):
             mock_db = MagicMock()
-            mock_db.count_chunks.return_value = 42
-            mock_db.get_indexed_files.return_value = {"x.py"}
+            mock_db.count_chunks.side_effect = AssertionError("global status must stay cheap")
+            mock_db.get_indexed_files.side_effect = AssertionError("global status must stay cheap")
             state = ProjectState(db=mock_db, indexer=MagicMock(), watching=False)
             app_ctx.projects[proj_path] = state
 
@@ -791,18 +828,21 @@ class TestServerErrorPaths:
         for entry in data["projects"]:
             assert "disk_cache" in entry, f"entry missing disk_cache: {entry}"
             assert "error" in entry, f"entry missing error: {entry}"
-            # Defaults on the success path — must be None when not loaded from disk
             assert entry["disk_cache"] is None
             assert entry["error"] is None
-            # Existing fields must remain
-            assert entry["files"] == 1
-            assert entry["chunks"] == 42
+            assert entry["files"] == 0
+            assert entry["chunks"] == 0
             assert entry["watching"] is False
+            assert entry["summary_only"] is True
+            assert "path" in entry["detail"]
+
+        for state in app_ctx.projects.values():
+            state.db.count_chunks.assert_not_called()
+            state.db.get_indexed_files.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_lgrep_status_all_projects_includes_fields_on_error_branch(self):
-        """When a project's stats query raises, the entry MUST still carry both
-        `disk_cache` (None) and `error` (string) keys."""
+    async def test_lgrep_status_scoped_includes_fields_on_error_branch(self):
+        """Scoped deep status still carries both `disk_cache` and `error` keys."""
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext()
 
@@ -813,13 +853,36 @@ class TestServerErrorPaths:
 
         mock_ctx.request_context.lifespan_context = app_ctx
 
-        response = await lgrep_status(ctx=mock_ctx)
-        data = response
-        assert len(data["projects"]) == 1
-        entry = data["projects"][0]
+        entry = await lgrep_status(path="/proj/broken", ctx=mock_ctx)
         assert entry["disk_cache"] is None
         assert isinstance(entry["error"], str)
         assert "simulated DB failure" in entry["error"]
+
+    @pytest.mark.asyncio
+    async def test_lgrep_status_scoped_deep_counts_use_runtime_supervisor(self):
+        """Scoped status preserves deep counts but routes sync DB work through runtime."""
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext()
+
+        calls = []
+
+        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+            calls.append((kind, caller, project))
+            return fn(*args, **kwargs)
+
+        app_ctx.runtime.run_blocking = run_blocking
+        mock_db = MagicMock()
+        mock_db.count_chunks.return_value = 42
+        mock_db.get_indexed_files.return_value = {"x.py", "y.py"}
+        app_ctx.projects["/proj/scoped"] = ProjectState(db=mock_db, indexer=MagicMock())
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        entry = await lgrep_status(path="/proj/scoped", ctx=mock_ctx)
+
+        assert entry["files"] == 2
+        assert entry["chunks"] == 42
+        assert ("status_count_chunks", "_get_project_stats", "/proj/scoped") in calls
+        assert ("status_indexed_files", "_get_project_stats", "/proj/scoped") in calls
 
     @pytest.mark.asyncio
     async def test_lgrep_watch_stop_when_not_watching(self):

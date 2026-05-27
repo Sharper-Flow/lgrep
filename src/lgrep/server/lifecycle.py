@@ -24,7 +24,8 @@ from lgrep.storage import (
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Callable
+    from typing import Any
 
     from mcp.server.fastmcp import FastMCP
 
@@ -306,7 +307,21 @@ async def _ensure_project_initialized(
             return _error_response("Failed to initialize project.")
 
 
-async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
+async def _run_blocking_or_thread(
+    runtime: RuntimeSupervisor | None,
+    kind: str,
+    caller: str,
+    project: str,
+    fn: Callable[[], Any],
+) -> Any:
+    if runtime is not None:
+        return await runtime.run_blocking(kind, caller, project, fn)
+    return await asyncio.to_thread(fn)
+
+
+async def _get_project_stats(
+    proj_path: str, state: ProjectState, runtime: RuntimeSupervisor | None = None
+) -> dict:
     """Get stats for a single project. Safe to call concurrently via asyncio.gather.
 
     Always returns a dict matching the ``StatusSemanticResult`` TypedDict shape
@@ -314,8 +329,20 @@ async def _get_project_stats(proj_path: str, state: ProjectState) -> dict:
     directly into the typed result without missing-key validation errors.
     """
     try:
-        chunks = await asyncio.to_thread(state.db.count_chunks)
-        files_set = await asyncio.to_thread(state.db.get_indexed_files)
+        chunks = await _run_blocking_or_thread(
+            runtime,
+            "status_count_chunks",
+            "_get_project_stats",
+            proj_path,
+            state.db.count_chunks,
+        )
+        files_set = await _run_blocking_or_thread(
+            runtime,
+            "status_indexed_files",
+            "_get_project_stats",
+            proj_path,
+            state.db.get_indexed_files,
+        )
         return {
             "files": len(files_set),
             "chunks": chunks,
@@ -378,10 +405,20 @@ async def _auto_index_project_single_flight(
 
         for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
             try:
-                status = await asyncio.to_thread(state.indexer.index_all)
+                status = await app_ctx.runtime.run_blocking(
+                    "index_all",
+                    "_auto_index_project_single_flight",
+                    project_path,
+                    state.indexer.index_all,
+                )
                 # Refresh the cached freshness timestamp so subsequent
                 # staleness pre-flights observe the just-completed index.
-                state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
+                state.latest_indexed_at = await app_ctx.runtime.run_blocking(
+                    "db_latest_indexed_at",
+                    "_auto_index_project_single_flight",
+                    project_path,
+                    state.db.get_latest_indexed_at,
+                )
                 log.info(
                     "search_auto_index_success",
                     project=project_path,

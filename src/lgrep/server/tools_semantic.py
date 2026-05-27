@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
@@ -35,9 +34,40 @@ from lgrep.server.responses import (
 from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
 from lgrep.watcher import FileWatcher
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+async def _run_blocking(
+    app_ctx: LgrepContext,
+    kind: str,
+    caller: str,
+    project: str | None,
+    fn: Callable[..., Any],
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Run sync daemon work through the bounded runtime supervisor."""
+    return await app_ctx.runtime.run_blocking(kind, caller, project, fn, *args, **kwargs)
+
+
+def _cheap_project_status(proj_path: str, state: ProjectState) -> StatusSemanticResult:
+    """Return memory-only status for no-arg global status calls."""
+    return StatusSemanticResult(
+        files=0,
+        chunks=0,
+        watching=state.watching,
+        project=proj_path,
+        disk_cache=None,
+        error=None,
+        summary_only=True,
+        detail="Counts omitted for cheap global status; call with path for deep counts.",
+    )
 
 
 def _check_staleness(state: ProjectState) -> tuple[bool, int]:
@@ -122,7 +152,14 @@ async def _execute_search(
         # Auto-staleness pre-flight: cheap mtime gate, then hash check on the
         # suspect subset only. If drift is confirmed, re-index synchronously
         # before paying for the query embedding so the user sees fresh results.
-        stale, suspect_count = await asyncio.to_thread(_check_staleness, state)
+        stale, suspect_count = await _run_blocking(
+            app_ctx,
+            "staleness_check",
+            "_execute_search",
+            project_path,
+            _check_staleness,
+            state,
+        )
         if stale:
             log.info(
                 "staleness_check_triggered_reindex",
@@ -138,13 +175,36 @@ async def _execute_search(
                 return reindex_result  # type: ignore[return-value]
             # Refresh the cached timestamp so subsequent searches use the
             # post-reindex value without another DB round trip.
-            state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
+            state.latest_indexed_at = await _run_blocking(
+                app_ctx,
+                "db_latest_indexed_at",
+                "_execute_search",
+                project_path,
+                state.db.get_latest_indexed_at,
+            )
 
         query_vector = await app_ctx.embedder.embed_query_async(query)
         if hybrid:
-            results = await asyncio.to_thread(state.db.search_hybrid, query_vector, query, limit)
+            results = await _run_blocking(
+                app_ctx,
+                "search_hybrid",
+                "_execute_search",
+                project_path,
+                state.db.search_hybrid,
+                query_vector,
+                query,
+                limit,
+            )
         else:
-            results = await asyncio.to_thread(state.db.search_vector, query_vector, limit)
+            results = await _run_blocking(
+                app_ctx,
+                "search_vector",
+                "_execute_search",
+                project_path,
+                state.db.search_vector,
+                query_vector,
+                limit,
+            )
         # Explicit key mapping: construct SearchChunk dicts with line_number
         # mapped from SearchResult.start_line, preserving fidelity fields.
         chunks = [
@@ -284,10 +344,22 @@ async def index_semantic(
 
     # Perform indexing
     try:
-        status = await asyncio.to_thread(state.indexer.index_all)
+        status = await _run_blocking(
+            app_ctx,
+            "index_all",
+            "index_semantic",
+            str(project_path),
+            state.indexer.index_all,
+        )
         # Refresh cached freshness timestamp so staleness pre-flight sees the
         # just-rebuilt index on the next search call.
-        state.latest_indexed_at = await asyncio.to_thread(state.db.get_latest_indexed_at)
+        state.latest_indexed_at = await _run_blocking(
+            app_ctx,
+            "db_latest_indexed_at",
+            "index_semantic",
+            str(project_path),
+            state.db.get_latest_indexed_at,
+        )
         return IndexSemanticResult(
             file_count=status.file_count,
             chunk_count=status.chunk_count,
@@ -348,7 +420,13 @@ async def status_semantic(
                         files_set = store.get_indexed_files()
                         return len(files_set), chunks
 
-                    file_count, chunk_count = await asyncio.to_thread(_read_disk_stats)
+                    file_count, chunk_count = await _run_blocking(
+                        app_ctx,
+                        "status_disk_cache_stats",
+                        "status_semantic",
+                        project_path,
+                        _read_disk_stats,
+                    )
                     return StatusSemanticResult(
                         files=file_count,
                         chunks=chunk_count,
@@ -364,7 +442,7 @@ async def status_semantic(
                 files=0, chunks=0, watching=False, project=project_path, disk_cache=None, error=None
             )
 
-        stats = await _get_project_stats(project_path, state)
+        stats = await _get_project_stats(project_path, state, app_ctx.runtime)
         return StatusSemanticResult(
             files=stats.get("files", 0),
             chunks=stats.get("chunks", 0),
@@ -378,10 +456,11 @@ async def status_semantic(
     if not app_ctx.projects:
         return StatusAllProjectsResult(projects=[])
 
-    # Gather stats for all projects concurrently
-    tasks = [_get_project_stats(proj_path, state) for proj_path, state in app_ctx.projects.items()]
-    projects_status = await asyncio.gather(*tasks)
-    return StatusAllProjectsResult(projects=list(projects_status))
+    # Cheap memory-only summary: no global LanceDB/database fanout by default.
+    projects_status = [
+        _cheap_project_status(proj_path, state) for proj_path, state in app_ctx.projects.items()
+    ]
+    return StatusAllProjectsResult(projects=projects_status)
 
 
 @mcp.tool(

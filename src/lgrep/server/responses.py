@@ -114,8 +114,8 @@ class IndexSemanticResult(TypedDict):
     total_tokens: int
 
 
-class StatusSemanticResult(TypedDict):
-    """Response for status_semantic (single-project or all-projects)."""
+class _StatusSemanticRequired(TypedDict):
+    """Required response fields for status_semantic."""
 
     files: int
     chunks: int
@@ -123,6 +123,13 @@ class StatusSemanticResult(TypedDict):
     project: str
     disk_cache: bool | None  # None = not applicable / no disk cache read
     error: str | None  # present only on error
+
+
+class StatusSemanticResult(_StatusSemanticRequired, total=False):
+    """Response for status_semantic (single-project or all-projects)."""
+
+    summary_only: bool  # True when no-arg global status omits deep counts
+    detail: str  # Human-readable note for summary-only entries
 
 
 class StatusAllProjectsResult(TypedDict):
