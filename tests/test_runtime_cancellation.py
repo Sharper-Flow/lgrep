@@ -237,3 +237,179 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
     assert any("staleness_check_deadline_exceeded" in e for e, _ in warnings), (
         f"Expected staleness_check_deadline_exceeded log, got {warnings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# AC8: embed_documents / _embed_batch_with_retry honor a cancel_event
+# ---------------------------------------------------------------------------
+
+
+def _make_real_embedder(monkeypatch):
+    """Build a real VoyageEmbedder with a fake voyage client so we can drive
+    the batching + retry-backoff code paths without network calls.
+    """
+    monkeypatch.setenv("VOYAGE_API_KEY", "test-key-not-used")
+    from lgrep.embeddings import VoyageEmbedder
+
+    embedder = VoyageEmbedder(api_key="test-key-not-used")
+    return embedder
+
+
+def test_embed_documents_raises_between_batches_on_cancel(monkeypatch):
+    """VoyageEmbedder.embed_documents(texts, cancel_event=...) must raise
+    OperationCancelled between batches when the event is already set.
+    """
+    from lgrep.exceptions import OperationCancelled
+
+    embedder = _make_real_embedder(monkeypatch)
+
+    # Fake client.embed returns a trivial successful result so we isolate
+    # the cancellation behavior (not retry).
+    class _FakeResult:
+        def __init__(self, n):
+            self.embeddings = [[0.1] * 1024 for _ in range(n)]
+            self.total_tokens = n * 10
+
+    embedder.client.embed = lambda texts, model, input_type: _FakeResult(len(texts))
+
+    cancel_event = threading.Event()
+    cancel_event.set()  # set before any batch runs
+
+    # Enough texts to form at least one batch.
+    texts = [f"chunk {i}" for i in range(10)]
+
+    with pytest.raises(OperationCancelled):
+        embedder.embed_documents(texts, cancel_event=cancel_event)
+
+
+def test_embed_batch_retry_aborts_wait_immediately_on_cancel(monkeypatch):
+    """_embed_batch_with_retry, when the cancel_event is set DURING its
+    exponential-backoff wait, must abort within the wait granularity (not
+    sleep the full backoff delay). This is the dominant wedge contributor:
+    up to ~31s of un-cancellable time.sleep in the retry loop.
+    """
+    from lgrep.exceptions import OperationCancelled
+
+    embedder = _make_real_embedder(monkeypatch)
+
+    cancel_event = threading.Event()
+
+    # Fake client.embed always raises a retryable error so we enter the
+    # backoff path. Setting the event from a background thread shortly after
+    # the call begins must wake the wait and raise OperationCancelled fast.
+    def failing_embed(texts, model, input_type):
+        raise RuntimeError("simulated transient voyage error")
+
+    embedder.client.embed = failing_embed
+
+    # Set the event 0.2s after we start, while the retry backoff (BASE_DELAY=1s+)
+    # would otherwise be sleeping. A correct implementation aborts ~immediately.
+    def set_soon():
+        time.sleep(0.2)
+        cancel_event.set()
+
+    setter = threading.Thread(target=set_soon, daemon=True)
+
+    start = time.monotonic()
+    setter.start()
+    with pytest.raises(OperationCancelled):
+        embedder._embed_batch_with_retry(
+            ["chunk a", "chunk b"], "document", cancel_event=cancel_event
+        )
+    elapsed = time.monotonic() - start
+    setter.join(timeout=1.0)
+
+    # Must abort well before a single full BASE_DELAY (1s) backoff completes,
+    # and far before the ~31s worst-case full retry budget. Allow generous
+    # slack for scheduling: < 0.9s proves the wait() aborted on the event.
+    assert elapsed < 0.9, (
+        f"retry backoff did not abort on cancel: took {elapsed:.2f}s "
+        "(expected immediate abort via cancel_event.wait)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC9: index_file honors a cancel_event before embed and before storage
+# ---------------------------------------------------------------------------
+
+
+def test_index_file_raises_before_embed_on_cancel(tmp_project):
+    """Indexer.index_file(file_path, cancel_event=...) must raise
+    OperationCancelled if the event is set before the embedding step.
+    """
+    from lgrep.exceptions import OperationCancelled
+
+    project_root, indexer = tmp_project
+
+    cancel_event = threading.Event()
+    cancel_event.set()  # set before index_file runs -> must raise before embed
+
+    target = project_root / "file_00.py"
+
+    with pytest.raises(OperationCancelled):
+        indexer.index_file(target, cancel_event=cancel_event)
+
+    # Embedding must NOT have been attempted (cancelled before embed step).
+    indexer.embedder.embed_documents.assert_not_called()
+
+
+def test_index_file_raises_before_storage_on_cancel(tmp_project):
+    """Indexer.index_file must raise OperationCancelled before the storage
+    step when the event is set after embedding begins. We set the event
+    inside the embed_documents mock so the post-embed check fires.
+    """
+    from lgrep.embeddings import EmbeddingResult
+    from lgrep.exceptions import OperationCancelled
+
+    project_root, indexer = tmp_project
+
+    cancel_event = threading.Event()
+
+    def embed_then_cancel(texts, **kwargs):
+        cancel_event.set()  # simulate cancellation arriving during embed
+        return EmbeddingResult(
+            embeddings=[[0.1] * 1024 for _ in texts],
+            token_usage=len(texts) * 10,
+            model="voyage-code-3",
+        )
+
+    indexer.embedder.embed_documents.side_effect = embed_then_cancel
+
+    target = project_root / "file_00.py"
+
+    with pytest.raises(OperationCancelled):
+        indexer.index_file(target, cancel_event=cancel_event)
+
+    # Storage write must NOT have happened (cancelled before storage step).
+    indexer.storage.add_chunks.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# AC10: index_all enforces a hard wall-clock backstop
+# ---------------------------------------------------------------------------
+
+
+def test_index_all_raises_on_wall_clock_budget(tmp_project, monkeypatch):
+    """Indexer.index_all must raise OperationCancelled once total wall-clock
+    exceeds LGREP_INDEX_MAX_WALL_S, independent of cancel_event, as a
+    defense-in-depth backstop.
+    """
+    from lgrep.exceptions import OperationCancelled
+
+    project_root, indexer = tmp_project
+
+    # Tiny budget so the backstop fires quickly.
+    monkeypatch.setenv("LGREP_INDEX_MAX_WALL_S", "0.1")
+
+    # Make each index_file slow enough that the wall-clock budget is exceeded
+    # within the first couple of files.
+    original = indexer.index_file
+
+    def slow_index_file(file_path, **kwargs):
+        time.sleep(0.08)
+        return original(file_path, **kwargs)
+
+    indexer.index_file = slow_index_file
+
+    with pytest.raises(OperationCancelled):
+        indexer.index_all()  # no cancel_event — wall-clock backstop only
