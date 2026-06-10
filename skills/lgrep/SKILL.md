@@ -172,6 +172,15 @@ three-stage check:
 3. **re-index** — on confirmed drift, `index_all()` runs via the existing
    single-flight coordinator so concurrent searches share one re-index.
 
+The whole check is bounded by `LGREP_STALENESS_DEADLINE_S` (default 4.0s)
+so a large repo's directory walk cannot eat the entire 8s tool timeout.
+On deadline, the search proceeds with the slightly-stale index and a
+`staleness_check_deadline_exceeded` log is emitted; the next search will
+trigger a fresh reindex if drift is real. Agents may see hybrid
+false-positives (results that don't reflect very recent edits) right
+after a long staleness walk; re-run the search once if precision is
+critical.
+
 Agents do **not** need to manually call `lgrep_index_semantic` to refresh
 between searches. Call `lgrep_status_semantic` if a project's drift behavior
 seems wrong (e.g., to inspect `disk_cache` / `watching` state per project).
