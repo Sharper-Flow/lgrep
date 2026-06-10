@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -24,6 +25,14 @@ if TYPE_CHECKING:
     from lgrep.storage import ChunkStore
 
 log = structlog.get_logger()
+
+
+class OperationCancelled(Exception):
+    """Raised by Indexer.index_all when a cancel_event is set during the
+    per-file indexing loop. Lets the awaiting asyncio coroutine unwind the
+    bounded executor worker thread at the next file boundary instead of
+    holding the slot until the underlying LanceDB I/O finishes.
+    """
 
 
 @dataclass
@@ -63,11 +72,22 @@ class Indexer:
 
         log.info("indexer_initialized", project=str(self.project_path))
 
-    def index_all(self) -> IndexStatus:
+    def index_all(self, cancel_event: threading.Event | None = None) -> IndexStatus:
         """Perform a full index of the project.
+
+        Args:
+            cancel_event: Optional cooperative-cancellation primitive. If
+                set, the loop exits at the next file boundary with
+                ``OperationCancelled``. Used by the daemon's bounded
+                executor to release worker slots when the awaiting MCP
+                coroutine is cancelled (e.g. 8s tool timeout).
 
         Returns:
             IndexStatus with results
+
+        Raises:
+            OperationCancelled: if ``cancel_event`` is set before or during
+                the per-file loop.
         """
         start_time = time.perf_counter()
         status = IndexStatus()
@@ -94,6 +114,13 @@ class Indexer:
                 log.warning("stale_cleanup_failed", error=str(e))
 
         for file_path in all_files:
+            if cancel_event is not None and cancel_event.is_set():
+                log.info(
+                    "index_all_cancelled",
+                    project=str(self.project_path),
+                    files_processed=status.chunk_count,
+                )
+                raise OperationCancelled("index_all cancelled by cancel_event")
             file_status = self.index_file(file_path)
             status.chunk_count += file_status.chunk_count
             status.total_tokens += file_status.total_tokens
