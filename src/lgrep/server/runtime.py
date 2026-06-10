@@ -123,9 +123,25 @@ class RuntimeSupervisor:
         project: str | None,
         fn: Callable[..., T],
         *args: Any,
+        cancel_event: threading.Event | None = None,
         **kwargs: Any,
     ) -> T:
-        """Run a synchronous function under bounded, observable supervision."""
+        """Run a synchronous function under bounded, observable supervision.
+
+        Args:
+            kind: Job kind label for diagnostics (e.g. "index_all", "search_vector").
+            caller: Tool name that initiated the work.
+            project: Project path, if applicable.
+            fn: The synchronous function to execute.
+            *args: Positional args forwarded to ``fn``.
+            cancel_event: Optional cooperative-cancellation primitive. If
+                the awaiting asyncio coroutine is cancelled, the supervisor
+                calls ``cancel_event.set()`` BEFORE propagating the
+                ``CancelledError``, so the blocking thread can observe
+                the signal at the next safe point and unwind.
+            **kwargs: Keyword args forwarded to ``fn`` (not including
+                ``cancel_event``).
+        """
         job = self._create_job(kind=kind, caller=caller, project=project)
 
         def invoke() -> T:
@@ -142,6 +158,14 @@ class RuntimeSupervisor:
         try:
             return await asyncio.wrap_future(future)
         except asyncio.CancelledError:
+            # Propagate cancellation to the blocking work BEFORE we mark
+            # the job abandoned, so the work has a chance to exit cleanly
+            # at its next cooperative-cancellation check point. Without
+            # this, blocking work that cannot be interrupted mid-call
+            # (e.g. LanceDB I/O) holds the worker thread forever and the
+            # bounded executor pool fills with abandoned threads.
+            if cancel_event is not None:
+                cancel_event.set()
             self._mark_cancelled_or_abandoned(job.id)
             raise
 
