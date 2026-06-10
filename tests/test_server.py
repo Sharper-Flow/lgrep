@@ -520,7 +520,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         call_counter = {"count": 0}
 
-        def slow_index_all():
+        def slow_index_all(**_kwargs):
             import time
 
             call_counter["count"] += 1
@@ -648,7 +648,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         attempts = {"count": 0}
 
-        def flaky_index_all():
+        def flaky_index_all(**_kwargs):
             attempts["count"] += 1
             if attempts["count"] == 1:
                 raise RuntimeError("temporary embedding timeout")

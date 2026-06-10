@@ -424,7 +424,9 @@ async def _auto_index_project_single_flight(
                     "index_all",
                     "_auto_index_project_single_flight",
                     project_path,
-                    state.indexer.index_all,
+                    lambda cancel_event=cancel_event: state.indexer.index_all(
+                        cancel_event=cancel_event
+                    ),
                     cancel_event=cancel_event,
                 )
                 # Refresh the cached freshness timestamp so subsequent
