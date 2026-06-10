@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from lgrep.embeddings import VoyageEmbedder
-from lgrep.indexing import Indexer
+from lgrep.indexing import Indexer, OperationCancelled
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import (
     ChunkStore,
@@ -411,12 +412,20 @@ async def _auto_index_project_single_flight(
         state = result
 
         for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
+            # Construct a fresh cancel_event per attempt so the supervisor
+            # can propagate the awaiting asyncio coroutine's cancellation
+            # to the blocking index_all work. The indexer checks the
+            # event at the top of every per-file iteration and raises
+            # OperationCancelled, allowing the bounded executor worker
+            # thread to exit instead of holding the slot forever.
+            cancel_event = threading.Event()
             try:
                 status = await app_ctx.runtime.run_blocking(
                     "index_all",
                     "_auto_index_project_single_flight",
                     project_path,
                     state.indexer.index_all,
+                    cancel_event=cancel_event,
                 )
                 # Refresh the cached freshness timestamp so subsequent
                 # staleness pre-flights observe the just-completed index.
@@ -432,6 +441,19 @@ async def _auto_index_project_single_flight(
                     files=status.file_count,
                     chunks=status.chunk_count,
                     duration_ms=round(status.duration_ms, 2),
+                    attempt=attempt,
+                    max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                )
+                return state
+            except OperationCancelled:
+                # The awaiting asyncio coroutine was cancelled (e.g. 8s
+                # tool timeout). The bounded executor worker has already
+                # exited cleanly. Return the state so the search proceeds
+                # with the slightly-stale index; the next search will
+                # trigger a fresh reindex.
+                log.info(
+                    "search_auto_index_cancelled",
+                    project=project_path,
                     attempt=attempt,
                     max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
                 )

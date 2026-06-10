@@ -197,28 +197,26 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
     # Force a tiny deadline so the test runs fast.
     monkeypatch.setenv("LGREP_STALENESS_DEADLINE_S", "0.05")
 
-    # Build a project with many files and a stub state that simulates
-    # a slow staleness walk.
-    from lgrep.server.tools_semantic import ProjectState
-
-    state = MagicMock(spec=ProjectState)
-    indexer = MagicMock()
-    indexer.project_path = str(tmp_path)
-    indexer.discovery = MagicMock()
-
-    def slow_find_files():
-        # Sleep long enough to exceed the 0.05s deadline.
-        time.sleep(0.3)
-        return [tmp_path / "x.py"]
-
-    indexer.discovery.find_files.side_effect = slow_find_files
-    state.indexer = indexer
+    # Build a state with explicit db mock. We use a plain MagicMock (no spec)
+    # so we can freely populate the fields the staleness check accesses.
+    state = MagicMock()
     state.latest_indexed_at = 0.0
     state.db.get_latest_indexed_at.return_value = 0.0
     state.db.get_indexed_files.return_value = set()
 
+    # Build a slow find_files that exceeds the 0.05s deadline.
+    indexer = MagicMock()
+    indexer.project_path = str(tmp_path)
+
+    def slow_find_files():
+        time.sleep(0.3)  # exceeds 0.05s deadline
+        return [tmp_path / "x.py"]
+
+    indexer.discovery.find_files.side_effect = slow_find_files
+    state.indexer = indexer
+
+    # Patch the logger used by tools_semantic to capture deadline logs.
     captured: dict = {}
-    import structlog
 
     class _Capture:
         def info(self, event, **kw):
@@ -230,7 +228,6 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
         def debug(self, event, **kw):
             captured.setdefault("debug", []).append((event, kw))
 
-    # Patch the logger used by tools_semantic to capture deadline logs.
     import lgrep.server.tools_semantic as ts_mod
 
     monkeypatch.setattr(ts_mod, "log", _Capture())
