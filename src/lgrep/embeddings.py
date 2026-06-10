@@ -10,9 +10,15 @@ import os
 import random
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import structlog
 import voyageai
+
+from lgrep.exceptions import OperationCancelled
+
+if TYPE_CHECKING:
+    import threading
 
 log = structlog.get_logger()
 
@@ -94,7 +100,10 @@ class VoyageEmbedder:
             )
 
     def _embed_batch_with_retry(
-        self, batch: list[str], input_type: str
+        self,
+        batch: list[str],
+        input_type: str,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[list[list[float]], int]:
         """Embed a single batch with exponential backoff retry.
 
@@ -103,14 +112,18 @@ class VoyageEmbedder:
         Args:
             batch: List of text strings to embed
             input_type: Voyage input type ("document" or "query")
+            cancel_event: Optional threading.Event for cooperative cancellation
 
         Returns:
             Tuple of (embeddings, token_usage)
 
         Raises:
             Exception: After MAX_RETRIES failed attempts
+            OperationCancelled: If cancel_event is set
         """
         for attempt in range(MAX_RETRIES):
+            if cancel_event is not None and cancel_event.is_set():
+                raise OperationCancelled("embed batch cancelled before attempt")
             try:
                 result = self.client.embed(
                     texts=batch,
@@ -129,8 +142,12 @@ class VoyageEmbedder:
                         batch_size=len(batch),
                         split_into=[mid, len(batch) - mid],
                     )
-                    emb1, tok1 = self._embed_batch_with_retry(batch[:mid], input_type)
-                    emb2, tok2 = self._embed_batch_with_retry(batch[mid:], input_type)
+                    emb1, tok1 = self._embed_batch_with_retry(
+                        batch[:mid], input_type, cancel_event=cancel_event
+                    )
+                    emb2, tok2 = self._embed_batch_with_retry(
+                        batch[mid:], input_type, cancel_event=cancel_event
+                    )
                     return emb1 + emb2, tok1 + tok2
 
                 if attempt == MAX_RETRIES - 1:
@@ -148,7 +165,11 @@ class VoyageEmbedder:
                     delay=delay,
                     error=error_msg,
                 )
-                time.sleep(delay)
+                if cancel_event is not None:
+                    if cancel_event.wait(timeout=delay):
+                        raise OperationCancelled("embed retry backoff cancelled") from None
+                else:
+                    time.sleep(delay)
 
         # Unreachable: the loop always returns or raises on the last attempt
         raise RuntimeError("Unexpected end of retry loop")  # pragma: no cover
@@ -209,6 +230,7 @@ class VoyageEmbedder:
         self,
         texts: list[str],
         batch_size: int = MAX_BATCH_SIZE,
+        cancel_event: threading.Event | None = None,
     ) -> EmbeddingResult:
         """Embed a list of documents (code chunks) with retry logic.
 
@@ -217,9 +239,13 @@ class VoyageEmbedder:
         Args:
             texts: List of text strings to embed
             batch_size: Max number of texts per API call (max 128)
+            cancel_event: Optional threading.Event for cooperative cancellation
 
         Returns:
             EmbeddingResult with embeddings and token usage
+
+        Raises:
+            OperationCancelled: If cancel_event is set between batches
         """
         if not texts:
             return EmbeddingResult(embeddings=[], token_usage=0, model=self.model)
@@ -254,12 +280,16 @@ class VoyageEmbedder:
         )
 
         for batch_num, batch in enumerate(batches, 1):
+            if cancel_event is not None and cancel_event.is_set():
+                raise OperationCancelled("embed_documents cancelled between batches")
             log.debug(
                 "voyage_embed_batch",
                 batch_num=batch_num,
                 batch_size=len(batch),
             )
-            embeddings, tokens = self._embed_batch_with_retry(batch, "document")
+            embeddings, tokens = self._embed_batch_with_retry(
+                batch, "document", cancel_event=cancel_event
+            )
             all_embeddings.extend(embeddings)
             total_tokens += tokens
 

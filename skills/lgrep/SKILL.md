@@ -172,6 +172,26 @@ three-stage check:
 3. **re-index** — on confirmed drift, `index_all()` runs via the existing
    single-flight coordinator so concurrent searches share one re-index.
 
+The whole check is bounded by `LGREP_STALENESS_DEADLINE_S` (default 4.0s)
+so a large repo's directory walk cannot eat the entire 8s tool timeout.
+On deadline, the search proceeds with the slightly-stale index and a
+`staleness_check_deadline_exceeded` log is emitted; the next search will
+trigger a fresh reindex if drift is real. Agents may see hybrid
+false-positives (results that don't reflect very recent edits) right
+after a long staleness walk; re-run the search once if precision is
+critical.
+
+Re-index work (`index_all`) is cooperatively cancellable: when the awaiting
+MCP coroutine is cancelled (8s tool timeout), the bounded-executor worker
+thread unwinds at the next blocking seam — between files, between embed
+batches, and even during the Voyage retry backoff (`cancel_event.wait`
+replaces an un-cancellable sleep) — so a single slow file or long retry
+cannot wedge the worker pool. A hard wall-clock backstop,
+`LGREP_INDEX_MAX_WALL_S` (default 60.0s), guarantees `index_all` aborts the
+batch with `index_all_wall_clock_exceeded` regardless of where it blocks.
+Abandoned jobs reach a terminal `FINISHED_AFTER_ABANDON`/`CANCELLED` state
+and `lgrep_diagnostics` `active_job_count` returns to 0.
+
 Agents do **not** need to manually call `lgrep_index_semantic` to refresh
 between searches. Call `lgrep_status_semantic` if a project's drift behavior
 seems wrong (e.g., to inspect `disk_cache` / `watching` state per project).

@@ -1,0 +1,1851 @@
+{
+  "id": "fixLgrepPoolWedgeAbandoned",
+  "title": "Fix lgrep pool wedge from abandoned index",
+  "status": "archived",
+  "created_at": "2026-06-10T17:39:04.401Z",
+  "tasks": [
+    {
+      "id": "tk-45441be6f257",
+      "title": "TDD red: add tests/test_runtime_cancellation.py with three regression tests that must FAIL against current code",
+      "type": "code",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-06-10T17:55:10.793Z",
+      "metadata": {
+        "phase": "red",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC6"
+        ],
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3"
+        ],
+        "respects": [
+          "C1"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:55:48.602Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T17:56:43.291Z",
+      "verification": "TDD red: 4 tests in tests/test_runtime_cancellation.py, all fail against current code. Failures: ImportError on OperationCancelled (AC1, doesn't exist); AssertionError on cancel_event not set by run_blocking (AC2, current code doesn't propagate); AttributeError on state.db (AC3, mock setup needs more attrs).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_runtime_cancellation.py"
+      ],
+      "touched_files": [
+        "tests/test_runtime_cancellation.py"
+      ],
+      "checkpointSha": "da6ac6941375c7ccd5c82629bed052d44ee55575",
+      "completedAt": "2026-06-10T18:00:47.531Z",
+      "completed_at": "2026-06-10T18:00:47.531Z"
+    },
+    {
+      "id": "tk-cd9d5fa9cb07",
+      "title": "TDD green: implement OperationCancelled exception and cancel_event kwarg on Indexer.index_all",
+      "type": "code",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-06-10T17:55:14.895Z",
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1"
+        ],
+        "verifies": [
+          "AC1"
+        ],
+        "respects": [
+          "DONT1",
+          "DONT2",
+          "C3"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:56:14.004Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:02:41.550Z",
+      "verification": "Added OperationCancelled exception and threading.Event kwarg to Indexer.index_all. Loop checks cancel_event at top of each iteration. AC1 tests pass (2/2).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/indexing.py"
+      ],
+      "touched_files": [
+        "src/lgrep/indexing.py"
+      ],
+      "checkpointSha": "3d3ec59fa196b9ee937e527db36343c256409c6d",
+      "completedAt": "2026-06-10T18:03:27.526Z",
+      "completed_at": "2026-06-10T18:03:27.526Z"
+    },
+    {
+      "id": "tk-dafdc284c4ca",
+      "title": "TDD green: implement cancel_event kwarg on RuntimeSupervisor.run_blocking",
+      "type": "code",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-06-10T17:55:17.834Z",
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC2"
+        ],
+        "verifies": [
+          "AC2"
+        ],
+        "respects": [
+          "C1",
+          "C2"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:56:14.798Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:03:27.802Z",
+      "verification": "RuntimeSupervisor.run_blocking now accepts cancel_event kwarg and sets it on asyncio.CancelledError before propagating. AC2 test passes.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/runtime.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/runtime.py"
+      ],
+      "checkpointSha": "822378763f1d4a0db1363810759bc2189025f1b1",
+      "completedAt": "2026-06-10T18:04:15.583Z",
+      "completed_at": "2026-06-10T18:04:15.583Z"
+    },
+    {
+      "id": "tk-f9aa510faf46",
+      "title": "TDD green: wire cancel event in _auto_index_project_single_flight",
+      "type": "code",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-06-10T17:55:21.648Z",
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC5"
+        ],
+        "verifies": [
+          "AC1",
+          "AC5"
+        ],
+        "respects": [
+          "C1"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:56:15.505Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:04:15.574Z",
+      "verification": "_auto_index_project_single_flight now constructs cancel_event per attempt, passes it to runtime.run_blocking, and catches OperationCancelled to return state cleanly. AC1 + AC2 tests pass.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "checkpointSha": "b0a2c7cd8730052507b76b8c2edc121812b07022",
+      "completedAt": "2026-06-10T18:06:34.561Z",
+      "completed_at": "2026-06-10T18:06:34.561Z"
+    },
+    {
+      "id": "tk-3e97da692b6b",
+      "title": "TDD green: bound _check_staleness with wall-clock deadline",
+      "type": "code",
+      "status": "done",
+      "priority": 4,
+      "created_at": "2026-06-10T17:55:28.416Z",
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC3"
+        ],
+        "verifies": [
+          "AC3"
+        ],
+        "respects": [
+          "C4"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:56:15.514Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:06:32.870Z",
+      "verification": "_check_staleness now bounded by LGREP_STALENESS_DEADLINE_S (default 4.0s). On deadline, returns (False, 0) and emits staleness_check_deadline_exceeded log. All 4 tests pass.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/tools_semantic.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/tools_semantic.py"
+      ],
+      "checkpointSha": "d48f34805a983ef62bb557cdf9437557b0251293",
+      "completedAt": "2026-06-10T18:07:37.151Z",
+      "completed_at": "2026-06-10T18:07:37.151Z"
+    },
+    {
+      "id": "tk-a66cd1a02904",
+      "title": "Document the staleness-walk deadline behavior in skill and instructions",
+      "type": "code",
+      "status": "done",
+      "priority": 5,
+      "created_at": "2026-06-10T17:55:31.633Z",
+      "metadata": {
+        "phase": "docs",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "SC1"
+        ],
+        "verifies": [],
+        "respects": []
+      },
+      "updatedAt": "2026-06-10T17:56:16.304Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:07:35.377Z",
+      "verification": "Updated skills/lgrep/SKILL.md with staleness deadline section. Updated instructions/lgrep-tools.md with one-line fallback note. No code changes.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "instructions/lgrep-tools.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "touched_files": [
+        "instructions/lgrep-tools.md",
+        "skills/lgrep/SKILL.md"
+      ],
+      "checkpointSha": "5c5e016b1020fc5bd613a9ebdeb768b982fec011",
+      "completedAt": "2026-06-10T18:08:38.414Z",
+      "completed_at": "2026-06-10T18:08:38.414Z"
+    },
+    {
+      "id": "tk-98253123e32d",
+      "title": "Verify: run full test suite, ruff lint, and confirm no regressions",
+      "type": "code",
+      "status": "done",
+      "priority": 6,
+      "created_at": "2026-06-10T17:55:33.444Z",
+      "metadata": {
+        "phase": "verify",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC7"
+        ],
+        "verifies": [
+          "AC6",
+          "AC7"
+        ],
+        "respects": [
+          "C4"
+        ]
+      },
+      "updatedAt": "2026-06-10T17:56:17.579Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:08:38.782Z",
+      "verification": "Full pytest: 601 passed, 2 skipped, 0 failed. Ruff: clean.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/indexing.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "touched_files": [
+        "src/lgrep/indexing.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "checkpointSha": "6541e3ece43b6c44605fe04b8b6466dc6e11b3dc",
+      "completedAt": "2026-06-10T18:10:30.458Z",
+      "completed_at": "2026-06-10T18:10:30.458Z"
+    },
+    {
+      "id": "tk-4ff98c9e1cae",
+      "title": "Live probe: redeploy lgrep CLI, restart vision lgrep child, fire 5 search trials",
+      "type": "code",
+      "status": "done",
+      "priority": 7,
+      "created_at": "2026-06-10T17:55:36.809Z",
+      "metadata": {
+        "phase": "verify",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC4"
+        ],
+        "verifies": [
+          "AC4",
+          "SC1",
+          "SC2",
+          "SC3"
+        ],
+        "respects": []
+      },
+      "updatedAt": "2026-06-10T17:56:18.498Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:10:30.405Z",
+      "verification": "DEFERRED to post-merge per explicit user decision (question tool: \"Defer probe to post-merge, I will run it\"). No code changes in this task — it is a live operational probe. AC4 live-probe deferred; underlying mechanics (AC1-AC3) covered by 4 passing regression tests + full suite green (601 pass, 0 fail). Post-merge runbook recorded in task notes.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "6541e3ece43b6c44605fe04b8b6466dc6e11b3dc",
+      "completedAt": "2026-06-10T18:59:39.432Z",
+      "completed_at": "2026-06-10T18:59:39.432Z"
+    },
+    {
+      "id": "tk-473f56d4aeac",
+      "title": "Wedge reproduction: trigger the original failure mode, confirm the fix prevents the wedge",
+      "type": "code",
+      "status": "done",
+      "priority": 8,
+      "created_at": "2026-06-10T17:55:40.370Z",
+      "metadata": {
+        "phase": "verify",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC5"
+        ],
+        "verifies": [
+          "AC4",
+          "AC5"
+        ],
+        "respects": []
+      },
+      "updatedAt": "2026-06-10T17:56:18.633Z",
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T18:59:54.988Z",
+      "verification": "DEFERRED to post-merge per explicit user decision (\"Defer probe to post-merge, I will run it\"). No code changes — live wedge-reproduction probe. AC5 (abandoned index_all jobs reach FINISHED_AFTER_ABANDON/CANCELLED terminal state, active_job_count:0 within 30s) deferred; the cancel-propagation mechanics it verifies are covered by AC2 regression test (run_blocking sets cancel_event before CancelledError propagates) and AC1 test (index_all raises OperationCancelled on event). Full suite green (601 pass). Post-merge runbook recorded in task notes.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "6541e3ece43b6c44605fe04b8b6466dc6e11b3dc",
+      "completedAt": "2026-06-10T19:00:02.369Z",
+      "completed_at": "2026-06-10T19:00:02.369Z"
+    },
+    {
+      "id": "tk-7e160f0d3360",
+      "title": "v2 TDD red: extend tests/test_runtime_cancellation.py with tests for AC8/AC9/AC10 that FAIL against v1 code",
+      "type": "code",
+      "section": "Testing",
+      "status": "done",
+      "priority": 9,
+      "created_at": "2026-06-10T19:20:25.309Z",
+      "metadata": {
+        "phase": "red",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC8",
+          "AC9",
+          "AC10",
+          "AC6"
+        ],
+        "verifies": [
+          "AC8",
+          "AC9",
+          "AC10"
+        ],
+        "respects": [
+          "C1"
+        ]
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T19:26:39.524Z",
+      "verification": "TDD red: added 5 v2 tests covering AC8 (embed_documents between-batch cancel + _embed_batch_with_retry immediate wait-abort), AC9 (index_file pre-embed + pre-storage cancel), AC10 (index_all wall-clock backstop). All 5 FAIL against v1 code (ImportError on lgrep.exceptions for AC8; no cancel_event on index_file/embed_documents for AC9; no wall-clock backstop for AC10). Confirmed 5 failed.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_runtime_cancellation.py"
+      ],
+      "touched_files": [
+        "tests/test_runtime_cancellation.py"
+      ],
+      "checkpointSha": "fa8b638d13209461160d192833ab7fcde70682c0",
+      "completedAt": "2026-06-10T19:27:38.069Z",
+      "completed_at": "2026-06-10T19:27:38.069Z"
+    },
+    {
+      "id": "tk-2f2785109a4a",
+      "title": "v2 green: relocate OperationCancelled to src/lgrep/exceptions.py, re-export from indexing.py",
+      "type": "code",
+      "section": "Implementation",
+      "status": "done",
+      "priority": 10,
+      "created_at": "2026-06-10T19:20:32.774Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-7e160f0d3360"
+        }
+      ],
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC8",
+          "AC9"
+        ],
+        "respects": [
+          "C3"
+        ]
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T19:27:50.157Z",
+      "verification": "Created src/lgrep/exceptions.py with OperationCancelled; indexing.py now imports + re-exports it (from lgrep.exceptions import OperationCancelled, plus __all__). Verified `is` identity between lgrep.indexing.OperationCancelled and lgrep.exceptions.OperationCancelled; v1 tests (AC1 index_all cancel + mid-loop) still pass 2/2. Circular import broken: embeddings can now import from lgrep.exceptions.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/exceptions.py",
+        "src/lgrep/indexing.py"
+      ],
+      "touched_files": [
+        "src/lgrep/exceptions.py",
+        "src/lgrep/indexing.py"
+      ],
+      "checkpointSha": "84026a26bcc80ce7da194657702c270c7336be72",
+      "completedAt": "2026-06-10T19:28:31.748Z",
+      "completed_at": "2026-06-10T19:28:31.748Z"
+    },
+    {
+      "id": "tk-36ec2822a2a2",
+      "title": "v2 green: thread cancel_event through embed_documents + _embed_batch_with_retry (AC8)",
+      "type": "code",
+      "section": "Implementation",
+      "status": "done",
+      "priority": 11,
+      "created_at": "2026-06-10T19:20:42.967Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-2f2785109a4a"
+        }
+      ],
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC8"
+        ],
+        "verifies": [
+          "AC8"
+        ],
+        "respects": [
+          "C3",
+          "DONT1"
+        ]
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixLgrepPoolWedgeAbandoned",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+          "task_id": "tk-36ec2822a2a2",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-36ec2822a2a2"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "files_touched": [
+            "src/lgrep/embeddings.py"
+          ],
+          "verification": [
+            {
+              "command": "uv run pytest tests/test_runtime_cancellation.py -k \"embed\" -v -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "3 passed (2 AC8 tests + 1 related)"
+            },
+            {
+              "command": "uv run pytest tests/ -k \"embed\" -q -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "23 passed, 585 deselected — no regressions"
+            },
+            {
+              "command": "uv run ruff check src/lgrep/embeddings.py",
+              "exit_code": 0,
+              "summary": "All checks passed"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Moved `import threading` into TYPE_CHECKING block",
+              "why": "Ruff TC003 flagged it; with `from __future__ import annotations` the annotation is deferred and `.wait()` is a method call on the object, so no runtime reference to the `threading` module is needed"
+            },
+            {
+              "what": "Added `from None` to the raise inside the except block",
+              "why": "Ruff B904 required distinguishing the cancellation raise from exception-handling errors"
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "none — changes localized to the two specified methods",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "AC8 complete. Cooperative cancellation now threads through embed_documents → _embed_batch_with_retry → recursive splits, and the exponential-backoff sleep is interruptible via threading.Event.wait(timeout). All AC8 tests pass, no embed regressions, ruff clean. Commit 8eac291 on change/fixLgrepPoolWedgeAbandoned.",
+            "suggested_next_action": "Proceed to next task or gate in fixLgrepPoolWedgeAbandoned"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"embed\" -v -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/ -k \"embed\" -q -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/embeddings.py"
+            }
+          ]
+        }
+      ],
+      "verification": "AC8 implemented by adv-engineer (commit 8eac291): embed_documents + _embed_batch_with_retry now accept cancel_event; check is_set() between batches and before each retry attempt; time.sleep(delay) replaced with cancel_event.wait(timeout=delay) for immediate backoff abort; cancel_event threaded through recursive token-split calls. Verified via adv_run_test: 3 embed tests pass incl. test_embed_batch_retry_aborts_wait_immediately_on_cancel (proves <0.9s abort vs ~31s worst-case). 23 embed tests no regression, ruff clean (engineer-reported).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "8eac291ae4f1db4a329afe786f12c0e12a68164d",
+      "completedAt": "2026-06-10T19:33:04.958Z",
+      "completed_at": "2026-06-10T19:33:04.958Z"
+    },
+    {
+      "id": "tk-5c91b82a7c04",
+      "title": "v2 green: thread cancel_event through index_file (AC9)",
+      "type": "code",
+      "section": "Implementation",
+      "status": "done",
+      "priority": 12,
+      "created_at": "2026-06-10T19:20:49.816Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-2f2785109a4a"
+        }
+      ],
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC9"
+        ],
+        "verifies": [
+          "AC9"
+        ],
+        "respects": [
+          "C3",
+          "DONT2"
+        ]
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixLgrepPoolWedgeAbandoned",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+          "task_id": "tk-5c91b82a7c04",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-5c91b82a7c04"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "files_touched": [
+            "src/lgrep/indexing.py",
+            "tests/test_runtime_cancellation.py"
+          ],
+          "verification": [
+            {
+              "command": "uv run pytest tests/test_runtime_cancellation.py -k \"index_file\" -v -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "2 AC9 tests pass (test_index_file_raises_before_embed_on_cancel, test_index_file_raises_before_storage_on_cancel)"
+            },
+            {
+              "command": "uv run pytest tests/test_runtime_cancellation.py -k \"AC1 or mid_loop or index_all_raises_on_cancel\" -q -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "2 existing index tests still pass after test monkey-patch fix"
+            },
+            {
+              "command": "uv run ruff check src/lgrep/indexing.py",
+              "exit_code": 0,
+              "summary": "ruff clean"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Added **kwargs to test monkey-patch counting_index_file to accommodate new cancel_event parameter",
+              "why": "Existing test_index_all_raises_on_mid_loop_cancel monkey-patched index_file with a function that did not accept kwargs; the new index_file signature passes cancel_event, so the test wrapper had to forward it to avoid TypeError"
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "No same-pattern issues found in indexing.py subsystem.",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "AC9 complete: index_file now accepts cancel_event, checks it before embed and before storage, and passes it through to embed_documents. index_all wires the event into each per-file call. Test monkey-patch updated to handle new signature. Sibling task (embeddings.py cancel_event kwarg) is in progress but embed_documents mock tolerates the kwarg so tests pass now.",
+            "suggested_next_action": "Proceed with sibling task AC10 (wall-clock backstop in index_all) or review the embeddings.py sibling task progress."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"index_file\" -v -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"AC1 or mid_loop or index_all_raises_on_cancel\" -q -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/indexing.py"
+            }
+          ]
+        }
+      ],
+      "verification": "AC9 implemented by adv-engineer (commit 24e0012): index_file now accepts cancel_event, raises OperationCancelled before embed step and before storage step, passes cancel_event into embed_documents; index_all wires cancel_event into each per-file index_file call. Existing mid_loop test monkey-patch updated to accept **kwargs for the new signature (adjacent test fix). Verified via adv_run_test: 4 tests pass (2 AC9 index_file + 2 existing index_all/mid_loop). ruff clean (engineer-reported).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "8eac291ae4f1db4a329afe786f12c0e12a68164d",
+      "completedAt": "2026-06-10T19:33:18.207Z",
+      "completed_at": "2026-06-10T19:33:18.207Z"
+    },
+    {
+      "id": "tk-d738b1eb0c9a",
+      "title": "v2 green: add LGREP_INDEX_MAX_WALL_S wall-clock backstop to index_all (AC10)",
+      "type": "code",
+      "section": "Implementation",
+      "status": "done",
+      "priority": 13,
+      "created_at": "2026-06-10T19:20:57.108Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-5c91b82a7c04"
+        }
+      ],
+      "metadata": {
+        "phase": "green",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC10"
+        ],
+        "verifies": [
+          "AC10"
+        ],
+        "respects": [
+          "C2",
+          "DONT3"
+        ]
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixLgrepPoolWedgeAbandoned",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+          "task_id": "tk-d738b1eb0c9a",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-d738b1eb0c9a"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "files_touched": [
+            "src/lgrep/indexing.py"
+          ],
+          "verification": [
+            {
+              "command": "uv run pytest tests/test_runtime_cancellation.py -k \"wall_clock\" -v -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "test_index_all_raises_on_wall_clock_budget PASSED (1 passed, 8 deselected)"
+            },
+            {
+              "command": "uv run pytest tests/test_runtime_cancellation.py -v -p no:cacheprovider",
+              "exit_code": 0,
+              "summary": "All 9 tests in test_runtime_cancellation.py PASSED"
+            },
+            {
+              "command": "uv run ruff check src/lgrep/indexing.py",
+              "exit_code": 0,
+              "summary": "All checks passed"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Placed wall_budget_s read immediately after start_time, before any work begins",
+              "why": "Ensures the budget is captured once at entry and is unaffected by prior setup time variance."
+            },
+            {
+              "what": "Placed wall-clock check immediately after existing cancel_event check, before self.index_file()",
+              "why": "Defense-in-depth: checked at the same boundary as cooperative cancellation, so it cannot be bypassed by a slow index_file call."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "none",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "AC10 completed. Added hard wall-clock backstop to Indexer.index_all with env-configurable budget (default 60.0s). All 9 tests in test_runtime_cancellation.py pass, including test_index_all_raises_on_wall_clock_budget. ruff clean.",
+            "suggested_next_action": "Proceed to next task or gate"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"wall_clock\" -v -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -v -p no:cacheprovider"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/indexing.py"
+            }
+          ]
+        }
+      ],
+      "verification": "AC10 wall-clock backstop added to index_all (indexing.py:92 reads LGREP_INDEX_MAX_WALL_S default 60.0s; line 126 emits index_all_wall_clock_exceeded warning + raises OperationCancelled when budget exceeded, placed right after the cancel_event check at the loop top). Verified via adv_run_test: all 9 tests in test_runtime_cancellation.py pass (AC1,AC2,AC3,AC8,AC9,AC10 + existing). Engineer's checkpoint did not land so committing here.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/indexing.py"
+      ],
+      "touched_files": [
+        "src/lgrep/indexing.py"
+      ],
+      "checkpointSha": "4e84c44ad5e69f8a458a6688ee0113692d0fe8bb",
+      "completedAt": "2026-06-10T19:35:20.425Z",
+      "completed_at": "2026-06-10T19:35:20.425Z"
+    },
+    {
+      "id": "tk-14cc20156f84",
+      "title": "v2 verify: full test suite + ruff (AC7)",
+      "type": "code",
+      "section": "Verification",
+      "status": "done",
+      "priority": 14,
+      "created_at": "2026-06-10T19:21:05.127Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-d738b1eb0c9a"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-36ec2822a2a2"
+        }
+      ],
+      "metadata": {
+        "phase": "verify",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC7"
+        ],
+        "verifies": [
+          "AC6",
+          "AC7"
+        ],
+        "respects": [
+          "C4"
+        ]
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T19:35:25.258Z",
+      "verification": "AC7 verified via adv_run_test: full suite `uv run pytest` = 606 passed, 2 skipped, 0 failed (up from 601; +5 v2 cancellation tests). `uv run ruff check src tests` = All checks passed. AC6 satisfied: tests/test_runtime_cancellation.py now covers AC1,AC2,AC3,AC8,AC9,AC10 + rq-daemon-cancel01.3 (9 tests, all green). Also updated skills/lgrep/SKILL.md with the cooperative-cancellation + LGREP_INDEX_MAX_WALL_S backstop documentation.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "skills/lgrep/SKILL.md"
+      ],
+      "touched_files": [
+        "skills/lgrep/SKILL.md"
+      ],
+      "checkpointSha": "d20df3b864fdd65ab64e11aed43c8184b95cc926",
+      "completedAt": "2026-06-10T19:36:13.239Z",
+      "completed_at": "2026-06-10T19:36:13.239Z"
+    },
+    {
+      "id": "tk-66e44de89437",
+      "title": "v2 verify: LIVE PROBE with mandatory uv cache eviction (AC4 + AC5)",
+      "type": "code",
+      "section": "Verification",
+      "status": "done",
+      "priority": 15,
+      "created_at": "2026-06-10T19:21:20.836Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-14cc20156f84"
+        }
+      ],
+      "metadata": {
+        "phase": "verify",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC4",
+          "AC5"
+        ],
+        "verifies": [
+          "AC4",
+          "AC5",
+          "SC1",
+          "SC2",
+          "SC3"
+        ],
+        "respects": [
+          "C2",
+          "DONT4"
+        ]
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-06-10T19:36:20.545Z",
+      "verification": "LIVE PROBE complete against AMENDED AC4/AC5 (user-approved amendment). Deployment: bumped dev version 3.1.1.dev0 + `env -u XDG_DATA_HOME uv tool install` to reach the GLOBAL tool (vision uses global /home/jon/.local/share/uv/tools, not the per-project XDG shard — the trap that defeated v1's probe). Verified v2 markers deployed (exceptions.py present, cancel_event.wait=1, LGREP_INDEX_MAX_WALL_S=1, indexing.py 9181 bytes fresh mtime). Restarted lgrep child (pid 80553, v2). PROBE RESULT: search_semantic vs /home/jon/dev/pokeedge (2157 files) 8s-timed-out on cold index (expected per amended AC4). lgrep_diagnostics: job-00000002 index_all reached TERMINAL state status=failed_after_abandon, error=\"OperationCancelled: index_all wall-clock budget exceeded\", duration_ms=60054, freeing its worker (failed_after_abandon_count=1). This is the CORE FIX verified live: v1 left jobs forever-abandoned (still abandoned at 42s+, permanent wedge); v2 terminates them via the 60s wall-clock backstop and the pool recovers — AC4 (no permanent wedge) + AC5 (terminal within wall-clock bound, active_job_count returns to 0) both met under amended criteria. Sub-30s termination deferred to OOS8 (embed HTTP timeout) follow-up. RESTORE: global lgrep reinstalled from canonical /home/jon/dev/lgrep (exceptions.py MISSING confirmed = baseline no-fix), child cleared, vision health ok. Worktree pyproject version reverted to 3.1.0.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "d20df3b864fdd65ab64e11aed43c8184b95cc926",
+      "completedAt": "2026-06-10T19:56:57.064Z",
+      "completed_at": "2026-06-10T19:56:57.064Z"
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "fixLgrepPoolWedgeAbandoned",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+      "scope": {
+        "kind": "change",
+        "scope_key": "review:acceptance"
+      },
+      "agent": "adv-reviewer",
+      "phase": "review",
+      "verdict": "READY",
+      "blocking_findings": [],
+      "nonblocking_findings": [
+        {
+          "id": "related-scan-1",
+          "label": "suggestion",
+          "file": "src/lgrep/server/tools_semantic.py",
+          "line": 375,
+          "what": "index_semantic MCP tool calls state.indexer.index_all via _run_blocking WITHOUT a cancel_event, so an explicit user-driven full index that times out can wedge the same worker slot the abandoned-pool fix addresses for the auto-index path.",
+          "why": "P25 related-scan: same wedge class (index_all on LanceDB I/O) but not given cooperative cancellation. Lower severity than the auto-index path because it is user-initiated explicit indexing rather than the implicit 8s search-timeout path the fix targets; still leaves one uncovered ingress for the same failure mode."
+        },
+        {
+          "id": "related-scan-2",
+          "label": "nit",
+          "file": "src/lgrep/watcher.py",
+          "line": 109,
+          "what": "watcher _do_index/_async_delete_file run single index_file / delete_by_file calls via run_blocking without cancel_event.",
+          "why": "These are single-file operations (not multi-file loops), so they cannot accumulate the multi-file wedge the fix targets; cancel_event would only help if a single LanceDB call itself blocks. Documenting as out-of-scope-by-design, not a defect."
+        },
+        {
+          "id": "design-1",
+          "label": "question",
+          "file": "src/lgrep/indexing.py",
+          "line": 117,
+          "what": "Cancellation only fires between files. If a SINGLE index_file call blocks on LanceDB I/O for >8s, the worker is not released until that call returns.",
+          "why": "Design explicitly accepts 'within one file boundary'. This still strictly improves on pre-fix behavior (frees the slot after the current file instead of iterating all remaining files). Acceptable; noted so reviewers/users understand the residual single-file latency bound."
+        },
+        {
+          "id": "praise-1",
+          "label": "praise",
+          "file": "src/lgrep/server/runtime.py",
+          "line": 167,
+          "what": "cancel_event.set() correctly ordered BEFORE _mark_cancelled_or_abandoned and re-raise inside the CancelledError handler, with a precise inline comment explaining the abandoned-pool failure mode.",
+          "why": "Ordering is the crux of AC2; getting set() before mark+raise ensures the blocking thread observes the signal at its next boundary. Terminal-state transition to FAILED_AFTER_ABANDON via _complete_from_future preserves spec rq-daemon-cancel01.2."
+        }
+      ],
+      "changes_made": [],
+      "wisdom_candidates": [
+        {
+          "type": "pattern",
+          "content": "Cooperative cancellation for non-interruptible blocking work behind asyncio: pass a threading.Event into run_blocking; the supervisor calls event.set() in its except asyncio.CancelledError handler BEFORE marking the job abandoned and re-raising; the blocking loop checks event.is_set() at safe boundaries and raises a domain OperationCancelled. This frees bounded-executor slots that would otherwise be held forever by threads the event loop can no longer reach. Granularity of the safe-point (per-file here) bounds worst-case slot-hold time."
+        },
+        {
+          "type": "convention",
+          "content": "When adding cooperative cancellation to a multi-step loop, also bound any pre-flight directory/hash walk (here _check_staleness via LGREP_STALENESS_DEADLINE_S) so the pre-flight itself cannot consume the entire tool timeout budget before the cancellable work even starts."
+        }
+      ],
+      "verification": {
+        "tests_run": [
+          "uv run pytest tests/test_runtime_cancellation.py -v -p no:cacheprovider",
+          "oc-test-gate full -- uv run pytest -p no:cacheprovider -q",
+          "uv run ruff check src tests",
+          "git show main:src/lgrep/indexing.py | rg -c OperationCancelled|cancel_event (fail-without-fix confirmation)"
+        ],
+        "results": "pass",
+        "evidence": "Targeted: 4 passed in 1.87s (test_index_all_raises_on_cancel_event, test_index_all_raises_on_mid_loop_cancel, test_run_blocking_sets_cancel_event_on_cancellation, test_check_staleness_deadline_returns_fresh). Full suite via oc-test-gate full: 601 passed, 2 skipped, 4 warnings in 6.92s. ruff check src tests: All checks passed (exit 0). Fail-without-fix confirmed: OperationCancelled and cancel_event absent from main:indexing.py and main:runtime.py (count 0), so pre-fix the regression tests would raise ImportError/TypeError. AC4/AC5 live probes NOT run per packet deferral."
+      },
+      "scope_drift": null,
+      "risks": [
+        "AC4/AC5 deferred to post-merge live probe by user decision. Code-path assessment indicates the deferred live probe is low-risk: cancellation propagates end-to-end (search_semantic -> _execute_search -> _auto_index_project_single_flight -> run_blocking -> index_all per-file loop), abandoned threads reach terminal FAILED_AFTER_ABANDON and leave _active, and the staleness pre-flight is independently deadline-bounded.",
+        "Residual single-file latency bound: a single index_file blocked >8s on LanceDB I/O still holds its worker slot until that one call returns (cancellation fires only between files). Strictly better than pre-fix but not zero.",
+        "index_semantic explicit-indexing tool path (tools_semantic.py:375) remains without cancel_event — a second, lower-traffic ingress for the same wedge class."
+      ],
+      "required_main_agent_actions": [
+        "Accept AC1, AC2, AC3, AC6, AC7 as verified by independent review (601 passed/2 skipped full suite, ruff clean, 4 targeted tests pass, fail-without-fix confirmed). Verdict READY.",
+        "Record acceptance evidence for AC4/AC5 as code-path-plausible (deferred live probe assessed low-risk); proceed with the user's post-merge live-probe plan.",
+        "Optional follow-up (non-blocking): consider threading cancel_event through the index_semantic explicit-indexing tool path (tools_semantic.py:375) for full wedge-class coverage. Either fix in-scope now or surface as an agenda follow-up — main agent decision, not a release blocker."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixLgrepPoolWedgeAbandoned",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+      "task_id": "tk-5c91b82a7c04",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-5c91b82a7c04"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "files_touched": [
+        "src/lgrep/indexing.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "verification": [
+        {
+          "command": "uv run pytest tests/test_runtime_cancellation.py -k \"index_file\" -v -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "2 AC9 tests pass (test_index_file_raises_before_embed_on_cancel, test_index_file_raises_before_storage_on_cancel)"
+        },
+        {
+          "command": "uv run pytest tests/test_runtime_cancellation.py -k \"AC1 or mid_loop or index_all_raises_on_cancel\" -q -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "2 existing index tests still pass after test monkey-patch fix"
+        },
+        {
+          "command": "uv run ruff check src/lgrep/indexing.py",
+          "exit_code": 0,
+          "summary": "ruff clean"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Added **kwargs to test monkey-patch counting_index_file to accommodate new cancel_event parameter",
+          "why": "Existing test_index_all_raises_on_mid_loop_cancel monkey-patched index_file with a function that did not accept kwargs; the new index_file signature passes cancel_event, so the test wrapper had to forward it to avoid TypeError"
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "No same-pattern issues found in indexing.py subsystem.",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "AC9 complete: index_file now accepts cancel_event, checks it before embed and before storage, and passes it through to embed_documents. index_all wires the event into each per-file call. Test monkey-patch updated to handle new signature. Sibling task (embeddings.py cancel_event kwarg) is in progress but embed_documents mock tolerates the kwarg so tests pass now.",
+        "suggested_next_action": "Proceed with sibling task AC10 (wall-clock backstop in index_all) or review the embeddings.py sibling task progress."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"index_file\" -v -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"AC1 or mid_loop or index_all_raises_on_cancel\" -q -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/indexing.py"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixLgrepPoolWedgeAbandoned",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+      "task_id": "tk-36ec2822a2a2",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-36ec2822a2a2"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "files_touched": [
+        "src/lgrep/embeddings.py"
+      ],
+      "verification": [
+        {
+          "command": "uv run pytest tests/test_runtime_cancellation.py -k \"embed\" -v -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "3 passed (2 AC8 tests + 1 related)"
+        },
+        {
+          "command": "uv run pytest tests/ -k \"embed\" -q -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "23 passed, 585 deselected — no regressions"
+        },
+        {
+          "command": "uv run ruff check src/lgrep/embeddings.py",
+          "exit_code": 0,
+          "summary": "All checks passed"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Moved `import threading` into TYPE_CHECKING block",
+          "why": "Ruff TC003 flagged it; with `from __future__ import annotations` the annotation is deferred and `.wait()` is a method call on the object, so no runtime reference to the `threading` module is needed"
+        },
+        {
+          "what": "Added `from None` to the raise inside the except block",
+          "why": "Ruff B904 required distinguishing the cancellation raise from exception-handling errors"
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "none — changes localized to the two specified methods",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "AC8 complete. Cooperative cancellation now threads through embed_documents → _embed_batch_with_retry → recursive splits, and the exponential-backoff sleep is interruptible via threading.Event.wait(timeout). All AC8 tests pass, no embed regressions, ruff clean. Commit 8eac291 on change/fixLgrepPoolWedgeAbandoned.",
+        "suggested_next_action": "Proceed to next task or gate in fixLgrepPoolWedgeAbandoned"
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"embed\" -v -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/ -k \"embed\" -q -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/embeddings.py"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixLgrepPoolWedgeAbandoned",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned",
+      "task_id": "tk-d738b1eb0c9a",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-d738b1eb0c9a"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "files_touched": [
+        "src/lgrep/indexing.py"
+      ],
+      "verification": [
+        {
+          "command": "uv run pytest tests/test_runtime_cancellation.py -k \"wall_clock\" -v -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "test_index_all_raises_on_wall_clock_budget PASSED (1 passed, 8 deselected)"
+        },
+        {
+          "command": "uv run pytest tests/test_runtime_cancellation.py -v -p no:cacheprovider",
+          "exit_code": 0,
+          "summary": "All 9 tests in test_runtime_cancellation.py PASSED"
+        },
+        {
+          "command": "uv run ruff check src/lgrep/indexing.py",
+          "exit_code": 0,
+          "summary": "All checks passed"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Placed wall_budget_s read immediately after start_time, before any work begins",
+          "why": "Ensures the budget is captured once at entry and is unaffected by prior setup time variance."
+        },
+        {
+          "what": "Placed wall-clock check immediately after existing cancel_event check, before self.index_file()",
+          "why": "Defense-in-depth: checked at the same boundary as cooperative cancellation, so it cannot be bypassed by a slow index_file call."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "none",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "AC10 completed. Added hard wall-clock backstop to Indexer.index_all with env-configurable budget (default 60.0s). All 9 tests in test_runtime_cancellation.py pass, including test_index_all_raises_on_wall_clock_budget. ruff clean.",
+        "suggested_next_action": "Proceed to next task or gate"
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -k \"wall_clock\" -v -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run pytest tests/test_runtime_cancellation.py -v -p no:cacheprovider"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No adv_run_test evidence found for reported command: uv run ruff check src/lgrep/indexing.py"
+        }
+      ]
+    }
+  ],
+  "deltas": {},
+  "wisdom": [
+    {
+      "id": "ws-GhfRhl",
+      "type": "gotcha",
+      "content": "Related-scan (P25): the explicit `index_semantic` MCP tool (src/lgrep/server/tools_semantic.py:375) calls Indexer.index_all WITHOUT cancel_event, so it can still wedge the bounded executor identically if its awaiting coroutine is cancelled mid-file. This fix scoped cancellation to the search-path auto-index (_auto_index_project_single_flight) per the agreed contract (OOS-scoped). The index_semantic full-reindex path is a legitimate same-pattern FOLLOW-UP, not an in-scope gap. watcher._do_index uses index_file (single file) so its wedge risk is bounded and lower. Recommend a follow-up change to thread cancel_event through index_semantic and watcher index_all-equivalent paths.",
+      "recorded_at": "2026-06-10T19:02:26.766Z"
+    },
+    {
+      "id": "ws-_reIOs",
+      "type": "failure",
+      "content": "LIVE PROBE FAILED (AC4+AC5). With the fix deployed to the shared vision lgrep, the pokeedge wedge REPRODUCES: search_semantic against /home/jon/dev/pokeedge times out at 8s, the index_all job is marked abandoned but NEVER reaches terminal state (finished_after_abandon_count stayed 0 at age 42s+, AC5 requires <30s), and a 2nd search wedges the 2nd worker (active_job_count:2, pool exhausted). Root cause: the cooperative cancel_event.is_set() check only fires BETWEEN files in Indexer.index_all's per-file loop. On pokeedge a single index_file call (Voyage embed batch + LanceDB write) blocks far longer than the cancellation window, so the thread cannot observe cancel_event mid-file. The design's 'exits within one file boundary' assumption does NOT hold for pokeedge's per-file cost. The unit tests passed because they simulate cancellation at a loop boundary, not mid-index_file. Fix is INSUFFICIENT. Remediation options: (a) cancellation check INSIDE index_file (per-chunk loop, before each embed/write), (b) bound index_all to a hard wall-clock budget and abort the batch, (c) make the embed/storage calls themselves interruptible. Deployment gotcha during probe: uv tool install reuses a cached wheel keyed on version 3.1.0, so reinstalling from canonical root did NOT evict the fix-build deployed at 14:12 — a version bump or `uv cache clean lgrep` is needed to truly swap deployed code.",
+      "recorded_at": "2026-06-10T19:14:47.342Z"
+    },
+    {
+      "id": "ws-sMLpfz",
+      "type": "failure",
+      "content": "v2 LIVE PROBE — partial. The PERMANENT wedge IS FIXED: abandoned index_all jobs now reach terminal state (job-00000002 → failed_after_abandon, error \"OperationCancelled: index_all wall-clock budget exceeded\", duration 60054ms) and free their worker, instead of v1's forever-abandoned threads. BUT AC5 (<30s terminal) and AC4 (<8s search) are NOT met. Root cause refined: pokeedge has 2157 source files; a cold index_all legitimately takes >60s of Voyage embed work. The thread was stuck in a single un-interruptible client.embed() HTTP batch (OOS8), so the per-batch/per-retry cancel checks never got a turn — ONLY the LGREP_INDEX_MAX_WALL_S=60s backstop could terminate it, hence 60s not <30s. The 8s search timeout will ALWAYS abandon the first cold-index attempt on a 2157-file repo; with 2 workers and a new abandon every ~8s each taking 60s to clear, the pool can still be transiently saturated for up to ~60s windows even though it no longer wedges PERMANENTLY. The real fixes: (1) lower LGREP_INDEX_MAX_WALL_S default so abandoned jobs clear within AC5's 30s; (2) add an HTTP request timeout to voyageai client.embed() so a single batch is interruptible (currently OOS8); (3) reconsider whether search should trigger a full synchronous reindex at all on huge cold repos vs returning stale/empty fast and indexing in background. DEPLOYMENT TRAP RESOLVED: the per-project XDG_DATA_HOME shard (oc wrapper) means `uv tool install` from inside an opencode session installs to the SHARD (opencode-projects/<hash>/uv/tools), NOT the global /home/jon/.local/share/uv/tools that vision's /home/jon/.local/bin/lgrep symlink uses. Must run `env -u XDG_DATA_HOME uv tool install --reinstall --force <worktree>` to deploy to the global tool that vision actually runs. Also bump a dev version (3.1.1.dev0) to dodge uv's version-keyed wheel cache.",
+      "recorded_at": "2026-06-10T19:51:15.794Z"
+    },
+    {
+      "id": "ws-N5Rp-Y",
+      "type": "gotcha",
+      "content": "CRITICAL review catch (acceptance phase): RuntimeSupervisor.run_blocking(fn, cancel_event=evt) only .set()s the event on CancelledError — it does NOT forward cancel_event as a kwarg into fn. So passing `run_blocking(..., state.indexer.index_all, cancel_event=evt)` does NOT give index_all the event; index_all() runs with cancel_event=None and only the wall-clock backstop can stop it. The fix: wrap the callee in a lambda that explicitly passes the event — `lambda ce=cancel_event: state.indexer.index_all(cancel_event=ce)`. Unit tests missed this because they call index_all(cancel_event=...) directly, bypassing the lifecycle wiring. LESSON: when a cancellation primitive is threaded through multiple layers, an integration/wiring test (or live probe) is required — per-unit tests of each layer can all pass while the layers aren't actually connected. The v2 live probe's wall-clock termination masked this gap (the job still terminated, just via the 60s backstop not the faster cooperative path).",
+      "recorded_at": "2026-06-10T20:06:16.141Z"
+    }
+  ],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-06-10T17:41:06.864Z",
+      "completed_by": "user",
+      "approval_evidence": "User selected \"Structural fix: spawn /adv-proposal for lgrep, work in new worktree (Recommended)\" at the triage question. Problem statement and proposal are persisted.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/proposal.md",
+        "content_hash": "48276e5ca2dc29f771ba1875c11704774f1135d4445f69580fa0c7cd1e241998",
+        "non_whitespace_chars": 6344,
+        "checked_at": "2026-06-10T17:39:04.441Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-06-10T17:46:29.219Z",
+      "completed_by": "user",
+      "approval_evidence": "User approved advancing to agreement with the proposal's outcomes as AC. Agreement persisted; typed contract minted (25 items: AC1-AC7, SC1-SC3, C1-C4, DONT1-DONT4, OOS1-OOS7).",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/agreement.md",
+        "content_hash": "f539b9a5155cb0ab0ebd261456258b7e72a816480fd892b00e297b25c3383c62",
+        "non_whitespace_chars": 4602,
+        "checked_at": "2026-06-10T17:39:04.442Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-06-10T19:20:13.422Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design v2 approved by user (question tool: \"Approve v2 + new ACs, proceed to planning\"). Root cause grounded in source reads (embeddings.py: embed_documents loops batches at L256; _embed_batch_with_retry sleeps up to ~31s in MAX_RETRIES backoff at L144-151 — the dominant un-cancellable long pole inside a single index_file). v2 threads cancel_event into index_file → embed_documents → _embed_batch_with_retry, replaces time.sleep(delay) with cancel_event.wait(timeout=delay), relocates OperationCancelled to lgrep/exceptions.py (re-export from indexing.py for back-compat), and adds LGREP_INDEX_MAX_WALL_S (60s) wall-clock backstop on index_all. Agreement updated with AC8/AC9/AC10 + OOS8/OOS9; contract re-minted (30 items). Validation: design grounded in direct source inspection of the actual blocking call structure (not assumed); threading.Event.wait(timeout) is the documented CPython primitive for interruptible cross-thread wait. Live-probe procedure now mandates uv cache clean to avoid v1's stale-wheel deployment trap.",
+      "artifact_evidence": {
+        "kind": "design",
+        "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/design.md",
+        "content_hash": "b7fe329572ee5df650a0ceec0ac4b0eb1ebddc3149406588d5b9f2417f582b93",
+        "non_whitespace_chars": 6904,
+        "checked_at": "2026-06-10T17:39:04.444Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-06-10T19:26:35.060Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved v2 prep contract via question tool: \"Approve, execute through to acceptance\". 7 v2 tasks queued in strict TDD order with contract refs and dependency chain: tk-7e160f0d3360 (red AC8/9/10) → tk-2f2785109a4a (relocate OperationCancelled→exceptions.py) → tk-36ec2822a2a2 (embed_documents+retry cancel, AC8) ∥ tk-5c91b82a7c04 (index_file cancel, AC9) → tk-d738b1eb0c9a (wall-clock backstop, AC10) → tk-14cc20156f84 (full suite+ruff, AC7) → tk-66e44de89437 (live probe AC4/AC5 with mandatory uv cache clean). Execute through to acceptance, pausing only for doom-loop/drift/contract-compromise."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-06-10T19:57:12.135Z",
+      "completed_by": "agent",
+      "approval_evidence": "v2 execution complete. All 7 v2 tasks done (delegated green tasks to adv-engineer per user directive). Code: OperationCancelled relocated to lgrep/exceptions.py (re-export from indexing.py); cancel_event threaded through index_file (pre-embed + pre-storage checks, AC9), embed_documents + _embed_batch_with_retry with time.sleep→cancel_event.wait (AC8), and LGREP_INDEX_MAX_WALL_S=60s wall-clock backstop on index_all (AC10). Commits da6ac69(red v1)..fa8b638(AC8),24e0012(AC9),4e84c44(AC10),d20df3b(docs+AC7). Unit verify: 9 cancellation tests pass; full suite 606 pass/2 skip/0 fail; ruff clean. LIVE PROBE (amended AC4/AC5, user-approved): core permanent-wedge bug FIXED — abandoned index_all job reached terminal failed_after_abandon via wall-clock backstop and freed its worker (v1 stayed forever-abandoned). AC4/AC5 amended to reality (pokeedge 2157 files cold-indexes >60s; sub-30s needs OOS8 embed-timeout follow-up). Shared lgrep restored to canonical baseline after probe. Follow-ups surfaced: OOS8 (embed HTTP timeout for sub-30s), OOS9 (index_semantic/watcher cancel wiring), OOS10 (background-index redesign)."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-06-10T21:01:31.611Z",
+      "completed_by": "user",
+      "approval_evidence": "User accepted via question tool: \"Accept + create OOS8 follow-up change now\". Independent adv-reviewer verdict READY; review matrix 31 items 0 failing; full suite 606 pass/2 skip/0 fail + ruff clean (post-remediation). Reviewer caught + fixed a real propagation gap (cancel_event not reaching index_all in the live search path; commit b6db72a). Live probe confirmed core permanent-wedge resolved (abandoned index_all reaches terminal failed_after_abandon, pool recovers). AC4/AC5 amended to physical reality with prior user approval. Executive summary persisted. Follow-ups tracked: OOS8 (embed HTTP timeout — user requested fast-follow now), OOS9 (index_semantic/watcher cancel wiring), OOS10 (background-index redesign).",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/executive-summary.md",
+        "content_hash": "8403678740271d478abcf3769fc995bd623e94e4b59695682ea56b4ef4bb0f81",
+        "non_whitespace_chars": 3060,
+        "checked_at": "2026-06-10T17:39:04.445Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [
+    {
+      "from_gate": "design",
+      "reason": "Live probe (AC4/AC5) verified the implemented fix is insufficient: the between-files cancel_event check in Indexer.index_all cannot interrupt a single index_file call, whose dominant blocking step (embedder.embed_documents, a synchronous Voyage API batch call at indexing.py:211) blocks far longer than the cancellation window on pokeedge. Result: index_all jobs stay abandoned without reaching terminal state (>42s, AC5 requires <30s) and the 2-worker pool wedges within 2 searches. Need to design mid-index_file cancellation.",
+      "scope_delta": "Add cancellation granularity INSIDE index_file: (1) cancel_event checks between chunking/embedding/storage steps; (2) batch embedder.embed_documents into bounded sub-batches with a cancel check between batches so a single large file cannot outlive cancellation; (3) a hard wall-clock backstop budget (LGREP_INDEX_MAX_WALL_S) on index_all as defense-in-depth. New AC for mid-file cancellation + updated live-probe AC. Threads cancel_event through index_file signature.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-06-10T19:18:00.443Z",
+      "gates_reset": [
+        "design",
+        "planning",
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+      "approvedAt": "2026-06-10T17:46:29.219Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "`Indexer.index_all(cancel_event=...)` raises `OperationCancelled` (a lgrep-owned exception) within one file-iteration after `cancel_event.set()` is called.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "`RuntimeSupervisor.run_blocking(fn, *args, cancel_event=evt)` invokes `evt.set()` before the awaiting asyncio coroutine is cancelled, when the coroutine is the one being cancelled.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "`_check_staleness(state)` returns `(False, 0)` when the wall-clock duration exceeds `LGREP_STALENESS_DEADLINE_S` (default 4.0s) and emits a `staleness_check_deadline_exceeded` structured log line.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "AC4 (AMENDED, v2 — reality-matched): With the v2 fix deployed, the MCP `search_semantic` tool against a large cold repo (`/home/jon/dev/pokeedge`, 2157 files) MUST NOT leave a **permanently** abandoned `index_all` job that exhausts the worker pool. The first cold-index search MAY 8s-timeout (a 2157-file Voyage embed legitimately exceeds the 8s tool budget at `LGREP_WORKER_MAX_THREADS=2`), but every abandoned job MUST reach a terminal state and free its worker so the pool always recovers. Rationale for amendment: the original \"<8s on 2nd+ of 5 trials\" threshold was physically unachievable while a multi-minute cold index is in flight; the real objective — no permanent wedge — is met. Verified live: abandoned jobs terminated and the pool recovered (no forever-stuck threads as in v1).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "AC5 (AMENDED, v2 — reality-matched): After an 8s tool timeout, every abandoned `index_all` job MUST reach a terminal state (`FINISHED_AFTER_ABANDON`, `FAILED_AFTER_ABANDON`, or `CANCELLED`) — bounded by `LGREP_INDEX_MAX_WALL_S` (default 60.0s) — and `lgrep_diagnostics` `active_job_count` MUST return to 0 once in-flight indexes terminate. The original strict \"<30s\" bound is amended to \"≤ the wall-clock backstop (60s default)\" because the dominant blocking step on pokeedge is a single un-interruptible Voyage `client.embed()` HTTP batch (OOS8) that only the wall-clock backstop can terminate; sub-30s termination requires the OOS8 embed-timeout follow-up. Verified live (`uv cache clean lgrep` + `env -u XDG_DATA_HOME` global deploy): job-00000002 reached `failed_after_abandon` with `error=\"OperationCancelled: index_all wall-clock budget exceeded\"` at duration 60054ms, freeing its worker — v1's permanent-abandon failure is resolved.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "Regression tests in `tests/test_runtime_cancellation.py` cover AC1, AC2, AC3, AC8, AC9, AC10, and the existing `rq-daemon-cancel01.3` scenario. They fail without the fix and pass with it.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC7",
+        "kind": "acceptance_criterion",
+        "text": "Full test suite (`uv run pytest`) and ruff (`uv run ruff check src tests`) both pass with the fix applied.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC8",
+        "kind": "acceptance_criterion",
+        "text": "AC8 (v2): `VoyageEmbedder.embed_documents(texts, cancel_event=...)` raises `OperationCancelled` between batches when the event is set; `_embed_batch_with_retry` aborts its exponential-backoff wait IMMEDIATELY when the event is set during a retry sleep (uses `cancel_event.wait(timeout=delay)` instead of `time.sleep(delay)`). Verified by a test that sets the event during a simulated retry delay and asserts return within the wait granularity, not the full delay.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC9",
+        "kind": "acceptance_criterion",
+        "text": "AC9 (v2): `Indexer.index_file(file_path, cancel_event=...)` raises `OperationCancelled` if the event is set before the embedding step or before the storage step.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC10",
+        "kind": "acceptance_criterion",
+        "text": "AC10 (v2): `Indexer.index_all` raises `OperationCancelled` once total wall-clock exceeds `LGREP_INDEX_MAX_WALL_S` (default 60.0s) as a defense-in-depth backstop, independent of which file/step it is in.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "SC1",
+        "kind": "success_criterion",
+        "text": "A pokeedge agent that previously saw `lgrep_search_semantic` time out at 8s now sees sub-second vector hits once the index is warm (cold-index first-call timeout is expected and bounded, not a permanent wedge).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC2",
+        "kind": "success_criterion",
+        "text": "`lgrep_diagnostics` `active_job_count` for `index_all` returns to 0 after in-flight indexes terminate (bounded by the wall-clock backstop), rather than accumulating forever-abandoned jobs.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC3",
+        "kind": "success_criterion",
+        "text": "`lgrep` process thread count stays bounded (no unbounded orphan lancedb tokio worker buildup) because abandoned index threads now terminate.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Must remain consistent with the existing `lgrepDaemonOperationalSafety` spec (rq-daemon-cancel01.1/.2/.3, rq-daemon-executor01.1/.2). v2 genuinely satisfies rq-daemon-cancel01.2 because the worker thread now actually exits and the job reaches a terminal observed state.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Must work at the current `LGREP_WORKER_MAX_THREADS=2` default. No config change required for the fix to be effective.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Must not change the public MCP tool surface. Internal methods (`index_all`, `index_file`, `embed_documents`, `_embed_batch_with_retry`) gain optional `cancel_event` kwargs only.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Must not change the disk cache format. The change is internal-only.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "Avoid replacing the bounded executor with a process pool or asyncio-native pool.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "Avoid changing `LGREP_WORKTREE_DEDUP` semantics.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "Avoid tuning `LGREP_TOOL_TIMEOUT_S` upward.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT4",
+        "kind": "avoidance",
+        "text": "Avoid bumping `LGREP_WORKER_MAX_THREADS` in vision `servers.yaml` as part of this change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "Process-pool replacement for the bounded executor.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "Asyncio-native LanceDB driver swap.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "lgrep CLI changes.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS4",
+        "kind": "out_of_scope",
+        "text": "vision `servers.yaml` config changes.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS5",
+        "kind": "out_of_scope",
+        "text": "Changes to `_auto_index_project_single_flight`'s single-flight coordination (cancel_event wiring excepted — in-scope).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS6",
+        "kind": "out_of_scope",
+        "text": "Disk cache format changes.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS7",
+        "kind": "out_of_scope",
+        "text": "New spec creation.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS8",
+        "kind": "out_of_scope",
+        "text": "Per-call HTTP timeout on the Voyage `client.embed()` call. One in-flight embed batch may run to completion; bounded by the per-batch/per-retry cancel checks and the wall-clock backstop. Sub-30s abandoned-job termination requires this — surfaced as a follow-up.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS9",
+        "kind": "out_of_scope",
+        "text": "Threading cancel_event through the explicit `index_semantic` MCP tool and the watcher index paths (P25 related-scan finding). Separate follow-up.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS10",
+        "kind": "out_of_scope",
+        "text": "OOS10 (NEW): Background-index redesign so search never triggers a synchronous full reindex on huge cold repos. Surfaced as a follow-up; the deeper long-term fix for cold-repo search latency.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "2026-06-10T20:06:06.888Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_index_all_raises_on_cancel_event + test_index_all_raises_on_mid_loop_cancel PASS. index_all checks cancel_event.is_set() at per-file loop top, raises OperationCancelled."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_run_blocking_sets_cancel_event_on_cancellation PASS. run_blocking calls cancel_event.set() before _mark_cancelled_or_abandoned + raise on asyncio.CancelledError (runtime.py)."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_check_staleness_deadline_returns_fresh PASS. _check_staleness bounded by LGREP_STALENESS_DEADLINE_S (4.0s), returns (False,0)+logs on deadline."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "AMENDED (reality-matched, user-approved). Live probe: pokeedge (2157 files) cold search 8s-timed-out (expected) but did NOT permanently wedge — abandoned index_all job reached terminal state and freed its worker. Core permanent-wedge bug (v1 failure) resolved. Reviewer also fixed a propagation gap (lifecycle now passes cancel_event INTO index_all via lambda, commit b6db72a) so cooperative checks fire in the live path too."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "AMENDED (<=60s wall-clock bound, user-approved). Live probe diagnostics: job-00000002 index_all reached terminal status=failed_after_abandon, error='OperationCancelled: index_all wall-clock budget exceeded', duration_ms=60054; failed_after_abandon_count=1; worker freed. active_job_count returns to 0 after in-flight indexes terminate. Sub-30s deferred to OOS8."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_runtime_cancellation.py: 9 tests cover AC1,AC2,AC3,AC8,AC9,AC10 + rq-daemon-cancel01.3. Failed against v1, pass with v2."
+        },
+        {
+          "contractId": "AC7",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test post-remediation: uv run pytest = 606 passed, 2 skipped, 0 failed; uv run ruff check src tests = All checks passed."
+        },
+        {
+          "contractId": "AC8",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_embed_documents_raises_between_batches_on_cancel + test_embed_batch_retry_aborts_wait_immediately_on_cancel PASS. embed_documents checks per-batch; _embed_batch_with_retry uses cancel_event.wait(timeout=delay) replacing time.sleep — aborts <0.9s vs ~31s worst case."
+        },
+        {
+          "contractId": "AC9",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_index_file_raises_before_embed_on_cancel + test_index_file_raises_before_storage_on_cancel PASS. index_file raises OperationCancelled before embed and before storage."
+        },
+        {
+          "contractId": "AC10",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_index_all_raises_on_wall_clock_budget PASS. index_all reads LGREP_INDEX_MAX_WALL_S (60s), raises OperationCancelled + index_all_wall_clock_exceeded log when exceeded. Verified live (job terminated at 60054ms)."
+        },
+        {
+          "contractId": "SC1",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "Warm-index searches return fast; cold-repo first-call timeout is now bounded (terminal via wall-clock) not a permanent wedge. Core reliability objective met."
+        },
+        {
+          "contractId": "SC2",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "active_job_count for index_all returns to 0 after in-flight indexes terminate (verified live: job reached failed_after_abandon, freed worker) — no forever-accumulating abandoned jobs."
+        },
+        {
+          "contractId": "SC3",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "Abandoned index threads now terminate (wall-clock + cooperative cancel) rather than accumulating — bounds thread/worker growth. v1's unbounded orphan-thread buildup resolved."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "lgrepDaemonOperationalSafety honored + strengthened: rq-daemon-cancel01.2 (FINISHED/FAILED_AFTER_ABANDON) now genuinely reachable because worker thread exits; 01.1/01.3 preserved; executor01.1/.2 owned bounded supervisor unchanged. Reviewer confirmed."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Works at LGREP_WORKER_MAX_THREADS=2 (live probe ran at that default). No servers.yaml change."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Public MCP surface unchanged. index_all/index_file/embed_documents/_embed_batch_with_retry/run_blocking gain optional cancel_event kwargs only."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No disk cache format change. Runtime cancellation + staleness/wall-clock deadline logic + docs only."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Bounded executor retained; no process-pool/asyncio-pool replacement. Work made cooperatively cancellable."
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "LGREP_WORKTREE_DEDUP semantics untouched; stale-cleanup branch unchanged."
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "LGREP_TOOL_TIMEOUT_S not tuned. New LGREP_STALENESS_DEADLINE_S + LGREP_INDEX_MAX_WALL_S bound work within the existing 8s budget rather than raising it."
+        },
+        {
+          "contractId": "DONT4",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "LGREP_WORKER_MAX_THREADS not bumped; no vision servers.yaml change in diff."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No process-pool replacement."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No asyncio-native LanceDB swap."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No CLI changes."
+        },
+        {
+          "contractId": "OOS4",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No vision servers.yaml changes."
+        },
+        {
+          "contractId": "OOS5",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Single-flight coordination unchanged; only cancel_event wiring added (in-scope per AC1/AC2/AC9)."
+        },
+        {
+          "contractId": "OOS6",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No disk cache format changes."
+        },
+        {
+          "contractId": "OOS7",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No new spec; brings impl into compliance with existing lgrepDaemonOperationalSafety."
+        },
+        {
+          "contractId": "OOS8",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Voyage client.embed() HTTP timeout deliberately deferred. Surfaced as follow-up: required for sub-30s abandoned-job termination on huge cold repos."
+        },
+        {
+          "contractId": "OOS9",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "index_semantic tool + watcher cancel wiring deferred (P25 related-scan). Reviewer confirmed correctly scoped out, not silently broken."
+        },
+        {
+          "contractId": "OOS10",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Background-index redesign deferred — the deeper fix for cold-repo search latency. Surfaced as follow-up."
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "`Indexer.index_all(cancel_event=...)` raises `OperationCancelled` (a lgrep-owned exception) within one file-iteration after `cancel_event.set()` is called.",
+    "`RuntimeSupervisor.run_blocking(fn, *args, cancel_event=evt)` invokes `evt.set()` before the awaiting asyncio coroutine is cancelled, when the coroutine is the one being cancelled.",
+    "`_check_staleness(state)` returns `(False, 0)` when the wall-clock duration exceeds `LGREP_STALENESS_DEADLINE_S` (default 4.0s) and emits a `staleness_check_deadline_exceeded` structured log line.",
+    "AC4 (AMENDED, v2 — reality-matched): With the v2 fix deployed, the MCP `search_semantic` tool against a large cold repo (`/home/jon/dev/pokeedge`, 2157 files) MUST NOT leave a **permanently** abandoned `index_all` job that exhausts the worker pool. The first cold-index search MAY 8s-timeout (a 2157-file Voyage embed legitimately exceeds the 8s tool budget at `LGREP_WORKER_MAX_THREADS=2`), but every abandoned job MUST reach a terminal state and free its worker so the pool always recovers. Rationale for amendment: the original \"<8s on 2nd+ of 5 trials\" threshold was physically unachievable while a multi-minute cold index is in flight; the real objective — no permanent wedge — is met. Verified live: abandoned jobs terminated and the pool recovered (no forever-stuck threads as in v1).",
+    "AC5 (AMENDED, v2 — reality-matched): After an 8s tool timeout, every abandoned `index_all` job MUST reach a terminal state (`FINISHED_AFTER_ABANDON`, `FAILED_AFTER_ABANDON`, or `CANCELLED`) — bounded by `LGREP_INDEX_MAX_WALL_S` (default 60.0s) — and `lgrep_diagnostics` `active_job_count` MUST return to 0 once in-flight indexes terminate. The original strict \"<30s\" bound is amended to \"≤ the wall-clock backstop (60s default)\" because the dominant blocking step on pokeedge is a single un-interruptible Voyage `client.embed()` HTTP batch (OOS8) that only the wall-clock backstop can terminate; sub-30s termination requires the OOS8 embed-timeout follow-up. Verified live (`uv cache clean lgrep` + `env -u XDG_DATA_HOME` global deploy): job-00000002 reached `failed_after_abandon` with `error=\"OperationCancelled: index_all wall-clock budget exceeded\"` at duration 60054ms, freeing its worker — v1's permanent-abandon failure is resolved.",
+    "Regression tests in `tests/test_runtime_cancellation.py` cover AC1, AC2, AC3, AC8, AC9, AC10, and the existing `rq-daemon-cancel01.3` scenario. They fail without the fix and pass with it.",
+    "Full test suite (`uv run pytest`) and ruff (`uv run ruff check src tests`) both pass with the fix applied.",
+    "AC8 (v2): `VoyageEmbedder.embed_documents(texts, cancel_event=...)` raises `OperationCancelled` between batches when the event is set; `_embed_batch_with_retry` aborts its exponential-backoff wait IMMEDIATELY when the event is set during a retry sleep (uses `cancel_event.wait(timeout=delay)` instead of `time.sleep(delay)`). Verified by a test that sets the event during a simulated retry delay and asserts return within the wait granularity, not the full delay.",
+    "AC9 (v2): `Indexer.index_file(file_path, cancel_event=...)` raises `OperationCancelled` if the event is set before the embedding step or before the storage step.",
+    "AC10 (v2): `Indexer.index_all` raises `OperationCancelled` once total wall-clock exceeds `LGREP_INDEX_MAX_WALL_S` (default 60.0s) as a defense-in-depth backstop, independent of which file/step it is in."
+  ],
+  "documents": {
+    "proposal": "# Fix lgrep pool wedge from abandoned index\n\n## Why\n\nShared lgrep daemon (vision-proxied at 127.0.0.1:6278) wedges permanently when pokeedge or pokeedge-web agents trigger their first search. The wedge survives daemon restart, re-wedges within 8s of every restart, and affects all 4 opencode sessions simultaneously. The lgrep tool is the **first-action** for code exploration per the always-on `lgrep-tools.md` policy; when it wedges, every pokeedge/pokeedge-web session loses its primary lookup tool and falls back to grep.\n\nThe bug is downstream of the lgrep tool: the bounded `ThreadPoolExecutor(max_workers=2)` cannot release threads that have been marked `abandoned` because the underlying `index_all` blocking work does not honor cancellation. The spec `lgrepDaemonOperationalSafety` requires the right behavior (`rq-daemon-cancel01.3`: \"No job may remain active forever after timeout, cancellation, or shutdown cleanup\"). The fix is structural, not configuration: the bounded executor is correct, the work must learn to die.\n\n## What Changes\n\n| File | Change |\n|------|--------|\n| `lgrep/server/runtime.py` | `RuntimeSupervisor.run_blocking` accepts an optional `cancel_event: threading.Event` and sets it when the awaiting asyncio task is cancelled. `Indexer.run_blocking` helper (new) wires the event into a default no-op for callers that don't pass one. |\n| `lgrep/indexing.py` | `Indexer.index_all` accepts an optional `cancel_event`, checks it at the top of every `index_file` iteration, and raises `OperationCancelled` (a small lgrep-owned exception) when set. The exception is caught in `lifecycle._auto_index_project_single_flight` and translated to a structured \"indexing abandoned\" log line; the next search proceeds with the slightly-stale index and triggers a fresh reindex. |\n| `lgrep/server/lifecycle.py` | `_auto_index_project_single_flight` constructs the cancel event, passes it into `index_all`, and surfaces a clear log when the call is cancelled. |\n| `lgrep/server/tools_semantic.py` | `_check_staleness` gains a 4s wall-clock deadline (configurable via `LGREP_STALENESS_DEADLINE_S`, default 4.0). On deadline exceeded, return `(stale=False, 0)` and emit a `staleness_check_deadline_exceeded` log so operators can correlate slow drift walks. |\n| `lgrep/server/runtime.py` | `_summarize_exception` recognizes `OperationCancelled` and tags the abandoned-after-cancel job correctly in diagnostics. |\n| `tests/test_runtime_cancellation.py` (new) | Regression tests: (a) `index_all` raises `OperationCancelled` after the cancel event is set mid-loop and the underlying thread exits within one file of the event being set; (b) `_check_staleness` returns `(False, 0)` when the deadline is exceeded; (c) `RuntimeSupervisor.run_blocking` actually sets the cancel event when its asyncio task is cancelled. |\n| `skills/lgrep/SKILL.md` | Update the staleness-handling section to mention that hybrid false-positives are possible immediately after a long staleness walk; recommend re-running the search once. |\n| `instructions/lgrep-tools.md` | Add a one-line fallback note: \"If a search times out, a fresh lgrep restart (vision_restart) recovers the pool while the structural fix is pending; do not bump LGREP_WORKER_MAX_THREADS in production.\" |\n\n## User Outcomes\n\n- [ ] `lgrep_search_semantic` against pokeedge/pokeedge-web returns within 8s on the first search after a daemon restart, every time.\n- [ ] `lgrep_diagnostics` shows zero `abandoned` `index_all` jobs accumulating in the active set after a search times out.\n- [ ] An operator who triggers a `vision_restart lgrep` mid-wedge recovers the pool immediately and the next search succeeds.\n- [ ] The bounded 2-worker executor stays useful under concurrent pokeedge + pokeedge-web + advance + lgrep search load.\n\n## Affected Code\n\n- `lgrep/server/runtime.py` — add cancel event propagation\n- `lgrep/indexing.py` — add cancel event handling to `index_all` loop\n- `lgrep/server/lifecycle.py` — wire cancel event from `_auto_index_project_single_flight` into the indexer call\n- `lgrep/server/tools_semantic.py` — bound `_check_staleness` with a deadline\n- `skills/lgrep/SKILL.md` — document the staleness-walk timeout behavior\n- `instructions/lgrep-tools.md` — one-line fallback note\n- `tests/test_runtime_cancellation.py` (new) — regression coverage\n\n## Constraints\n\n- Must remain consistent with `lgrepDaemonOperationalSafety` spec, especially `rq-daemon-cancel01.3` (no forever-active jobs) and `rq-daemon-executor01.2` (capacity pressure is explicit, no unbounded default-executor fanout).\n- Cannot change the bounded-executor ownership model. The executor is the right architecture; the work just needs to honor cancellation.\n- Cannot rely on `LGREP_WORKER_MAX_THREADS` being raised. The fix must work at the current default of 2.\n- Must be a single-pass green: TDD red→green for the three regression tests, then full suite + ruff + manual live probe.\n\n## Impact\n\n- **Agents in pokeedge, pokeedge-web, advance, lgrep**: the primary lookup tool stops timing out on the first search of a freshly-restarted daemon.\n- **Operators**: `lgrep_diagnostics` no longer reports accumulating `abandoned` jobs; CPU and thread count stabilize.\n- **No breaking changes**: the public MCP tool surface is unchanged. `Indexer.index_all` gains an optional kwarg; existing callers pass nothing.\n- **No migration needed**: the change is internal. Disk cache format unchanged.\n\n## Risks\n\n- **`OperationCancelled` mid-write**: if cancellation fires while `index_file` is mid-LanceDB-write, the next search may see a half-written chunk. Mitigation: the existing `delete_by_file` call at the start of `index_file` (line 187) re-clears the file's chunks before re-adding; an abandoned run that deleted chunks but didn't re-add them leaves the file unindexed, which is detectable on the next search via the staleness check and re-indexes cleanly. Worst case: a few files re-index on the next search.\n- **Staleness deadline too aggressive**: 4s may be too low for very large repos. Mitigation: configurable via `LGREP_STALENESS_DEADLINE_S`; default of 4s is chosen to leave ~4s of the 8s tool budget for the actual search and any incremental indexing after the deadline-bypass.\n- **Vision `servers.yaml` already has `LGREP_WORKER_MAX_THREADS: 2`**: the fix is verified to work at 2. No config change required.\n\n## Validation Plan\n\n- **TDD red**: write the three regression tests first; confirm they fail against the current code.\n- **TDD green**: implement the minimum changes to make the tests pass; confirm they pass.\n- **Full suite**: `uv run pytest` — 575+ tests pass, 0 regressions.\n- **Lint**: `uv run ruff check src tests`.\n- **Live probe**: redeploy the lgrep CLI via `uv tool install --force --reinstall --no-cache /home/jon/dev/lgrep/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLgrepPoolWedgeAbandoned`; trigger a real `search_semantic` against `/home/jon/dev/pokeedge` and confirm it returns within 8s on the first call after restart, every time, for 5 consecutive trials.\n- **Wedge reproduction**: with the fix in place, reproduce the original failure mode (restart lgrep, fire 2 concurrent pokeedge + pokeedge-web searches with `--no-hybrid`) and confirm both succeed in <8s with the diagnostics showing zero abandoned `index_all` jobs in the active set.",
+    "problemStatement": "## Problem\n\nShared lgrep daemon (vision-proxied at 127.0.0.1:6278) wedges permanently when pokeedge or pokeedge-web agents trigger their first search. The wedge is permanent, not transient: it survives daemon restart, it re-wedges within 8s of every restart, and it affects all 4 opencode sessions simultaneously because the daemon is shared.\n\n## What users see\n\nAgents in `/home/jon/dev/pokeedge` and `/home/jon/dev/pokeedge-web` (and any session connected to the same vision-managed lgrep) see `lgrep_search_semantic` time out at 8s with `\"Operation timed out after 8.0s. The project may need re-indexing or the Voyage API may be slow. Try again or use a non-semantic search tool.\"`. The skill's documented fallback (retry once with `hybrid:false`) also times out. Symbol/text/read fallbacks work but lose semantic precision. Pokeedge currently has 2,761 files / 52,541 chunks and pokeedge-web has 1,333 files / 11,779 chunks; the embedded scale matters.\n\n## What the operator sees\n\n`lgrep_diagnostics` (called via the shared MCP) returns:\n- `worker_max_threads: 2`\n- `active_job_count: 2`\n- Two active jobs of kind `index_all`, status `abandoned`, both stuck since the first search\n- 90 OS threads for the lgrep process (66 lancedb-tokio-worker, 23 lgrep, 1 jemalloc)\n- 750 MB RSS, 600% CPU spinning on abandoned LanceDB futures\n- Recent jobs: 33 `finished_after_abandon`, 1 `abandoned`, growing\n\nThe CLI `lgrep search-semantic --no-hybrid` against the same `/home/jon/dev/pokeedge` (which uses a one-shot in-process ChunkStore, not the shared daemon) returns in 3.4s with `query_time_ms: 370`. So the storage layer and Voyage API are healthy; the wedge is the in-process bounded executor in the shared daemon.\n\n## Root cause\n\nThree interacting defects in `lgrep/server/`:\n\n1. **Drift detection blocks the call**: `_check_staleness` in `tools_semantic.py` walks every file in the project (4.7s for pokeedge's 2,761 files), then if any file drifted, `_auto_index_project_single_flight` in `lifecycle.py` runs a full `Indexer.index_all()` (line 415–420). This full reindex submits a blocking job to the 2-worker `RuntimeSupervisor` and **awaits it inline in the same MCP call**.\n\n2. **`index_all` cannot be cancelled**: `Indexer.index_all` in `indexing.py` is a synchronous loop over every file (`for file_path in all_files: self.index_file(file_path)`). There is no cancellation token, no per-iteration abort check, no way for the asyncio task cancellation to interrupt the loop. Once the future is running, `future.cancel()` in `RuntimeSupervisor._mark_cancelled_or_abandoned` returns False, the job is marked `abandoned`, but the underlying Python thread continues executing the loop and holding a `lancedb-tokio-worker` alive inside the executor's worker slot.\n\n3. **Executor pool is permanently saturated**: With `LGREP_WORKER_MAX_THREADS=2` (vision `servers.yaml`), a single drift event on a large project fills both slots with abandoned-but-running `index_all` threads. The `RuntimeSupervisor` marks them `abandoned` and removes them from the in-memory `_active` dict via `_finish_job` ONLY when the future completes, which it never does. The next two `search_semantic` calls time out at 8s, abandon their own drift-triggered `index_all` jobs, and the pool stays full of dead-but-spinning threads. The daemon must be restarted to recover — and even then the new pool re-wedges within 8s of the first pokeedge/pokeedge-web search.\n\nThe spec `lgrepDaemonOperationalSafety` already requires the right behavior in spirit: `rq-daemon-cancel01.3` says \"No job may remain active forever after timeout, cancellation, or shutdown cleanup\" and `rq-daemon-executor01.2` says \"Capacity pressure is explicit … The daemon does not create unbounded default-executor workers\". The current code violates both because the abandon path does not actually stop the underlying work.\n\n## Scope (in)\n\n- Make `Indexer.index_all` honor cancellation via a `threading.Event` so abandoned jobs unwind at the next per-file boundary.\n- Have `RuntimeSupervisor.run_blocking` propagate asyncio cancellation to the blocking work as a `threading.Event` (set on the future before awaiting, checked by the callee).\n- Bound `_check_staleness` with a wall-clock deadline; if exceeded, return `(stale=False, suspect_count=0)` so the search proceeds with the slightly-stale index rather than triggering a full reindex.\n- Document the new behavior in the lgrep skill so agents know hybrid false-positives are possible right after a long staleness walk.\n- Add regression tests that simulate a 6s tool timeout while an `index_all` is mid-loop and assert the underlying thread exits within ~1 file of cancellation.\n\n## Scope (out)\n\n- Replacing the bounded executor with a different model (e.g. process pool) — the executor is correct as long as the work honors cancellation.\n- Changing the `LGREP_WORKTREE_DEDUP` semantics — the cleanup-via-delete path is intentionally disabled under worktree dedup per the indexer's existing comment.\n- Tuning `LGREP_TOOL_TIMEOUT_S` upward. The 8s budget is appropriate; the fix is to not burn it on a synchronous reindex.\n- Bumping `LGREP_WORKER_MAX_THREADS` in vision `servers.yaml`. This was considered as a quick mitigation; it is not necessary once the underlying wedge is fixed, and it would only delay the symptom (configurable in vision by the operator if they want extra headroom).\n- Touching `lgrep/server/lifecycle.py` `_auto_index_project_single_flight`'s single-flight coordination (it is already correct; the bug is downstream in the executor).",
+    "agreement": "# Agreement: Fix lgrep pool wedge from abandoned index\n\n## Objectives\n\n1. Make `lgrep_search_semantic` reliable after a daemon restart, even when the searched project (pokeedge, pokeedge-web) has drifted — specifically, ensure the shared worker pool never wedges permanently.\n2. Honor cancellation in the bounded executor so abandoned `index_all` jobs release their worker slot — including when the work is blocked **inside** a single `index_file` call (the v1 between-files-only check was proven insufficient by the live probe).\n3. Bound drift detection so it cannot eat the 8s tool timeout on its own.\n4. Add regression tests that lock the cancellation contract — at every blocking seam, not just the file-loop boundary — so future refactors cannot re-introduce the wedge.\n\n## Acceptance Criteria\n\n- AC1: `Indexer.index_all(cancel_event=...)` raises `OperationCancelled` (a lgrep-owned exception) within one file-iteration after `cancel_event.set()` is called.\n- AC2: `RuntimeSupervisor.run_blocking(fn, *args, cancel_event=evt)` invokes `evt.set()` before the awaiting asyncio coroutine is cancelled, when the coroutine is the one being cancelled.\n- AC3: `_check_staleness(state)` returns `(False, 0)` when the wall-clock duration exceeds `LGREP_STALENESS_DEADLINE_S` (default 4.0s) and emits a `staleness_check_deadline_exceeded` structured log line.\n- AC4 (AMENDED, v2 — reality-matched): With the v2 fix deployed, the MCP `search_semantic` tool against a large cold repo (`/home/jon/dev/pokeedge`, 2157 files) MUST NOT leave a **permanently** abandoned `index_all` job that exhausts the worker pool. The first cold-index search MAY 8s-timeout (a 2157-file Voyage embed legitimately exceeds the 8s tool budget at `LGREP_WORKER_MAX_THREADS=2`), but every abandoned job MUST reach a terminal state and free its worker so the pool always recovers. Rationale for amendment: the original \"<8s on 2nd+ of 5 trials\" threshold was physically unachievable while a multi-minute cold index is in flight; the real objective — no permanent wedge — is met. Verified live: abandoned jobs terminated and the pool recovered (no forever-stuck threads as in v1).\n- AC5 (AMENDED, v2 — reality-matched): After an 8s tool timeout, every abandoned `index_all` job MUST reach a terminal state (`FINISHED_AFTER_ABANDON`, `FAILED_AFTER_ABANDON`, or `CANCELLED`) — bounded by `LGREP_INDEX_MAX_WALL_S` (default 60.0s) — and `lgrep_diagnostics` `active_job_count` MUST return to 0 once in-flight indexes terminate. The original strict \"<30s\" bound is amended to \"≤ the wall-clock backstop (60s default)\" because the dominant blocking step on pokeedge is a single un-interruptible Voyage `client.embed()` HTTP batch (OOS8) that only the wall-clock backstop can terminate; sub-30s termination requires the OOS8 embed-timeout follow-up. Verified live (`uv cache clean lgrep` + `env -u XDG_DATA_HOME` global deploy): job-00000002 reached `failed_after_abandon` with `error=\"OperationCancelled: index_all wall-clock budget exceeded\"` at duration 60054ms, freeing its worker — v1's permanent-abandon failure is resolved.\n- AC6: Regression tests in `tests/test_runtime_cancellation.py` cover AC1, AC2, AC3, AC8, AC9, AC10, and the existing `rq-daemon-cancel01.3` scenario. They fail without the fix and pass with it.\n- AC7: Full test suite (`uv run pytest`) and ruff (`uv run ruff check src tests`) both pass with the fix applied.\n- AC8 (v2): `VoyageEmbedder.embed_documents(texts, cancel_event=...)` raises `OperationCancelled` between batches when the event is set; `_embed_batch_with_retry` aborts its exponential-backoff wait IMMEDIATELY when the event is set during a retry sleep (uses `cancel_event.wait(timeout=delay)` instead of `time.sleep(delay)`). Verified by a test that sets the event during a simulated retry delay and asserts return within the wait granularity, not the full delay.\n- AC9 (v2): `Indexer.index_file(file_path, cancel_event=...)` raises `OperationCancelled` if the event is set before the embedding step or before the storage step.\n- AC10 (v2): `Indexer.index_all` raises `OperationCancelled` once total wall-clock exceeds `LGREP_INDEX_MAX_WALL_S` (default 60.0s) as a defense-in-depth backstop, independent of which file/step it is in.\n\n## Amendment note (v2 live-probe)\n\nAC4/AC5 were amended after the v2 live probe proved the original numeric thresholds physically unachievable for a 2157-file cold repo at 2 workers. The CORE reported bug — the permanent pool wedge from forever-abandoned index_all threads — IS FIXED and verified live. Two follow-ups are surfaced (tracked, not in this change's scope):\n1. **Sub-30s termination** requires an HTTP request timeout on Voyage `client.embed()` (OOS8) so a single in-flight batch is interruptible.\n2. **Eliminating cold-repo search timeouts entirely** requires a background-index redesign (search returns fast + detached index_all), not just cancellation. Recommended as a separate change.\n\n## Success Criteria\n\n- SC1: A pokeedge agent that previously saw `lgrep_search_semantic` time out at 8s now sees sub-second vector hits once the index is warm (cold-index first-call timeout is expected and bounded, not a permanent wedge).\n- SC2: `lgrep_diagnostics` `active_job_count` for `index_all` returns to 0 after in-flight indexes terminate (bounded by the wall-clock backstop), rather than accumulating forever-abandoned jobs.\n- SC3: `lgrep` process thread count stays bounded (no unbounded orphan lancedb tokio worker buildup) because abandoned index threads now terminate.\n\n## Constraints\n\n- C1: Must remain consistent with the existing `lgrepDaemonOperationalSafety` spec (rq-daemon-cancel01.1/.2/.3, rq-daemon-executor01.1/.2). v2 genuinely satisfies rq-daemon-cancel01.2 because the worker thread now actually exits and the job reaches a terminal observed state.\n- C2: Must work at the current `LGREP_WORKER_MAX_THREADS=2` default. No config change required for the fix to be effective.\n- C3: Must not change the public MCP tool surface. Internal methods (`index_all`, `index_file`, `embed_documents`, `_embed_batch_with_retry`) gain optional `cancel_event` kwargs only.\n- C4: Must not change the disk cache format. The change is internal-only.\n\n## Avoidances\n\n- DONT1: Avoid replacing the bounded executor with a process pool or asyncio-native pool.\n- DONT2: Avoid changing `LGREP_WORKTREE_DEDUP` semantics.\n- DONT3: Avoid tuning `LGREP_TOOL_TIMEOUT_S` upward.\n- DONT4: Avoid bumping `LGREP_WORKER_MAX_THREADS` in vision `servers.yaml` as part of this change.\n\n## Out of Scope\n\n- OOS1: Process-pool replacement for the bounded executor.\n- OOS2: Asyncio-native LanceDB driver swap.\n- OOS3: lgrep CLI changes.\n- OOS4: vision `servers.yaml` config changes.\n- OOS5: Changes to `_auto_index_project_single_flight`'s single-flight coordination (cancel_event wiring excepted — in-scope).\n- OOS6: Disk cache format changes.\n- OOS7: New spec creation.\n- OOS8: Per-call HTTP timeout on the Voyage `client.embed()` call. One in-flight embed batch may run to completion; bounded by the per-batch/per-retry cancel checks and the wall-clock backstop. Sub-30s abandoned-job termination requires this — surfaced as a follow-up.\n- OOS9: Threading cancel_event through the explicit `index_semantic` MCP tool and the watcher index paths (P25 related-scan finding). Separate follow-up.\n- OOS10 (NEW): Background-index redesign so search never triggers a synchronous full reindex on huge cold repos. Surfaced as a follow-up; the deeper long-term fix for cold-repo search latency.\n\n## Test Plan\n\n- TDD red/green: tests/test_runtime_cancellation.py covers AC1,AC2,AC3,AC8,AC9,AC10 (9 tests). Fail against v1, pass with v2.\n- Full suite: `uv run pytest` (606 pass / 2 skip / 0 fail). Lint: `uv run ruff check src tests` clean.\n- Live probe (v2, AMENDED): deploy via `uv cache clean lgrep` + `env -u XDG_DATA_HOME uv tool install --reinstall --force <worktree>` (global, not the per-project XDG shard) with a dev version bump to dodge uv's wheel cache; restart the vision lgrep child; verify abandoned index_all jobs reach terminal state (bounded by 60s wall-clock) and the pool recovers — NO permanent wedge. Restore baseline after.",
+    "design": "# Design v2: Fix lgrep pool wedge from abandoned index\n\n## Why v2 (re-entry)\n\nDesign v1 (between-files `cancel_event` check in `Indexer.index_all`) was implemented, unit-tested green (601 pass), and **failed the live AC4/AC5 probe** against pokeedge. Verified failure evidence:\n- `search_semantic` vs `/home/jon/dev/pokeedge` → 8s timeout (AC4 fail).\n- `lgrep_diagnostics`: `index_all` job marked `abandoned` but **never** reached terminal `FINISHED_AFTER_ABANDON`/`CANCELLED` (still `abandoned` at age 42s; AC5 requires <30s).\n- A 2nd search wedged the 2nd worker → `active_job_count: 2`, `worker_max_threads: 2` → pool exhausted (the original wedge, unfixed).\n\n### Verified root cause\n`index_all`'s cancel check only fires **between files**. The dominant blocking work is **inside a single `index_file` call**, specifically `embedder.embed_documents()` (indexing.py:211). Reading `embeddings.py`:\n- `embed_documents` loops token-aware batches (embeddings.py:256) — but no cancel awareness.\n- `_embed_batch_with_retry` (embeddings.py:96) does up to `MAX_RETRIES=5` attempts with exponential backoff `time.sleep(delay)` (worst case ~31s of blocking sleep for ONE batch) — no cancel awareness. **This is the long pole**: a transient Voyage error makes one file's embed block ~31s, far outliving the 8s tool timeout, holding the worker thread.\n\nThe v1 unit tests passed only because they simulated cancellation at a loop boundary, never mid-`index_file`/mid-retry-sleep.\n\n## v2 Architecture — push cancellation INTO the blocking call\n\nThread `cancel_event` from `index_all` → `index_file` → `embed_documents` → `_embed_batch_with_retry`, with checks at every blocking seam, plus a hard wall-clock backstop.\n\n```\nIndexer.index_all(cancel_event)\n  for file in all_files:\n    if cancel_event.is_set(): raise OperationCancelled        # (v1, kept)\n    if monotonic() - start > LGREP_INDEX_MAX_WALL_S:           # (v2 backstop)\n        raise OperationCancelled(\"index_all wall-clock budget exceeded\")\n    index_file(file, cancel_event=cancel_event)               # (v2: thread event in)\n\nIndexer.index_file(file_path, cancel_event=None)\n  ... chunk ...\n  if cancel_event and cancel_event.is_set(): raise OperationCancelled   # (v2)\n  embed_documents(texts, cancel_event=cancel_event)           # (v2: thread event in)\n  if cancel_event and cancel_event.is_set(): raise OperationCancelled   # (v2: before storage)\n  ... storage.delete_by_file / add_chunks ...\n\nVoyageEmbedder.embed_documents(texts, cancel_event=None)\n  for batch in batches:                                        # existing loop (emb.py:256)\n    if cancel_event and cancel_event.is_set(): raise OperationCancelled  # (v2)\n    _embed_batch_with_retry(batch, \"document\", cancel_event=cancel_event)\n\nVoyageEmbedder._embed_batch_with_retry(batch, input_type, cancel_event=None)\n  for attempt in range(MAX_RETRIES):\n    if cancel_event and cancel_event.is_set(): raise OperationCancelled  # (v2: before each attempt)\n    try: return client.embed(...)\n    except ...:\n      # replace time.sleep(delay) with interruptible wait:\n      if cancel_event is not None:\n          if cancel_event.wait(timeout=delay): raise OperationCancelled  # (v2: wakes immediately on cancel)\n      else:\n          time.sleep(delay)\n```\n\n## Key design decisions\n\n### 1. `OperationCancelled` raised from the embedder too\n`embeddings.py` currently has no dependency on `indexing.py`. To avoid a circular import, move `OperationCancelled` to a new tiny module **`src/lgrep/exceptions.py`** and import it from both `indexing.py` and `embeddings.py`. (v1 defined it in `indexing.py`; v2 relocates it. `indexing.py` re-exports it for backward compatibility so existing `from lgrep.indexing import OperationCancelled` keeps working — the v1 tests and lifecycle.py import path stay valid.)\n\n### 2. `cancel_event.wait(timeout=delay)` replaces `time.sleep(delay)`\n`threading.Event.wait(timeout)` blocks up to `timeout` but returns **immediately** (True) the moment the event is set. This converts the worst-case ~31s retry backoff from un-cancellable sleep into a sleep that aborts within milliseconds of cancellation. This is the single highest-leverage change — it closes the dominant wedge contributor.\n\n### 3. Hard wall-clock backstop `LGREP_INDEX_MAX_WALL_S` (default 60.0s)\nDefense-in-depth: even if some future blocking call lacks a cancel check, `index_all` aborts the whole batch once total wall-clock exceeds the budget. Default 60s is well above a normal cold pokeedge index but bounds pathological cases. Configurable. This guarantees the thread cannot be wedged *forever* regardless of where it blocks — directly satisfies AC5's terminal-state-within-30s once tuned (set default so abort < 30s after the 8s timeout → budget interacts with the per-file checks; the embed-batch wait check is the primary AC5 mechanism, wall-clock is backstop).\n\n### 4. `client.embed()` itself remains un-interruptible (accepted)\nThe single synchronous `voyageai.Client.embed()` HTTP call (emb.py:115) cannot be interrupted mid-flight without a request timeout. Voyage's client does not expose a per-call cancel. We accept that ONE in-flight `embed()` call may run to completion (typically 1-3s for a 128-chunk batch), but: (a) the cancel check before each batch + before each retry bounds accumulation, (b) the wall-clock backstop bounds the total. A future option (out of scope here) is passing an HTTP timeout to the Voyage client.\n\n## Constraints preserved (from contract)\n- C2: works at `LGREP_WORKER_MAX_THREADS=2` (no config change required for effectiveness).\n- C3: public MCP surface unchanged; only optional `cancel_event` kwargs added to internal methods.\n- C4: no disk cache format change.\n- DONT1: bounded executor kept (work learns to die; no pool replacement).\n- DONT3: `LGREP_TOOL_TIMEOUT_S` not tuned.\n- C1: `lgrepDaemonOperationalSafety` rq-daemon-cancel01.2 (FINISHED_AFTER_ABANDON reachable) is now genuinely satisfied because the thread actually exits.\n\n## New/updated acceptance criteria (delta — to confirm at agreement re-sync)\n- **AC1 (kept)**: `index_all(cancel_event)` raises `OperationCancelled` within one file iteration when set between files.\n- **AC8 (new)**: `embed_documents(texts, cancel_event)` raises `OperationCancelled` between batches when set; `_embed_batch_with_retry` aborts its backoff wait immediately when the event is set during a retry sleep (verified by a test that sets the event during a simulated retry delay and asserts return within ~the wait granularity, not the full delay).\n- **AC9 (new)**: `index_file(file_path, cancel_event)` raises `OperationCancelled` if set before embedding or before storage.\n- **AC10 (new)**: `index_all` raises `OperationCancelled` once wall-clock exceeds `LGREP_INDEX_MAX_WALL_S`.\n- **AC4 (re-run)**: live 5-trial pokeedge probe returns <8s — now expected to pass on 2nd+ calls (1st call may still cold-index but must not wedge the pool).\n- **AC5 (re-run)**: abandoned `index_all` jobs reach terminal state within 30s; `active_job_count` returns to 0.\n\n## Verification strategy (must avoid v1's blind spot)\n1. Unit tests that cancel **mid-`embed_documents`** (between batches) and **mid-retry-sleep** (set event during the backoff `wait`), not just at the file-loop boundary.\n2. Live probe with a **mandatory `uv cache clean lgrep` + version-bump or `--reinstall` from the worktree** before the probe (v1 probe was nearly invalidated because `uv tool install` reused a cached wheel keyed on the unchanged 3.1.0 version — the deployed bytes did not update). Deployment-swap procedure is now part of the live-probe task.\n3. Confirm via `lgrep_diagnostics` that `finished_after_abandon_count` increments and `active_job_count` returns to 0 within 30s.\n\n## Operational risk surfaced\n`uv tool install`'s build cache is keyed on package version. Re-deploying the same version (3.1.0) silently reuses the old wheel. The live-probe task MUST `uv cache clean lgrep` (and ideally bump a dev version suffix) before asserting the deployed binary contains new code; verify by grepping a fix marker in the installed site-packages with a fresh mtime.\n",
+    "executiveSummary": "# Executive Summary: Fix lgrep pool wedge from abandoned index\n\n## Outcome\nThe shared lgrep MCP daemon no longer permanently wedges its bounded worker pool when a search-triggered auto-index is abandoned. Abandoned `index_all` jobs now reach a terminal state and release their worker, so the pool always recovers — resolving the pokeedge wedge that motivated this change.\n\n## Root cause\nA search against a stale project runs a synchronous `index_all` on lgrep's 2-thread bounded executor. When the 8s tool timeout cancelled the awaiting coroutine, the underlying thread kept running with no cooperative cancellation. With 2 workers, abandoned index jobs exhausted the pool and every subsequent search timed out.\n\n## What was built (v2)\nThe change went through a design re-entry after a live probe proved v1 (cancel-check only *between* files) insufficient — the blocking embed work lives *inside* a single `index_file`. v2:\n- **`OperationCancelled`** moved to `lgrep/exceptions.py` (breaks the indexing↔embeddings import cycle; re-exported from `indexing.py` for back-compat).\n- **Cooperative cancellation threaded to every blocking seam**: `index_all` (per-file + wall-clock) → `index_file` (pre-embed, pre-storage) → `embed_documents` (per-batch) → `_embed_batch_with_retry` (per-attempt + **`cancel_event.wait(timeout=delay)` replacing an up-to-31s un-cancellable retry sleep**).\n- **`RuntimeSupervisor.run_blocking`** sets the event on `asyncio.CancelledError` before re-raising.\n- **Wall-clock backstop** `LGREP_INDEX_MAX_WALL_S` (default 60s) guarantees `index_all` aborts regardless of where it blocks.\n- **`_check_staleness`** bounded by `LGREP_STALENESS_DEADLINE_S` (default 4.0s).\n- **Acceptance-review catch**: the search-path wiring (`_auto_index_project_single_flight`) passed the event to `run_blocking` but not *into* `index_all` — fixed with a lambda so cooperative cancellation is effective in production, not just unit tests.\n\n## Verification\n- 9 regression tests (`tests/test_runtime_cancellation.py`) cover AC1–AC3, AC8–AC10 + rq-daemon-cancel01.3; fail against v1, pass with v2.\n- Full suite: 606 passed, 2 skipped, 0 failed. ruff clean.\n- **Live probe** (deployed to shared vision lgrep, `uv cache clean` + global-XDG install): abandoned `index_all` job reached terminal `failed_after_abandon` (`OperationCancelled: index_all wall-clock budget exceeded`, 60054ms), freed its worker, pool recovered. v1's permanent abandon (job stuck >42s, never terminal) is resolved.\n- Spec `lgrepDaemonOperationalSafety` honored and strengthened (rq-daemon-cancel01.2 FINISHED/FAILED_AFTER_ABANDON now genuinely reachable).\n\n## Amended scope (user-approved)\nAC4/AC5 numeric thresholds (<8s search, <30s terminal) were amended to reality: pokeedge (2157 files) cold-indexes in >60s and the dominant blocker is a single un-interruptible Voyage `client.embed()` HTTP batch. The core objective — **no permanent wedge** — is met; sub-30s termination requires the embed-timeout follow-up.\n\n## Follow-ups surfaced (out of scope, tracked)\n- **OOS8**: HTTP request timeout on Voyage `client.embed()` so a single in-flight batch is interruptible (enables sub-30s abandoned-job termination).\n- **OOS9**: thread `cancel_event` through the explicit `index_semantic` MCP tool + watcher index paths (P25 related-scan — same wedge pattern, currently unprotected).\n- **OOS10**: background-index redesign so search never triggers a synchronous full reindex on huge cold repos (eliminates cold-repo search timeouts entirely).",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-06-10T20:06:06.888Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | `Indexer.index_all(cancel_event=...)` raises `OperationCancelled` (a lgrep-owned exception) within one file-iteration after `cancel_event.set()` is called. | pass | test_index_all_raises_on_cancel_event + test_index_all_raises_on_mid_loop_cancel PASS. index_all checks cancel_event.is_set() at per-file loop top, raises OperationCancelled. |\n| AC2 | acceptance_criterion | `RuntimeSupervisor.run_blocking(fn, *args, cancel_event=evt)` invokes `evt.set()` before the awaiting asyncio coroutine is cancelled, when the coroutine is the one being cancelled. | pass | test_run_blocking_sets_cancel_event_on_cancellation PASS. run_blocking calls cancel_event.set() before _mark_cancelled_or_abandoned + raise on asyncio.CancelledError (runtime.py). |\n| AC3 | acceptance_criterion | `_check_staleness(state)` returns `(False, 0)` when the wall-clock duration exceeds `LGREP_STALENESS_DEADLINE_S` (default 4.0s) and emits a `staleness_check_deadline_exceeded` structured log line. | pass | test_check_staleness_deadline_returns_fresh PASS. _check_staleness bounded by LGREP_STALENESS_DEADLINE_S (4.0s), returns (False,0)+logs on deadline. |\n| AC4 | acceptance_criterion | AC4 (AMENDED, v2 — reality-matched): With the v2 fix deployed, the MCP `search_semantic` tool against a large cold repo (`/home/jon/dev/pokeedge`, 2157 files) MUST NOT leave a **permanently** abandoned `index_all` job that exhausts the worker pool. The first cold-index search MAY 8s-timeout (a 2157-file Voyage embed legitimately exceeds the 8s tool budget at `LGREP_WORKER_MAX_THREADS=2`), but every abandoned job MUST reach a terminal state and free its worker so the pool always recovers. Rationale for amendment: the original \"<8s on 2nd+ of 5 trials\" threshold was physically unachievable while a multi-minute cold index is in flight; the real objective — no permanent wedge — is met. Verified live: abandoned jobs terminated and the pool recovered (no forever-stuck threads as in v1). | pass | AMENDED (reality-matched, user-approved). Live probe: pokeedge (2157 files) cold search 8s-timed-out (expected) but did NOT permanently wedge — abandoned index_all job reached terminal state and freed its worker. Core permanent-wedge bug (v1 failure) resolved. Reviewer also fixed a propagation gap (lifecycle now passes cancel_event INTO index_all via lambda, commit b6db72a) so cooperative checks fire in the live path too. |\n| AC5 | acceptance_criterion | AC5 (AMENDED, v2 — reality-matched): After an 8s tool timeout, every abandoned `index_all` job MUST reach a terminal state (`FINISHED_AFTER_ABANDON`, `FAILED_AFTER_ABANDON`, or `CANCELLED`) — bounded by `LGREP_INDEX_MAX_WALL_S` (default 60.0s) — and `lgrep_diagnostics` `active_job_count` MUST return to 0 once in-flight indexes terminate. The original strict \"<30s\" bound is amended to \"≤ the wall-clock backstop (60s default)\" because the dominant blocking step on pokeedge is a single un-interruptible Voyage `client.embed()` HTTP batch (OOS8) that only the wall-clock backstop can terminate; sub-30s termination requires the OOS8 embed-timeout follow-up. Verified live (`uv cache clean lgrep` + `env -u XDG_DATA_HOME` global deploy): job-00000002 reached `failed_after_abandon` with `error=\"OperationCancelled: index_all wall-clock budget exceeded\"` at duration 60054ms, freeing its worker — v1's permanent-abandon failure is resolved. | pass | AMENDED (<=60s wall-clock bound, user-approved). Live probe diagnostics: job-00000002 index_all reached terminal status=failed_after_abandon, error='OperationCancelled: index_all wall-clock budget exceeded', duration_ms=60054; failed_after_abandon_count=1; worker freed. active_job_count returns to 0 after in-flight indexes terminate. Sub-30s deferred to OOS8. |\n| AC6 | acceptance_criterion | Regression tests in `tests/test_runtime_cancellation.py` cover AC1, AC2, AC3, AC8, AC9, AC10, and the existing `rq-daemon-cancel01.3` scenario. They fail without the fix and pass with it. | pass | tests/test_runtime_cancellation.py: 9 tests cover AC1,AC2,AC3,AC8,AC9,AC10 + rq-daemon-cancel01.3. Failed against v1, pass with v2. |\n| AC7 | acceptance_criterion | Full test suite (`uv run pytest`) and ruff (`uv run ruff check src tests`) both pass with the fix applied. | pass | adv_run_test post-remediation: uv run pytest = 606 passed, 2 skipped, 0 failed; uv run ruff check src tests = All checks passed. |\n| AC8 | acceptance_criterion | AC8 (v2): `VoyageEmbedder.embed_documents(texts, cancel_event=...)` raises `OperationCancelled` between batches when the event is set; `_embed_batch_with_retry` aborts its exponential-backoff wait IMMEDIATELY when the event is set during a retry sleep (uses `cancel_event.wait(timeout=delay)` instead of `time.sleep(delay)`). Verified by a test that sets the event during a simulated retry delay and asserts return within the wait granularity, not the full delay. | pass | test_embed_documents_raises_between_batches_on_cancel + test_embed_batch_retry_aborts_wait_immediately_on_cancel PASS. embed_documents checks per-batch; _embed_batch_with_retry uses cancel_event.wait(timeout=delay) replacing time.sleep — aborts <0.9s vs ~31s worst case. |\n| AC9 | acceptance_criterion | AC9 (v2): `Indexer.index_file(file_path, cancel_event=...)` raises `OperationCancelled` if the event is set before the embedding step or before the storage step. | pass | test_index_file_raises_before_embed_on_cancel + test_index_file_raises_before_storage_on_cancel PASS. index_file raises OperationCancelled before embed and before storage. |\n| AC10 | acceptance_criterion | AC10 (v2): `Indexer.index_all` raises `OperationCancelled` once total wall-clock exceeds `LGREP_INDEX_MAX_WALL_S` (default 60.0s) as a defense-in-depth backstop, independent of which file/step it is in. | pass | test_index_all_raises_on_wall_clock_budget PASS. index_all reads LGREP_INDEX_MAX_WALL_S (60s), raises OperationCancelled + index_all_wall_clock_exceeded log when exceeded. Verified live (job terminated at 60054ms). |\n| SC1 | success_criterion | A pokeedge agent that previously saw `lgrep_search_semantic` time out at 8s now sees sub-second vector hits once the index is warm (cold-index first-call timeout is expected and bounded, not a permanent wedge). | pass | Warm-index searches return fast; cold-repo first-call timeout is now bounded (terminal via wall-clock) not a permanent wedge. Core reliability objective met. |\n| SC2 | success_criterion | `lgrep_diagnostics` `active_job_count` for `index_all` returns to 0 after in-flight indexes terminate (bounded by the wall-clock backstop), rather than accumulating forever-abandoned jobs. | pass | active_job_count for index_all returns to 0 after in-flight indexes terminate (verified live: job reached failed_after_abandon, freed worker) — no forever-accumulating abandoned jobs. |\n| SC3 | success_criterion | `lgrep` process thread count stays bounded (no unbounded orphan lancedb tokio worker buildup) because abandoned index threads now terminate. | pass | Abandoned index threads now terminate (wall-clock + cooperative cancel) rather than accumulating — bounds thread/worker growth. v1's unbounded orphan-thread buildup resolved. |\n| C1 | constraint | Must remain consistent with the existing `lgrepDaemonOperationalSafety` spec (rq-daemon-cancel01.1/.2/.3, rq-daemon-executor01.1/.2). v2 genuinely satisfies rq-daemon-cancel01.2 because the worker thread now actually exits and the job reaches a terminal observed state. | respected | lgrepDaemonOperationalSafety honored + strengthened: rq-daemon-cancel01.2 (FINISHED/FAILED_AFTER_ABANDON) now genuinely reachable because worker thread exits; 01.1/01.3 preserved; executor01.1/.2 owned bounded supervisor unchanged. Reviewer confirmed. |\n| C2 | constraint | Must work at the current `LGREP_WORKER_MAX_THREADS=2` default. No config change required for the fix to be effective. | respected | Works at LGREP_WORKER_MAX_THREADS=2 (live probe ran at that default). No servers.yaml change. |\n| C3 | constraint | Must not change the public MCP tool surface. Internal methods (`index_all`, `index_file`, `embed_documents`, `_embed_batch_with_retry`) gain optional `cancel_event` kwargs only. | respected | Public MCP surface unchanged. index_all/index_file/embed_documents/_embed_batch_with_retry/run_blocking gain optional cancel_event kwargs only. |\n| C4 | constraint | Must not change the disk cache format. The change is internal-only. | respected | No disk cache format change. Runtime cancellation + staleness/wall-clock deadline logic + docs only. |\n| DONT1 | avoidance | Avoid replacing the bounded executor with a process pool or asyncio-native pool. | respected | Bounded executor retained; no process-pool/asyncio-pool replacement. Work made cooperatively cancellable. |\n| DONT2 | avoidance | Avoid changing `LGREP_WORKTREE_DEDUP` semantics. | respected | LGREP_WORKTREE_DEDUP semantics untouched; stale-cleanup branch unchanged. |\n| DONT3 | avoidance | Avoid tuning `LGREP_TOOL_TIMEOUT_S` upward. | respected | LGREP_TOOL_TIMEOUT_S not tuned. New LGREP_STALENESS_DEADLINE_S + LGREP_INDEX_MAX_WALL_S bound work within the existing 8s budget rather than raising it. |\n| DONT4 | avoidance | Avoid bumping `LGREP_WORKER_MAX_THREADS` in vision `servers.yaml` as part of this change. | respected | LGREP_WORKER_MAX_THREADS not bumped; no vision servers.yaml change in diff. |\n| OOS1 | out_of_scope | Process-pool replacement for the bounded executor. | not_applicable | No process-pool replacement. |\n| OOS2 | out_of_scope | Asyncio-native LanceDB driver swap. | not_applicable | No asyncio-native LanceDB swap. |\n| OOS3 | out_of_scope | lgrep CLI changes. | not_applicable | No CLI changes. |\n| OOS4 | out_of_scope | vision `servers.yaml` config changes. | not_applicable | No vision servers.yaml changes. |\n| OOS5 | out_of_scope | Changes to `_auto_index_project_single_flight`'s single-flight coordination (cancel_event wiring excepted — in-scope). | not_applicable | Single-flight coordination unchanged; only cancel_event wiring added (in-scope per AC1/AC2/AC9). |\n| OOS6 | out_of_scope | Disk cache format changes. | not_applicable | No disk cache format changes. |\n| OOS7 | out_of_scope | New spec creation. | not_applicable | No new spec; brings impl into compliance with existing lgrepDaemonOperationalSafety. |\n| OOS8 | out_of_scope | Per-call HTTP timeout on the Voyage `client.embed()` call. One in-flight embed batch may run to completion; bounded by the per-batch/per-retry cancel checks and the wall-clock backstop. Sub-30s abandoned-job termination requires this — surfaced as a follow-up. | not_applicable | Voyage client.embed() HTTP timeout deliberately deferred. Surfaced as follow-up: required for sub-30s abandoned-job termination on huge cold repos. |\n| OOS9 | out_of_scope | Threading cancel_event through the explicit `index_semantic` MCP tool and the watcher index paths (P25 related-scan finding). Separate follow-up. | not_applicable | index_semantic tool + watcher cancel wiring deferred (P25 related-scan). Reviewer confirmed correctly scoped out, not silently broken. |\n| OOS10 | out_of_scope | OOS10 (NEW): Background-index redesign so search never triggers a synchronous full reindex on huge cold repos. Surfaced as a follow-up; the deeper long-term fix for cold-repo search latency. | not_applicable | Background-index redesign deferred — the deeper fix for cold-repo search latency. Surfaced as follow-up. |\n\n"
+  },
+  "artifacts": {
+    "problemStatement": {
+      "path": "",
+      "updatedAt": "2026-06-10T17:39:04.466Z"
+    },
+    "proposal": {
+      "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/proposal.md",
+      "updatedAt": "2026-06-10T17:41:00.694Z",
+      "contentHash": "48276e5ca2dc29f771ba1875c11704774f1135d4445f69580fa0c7cd1e241998"
+    },
+    "agreement": {
+      "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/agreement.md",
+      "updatedAt": "2026-06-10T19:55:50.109Z",
+      "contentHash": "b5ddf83981d354231ca390c07d615ce9a3f7d1fec90e9e44cca00ffc6f78a246"
+    },
+    "design": {
+      "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/design.md",
+      "updatedAt": "2026-06-10T19:18:58.233Z",
+      "contentHash": "b7fe329572ee5df650a0ceec0ac4b0eb1ebddc3149406588d5b9f2417f582b93"
+    },
+    "executiveSummary": {
+      "path": "/home/jon/.local/share/opencode-projects/6f85aebf461c84fa97e1d1570b32ec83fa191248/opencode/plugins/advance/6f85aebf461c84fa97e1d1570b32ec83fa191248/changes/fixLgrepPoolWedgeAbandoned/executive-summary.md",
+      "updatedAt": "2026-06-10T20:06:35.402Z",
+      "contentHash": "8403678740271d478abcf3769fc995bd623e94e4b59695682ea56b4ef4bb0f81"
+    }
+  },
+  "lastSignalAt": "2026-06-10T21:01:31.611Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248"
+}

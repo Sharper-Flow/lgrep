@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "id": "ws-GhfRhl",
+      "type": "gotcha",
+      "content": "Related-scan (P25): the explicit `index_semantic` MCP tool (src/lgrep/server/tools_semantic.py:375) calls Indexer.index_all WITHOUT cancel_event, so it can still wedge the bounded executor identically if its awaiting coroutine is cancelled mid-file. This fix scoped cancellation to the search-path auto-index (_auto_index_project_single_flight) per the agreed contract (OOS-scoped). The index_semantic full-reindex path is a legitimate same-pattern FOLLOW-UP, not an in-scope gap. watcher._do_index uses index_file (single file) so its wedge risk is bounded and lower. Recommend a follow-up change to thread cancel_event through index_semantic and watcher index_all-equivalent paths.",
+      "recorded_at": "2026-06-10T19:02:26.766Z"
+    },
+    {
+      "id": "ws-_reIOs",
+      "type": "failure",
+      "content": "LIVE PROBE FAILED (AC4+AC5). With the fix deployed to the shared vision lgrep, the pokeedge wedge REPRODUCES: search_semantic against /home/jon/dev/pokeedge times out at 8s, the index_all job is marked abandoned but NEVER reaches terminal state (finished_after_abandon_count stayed 0 at age 42s+, AC5 requires <30s), and a 2nd search wedges the 2nd worker (active_job_count:2, pool exhausted). Root cause: the cooperative cancel_event.is_set() check only fires BETWEEN files in Indexer.index_all's per-file loop. On pokeedge a single index_file call (Voyage embed batch + LanceDB write) blocks far longer than the cancellation window, so the thread cannot observe cancel_event mid-file. The design's 'exits within one file boundary' assumption does NOT hold for pokeedge's per-file cost. The unit tests passed because they simulate cancellation at a loop boundary, not mid-index_file. Fix is INSUFFICIENT. Remediation options: (a) cancellation check INSIDE index_file (per-chunk loop, before each embed/write), (b) bound index_all to a hard wall-clock budget and abort the batch, (c) make the embed/storage calls themselves interruptible. Deployment gotcha during probe: uv tool install reuses a cached wheel keyed on version 3.1.0, so reinstalling from canonical root did NOT evict the fix-build deployed at 14:12 — a version bump or `uv cache clean lgrep` is needed to truly swap deployed code.",
+      "recorded_at": "2026-06-10T19:14:47.342Z"
+    },
+    {
+      "id": "ws-sMLpfz",
+      "type": "failure",
+      "content": "v2 LIVE PROBE — partial. The PERMANENT wedge IS FIXED: abandoned index_all jobs now reach terminal state (job-00000002 → failed_after_abandon, error \"OperationCancelled: index_all wall-clock budget exceeded\", duration 60054ms) and free their worker, instead of v1's forever-abandoned threads. BUT AC5 (<30s terminal) and AC4 (<8s search) are NOT met. Root cause refined: pokeedge has 2157 source files; a cold index_all legitimately takes >60s of Voyage embed work. The thread was stuck in a single un-interruptible client.embed() HTTP batch (OOS8), so the per-batch/per-retry cancel checks never got a turn — ONLY the LGREP_INDEX_MAX_WALL_S=60s backstop could terminate it, hence 60s not <30s. The 8s search timeout will ALWAYS abandon the first cold-index attempt on a 2157-file repo; with 2 workers and a new abandon every ~8s each taking 60s to clear, the pool can still be transiently saturated for up to ~60s windows even though it no longer wedges PERMANENTLY. The real fixes: (1) lower LGREP_INDEX_MAX_WALL_S default so abandoned jobs clear within AC5's 30s; (2) add an HTTP request timeout to voyageai client.embed() so a single batch is interruptible (currently OOS8); (3) reconsider whether search should trigger a full synchronous reindex at all on huge cold repos vs returning stale/empty fast and indexing in background. DEPLOYMENT TRAP RESOLVED: the per-project XDG_DATA_HOME shard (oc wrapper) means `uv tool install` from inside an opencode session installs to the SHARD (opencode-projects/<hash>/uv/tools), NOT the global /home/jon/.local/share/uv/tools that vision's /home/jon/.local/bin/lgrep symlink uses. Must run `env -u XDG_DATA_HOME uv tool install --reinstall --force <worktree>` to deploy to the global tool that vision actually runs. Also bump a dev version (3.1.1.dev0) to dodge uv's version-keyed wheel cache.",
+      "recorded_at": "2026-06-10T19:51:15.794Z"
+    },
+    {
+      "id": "ws-N5Rp-Y",
+      "type": "gotcha",
+      "content": "CRITICAL review catch (acceptance phase): RuntimeSupervisor.run_blocking(fn, cancel_event=evt) only .set()s the event on CancelledError — it does NOT forward cancel_event as a kwarg into fn. So passing `run_blocking(..., state.indexer.index_all, cancel_event=evt)` does NOT give index_all the event; index_all() runs with cancel_event=None and only the wall-clock backstop can stop it. The fix: wrap the callee in a lambda that explicitly passes the event — `lambda ce=cancel_event: state.indexer.index_all(cancel_event=ce)`. Unit tests missed this because they call index_all(cancel_event=...) directly, bypassing the lifecycle wiring. LESSON: when a cancellation primitive is threaded through multiple layers, an integration/wiring test (or live probe) is required — per-unit tests of each layer can all pass while the layers aren't actually connected. The v2 live probe's wall-clock termination masked this gap (the job still terminated, just via the 60s backstop not the faster cooperative path).",
+      "recorded_at": "2026-06-10T20:06:16.141Z"
+    }
+  ],
+  "count": 4
+}

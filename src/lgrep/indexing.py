@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading  # noqa: TC003  # used at runtime by cancel_event.is_set()
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import structlog
 
 from lgrep.chunking import CodeChunker
 from lgrep.discovery import FileDiscovery
+from lgrep.exceptions import OperationCancelled
 from lgrep.storage import CodeChunk
 
 if TYPE_CHECKING:
@@ -24,6 +26,12 @@ if TYPE_CHECKING:
     from lgrep.storage import ChunkStore
 
 log = structlog.get_logger()
+
+# Re-exported for backward compatibility: callers that do
+# `from lgrep.indexing import OperationCancelled` (lifecycle.py, v1 tests)
+# keep working after the class moved to lgrep.exceptions to break the
+# indexing <-> embeddings import cycle.
+__all__ = ["IndexStatus", "Indexer", "OperationCancelled"]
 
 
 @dataclass
@@ -63,13 +71,25 @@ class Indexer:
 
         log.info("indexer_initialized", project=str(self.project_path))
 
-    def index_all(self) -> IndexStatus:
+    def index_all(self, cancel_event: threading.Event | None = None) -> IndexStatus:
         """Perform a full index of the project.
+
+        Args:
+            cancel_event: Optional cooperative-cancellation primitive. If
+                set, the loop exits at the next file boundary with
+                ``OperationCancelled``. Used by the daemon's bounded
+                executor to release worker slots when the awaiting MCP
+                coroutine is cancelled (e.g. 8s tool timeout).
 
         Returns:
             IndexStatus with results
+
+        Raises:
+            OperationCancelled: if ``cancel_event`` is set before or during
+                the per-file loop.
         """
         start_time = time.perf_counter()
+        wall_budget_s = float(os.environ.get("LGREP_INDEX_MAX_WALL_S", "60.0"))
         status = IndexStatus()
 
         log.info("full_index_started", project=str(self.project_path))
@@ -94,7 +114,21 @@ class Indexer:
                 log.warning("stale_cleanup_failed", error=str(e))
 
         for file_path in all_files:
-            file_status = self.index_file(file_path)
+            if cancel_event is not None and cancel_event.is_set():
+                log.info(
+                    "index_all_cancelled",
+                    project=str(self.project_path),
+                    files_processed=status.chunk_count,
+                )
+                raise OperationCancelled("index_all cancelled by cancel_event")
+            if (time.perf_counter() - start_time) > wall_budget_s:
+                log.warning(
+                    "index_all_wall_clock_exceeded",
+                    project=str(self.project_path),
+                    budget_s=wall_budget_s,
+                )
+                raise OperationCancelled("index_all wall-clock budget exceeded")
+            file_status = self.index_file(file_path, cancel_event=cancel_event)
             status.chunk_count += file_status.chunk_count
             status.total_tokens += file_status.total_tokens
 
@@ -144,14 +178,23 @@ class Indexer:
             for i, (chunk_info, vector) in enumerate(zip(chunk_infos, embeddings, strict=False))
         ]
 
-    def index_file(self, file_path: str | Path) -> IndexStatus:
+    def index_file(
+        self, file_path: str | Path, cancel_event: threading.Event | None = None
+    ) -> IndexStatus:
         """Index or re-index a single file.
 
         Args:
             file_path: Absolute or relative path to the file
+            cancel_event: Optional cooperative-cancellation primitive. If
+                set, raises ``OperationCancelled`` before the embedding step
+                or before the storage step.
 
         Returns:
             IndexStatus for this file
+
+        Raises:
+            OperationCancelled: if ``cancel_event`` is set before embedding
+                or before storage.
         """
         start_time = time.perf_counter()
         file_path = Path(file_path)
@@ -180,10 +223,14 @@ class Indexer:
             return IndexStatus(file_count=1)
 
         # 2. Embedding
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("index_file cancelled before embed")
         texts = [c.text for c in chunk_result.chunks]
-        embed_result = self.embedder.embed_documents(texts)
+        embed_result = self.embedder.embed_documents(texts, cancel_event=cancel_event)
 
         # 3. Storage
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("index_file cancelled before storage")
         self.storage.delete_by_file(rel_path)
         code_chunks = self._build_code_chunks(
             chunk_result.chunks, embed_result.embeddings, rel_path, file_hash

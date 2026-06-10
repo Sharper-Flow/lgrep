@@ -58,3 +58,6 @@ sub-agent must also expose the `lgrep_*` tool definitions in its tool manifest.
   `lgrep_search_text: true`).
 - Do not assume that having `mcp.lgrep` configured in `opencode.json` is enough
   for every agent profile; agent-level tool allowlists can still hide the tools.
+- If a search times out, an MCP-tool-level `vision_restart lgrep` recovers the
+  pool while a structural fix is in flight. Do not bump
+  `LGREP_WORKER_MAX_THREADS` in production as a workaround.
