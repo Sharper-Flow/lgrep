@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-import threading
+import threading  # noqa: TC003  # used at runtime by cancel_event.is_set()
 import time
 import uuid
 from dataclasses import dataclass

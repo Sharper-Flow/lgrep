@@ -13,7 +13,7 @@ fix. See fixLgrepPoolWedgeAbandoned change artifacts.
 from __future__ import annotations
 
 import asyncio
-import os
+import contextlib
 import threading
 import time
 from unittest.mock import MagicMock
@@ -21,10 +21,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from lgrep.indexing import Indexer
-from lgrep.storage import ChunkStore
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.server.tools_semantic import _check_staleness
-
+from lgrep.storage import ChunkStore
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -166,10 +165,8 @@ async def test_run_blocking_sets_cancel_event_on_cancellation():
         # Give the work a moment to enter its poll loop
         await asyncio.sleep(0.05)
         coro.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, RuntimeError):
             await coro
-        except (asyncio.CancelledError, RuntimeError):
-            pass
 
     await asyncio.wait_for(call_and_cancel(), timeout=5.0)
 
