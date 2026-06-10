@@ -18,6 +18,7 @@ import structlog
 
 from lgrep.chunking import CodeChunker
 from lgrep.discovery import FileDiscovery
+from lgrep.exceptions import OperationCancelled
 from lgrep.storage import CodeChunk
 
 if TYPE_CHECKING:
@@ -26,13 +27,11 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-
-class OperationCancelled(Exception):
-    """Raised by Indexer.index_all when a cancel_event is set during the
-    per-file indexing loop. Lets the awaiting asyncio coroutine unwind the
-    bounded executor worker thread at the next file boundary instead of
-    holding the slot until the underlying LanceDB I/O finishes.
-    """
+# Re-exported for backward compatibility: callers that do
+# `from lgrep.indexing import OperationCancelled` (lifecycle.py, v1 tests)
+# keep working after the class moved to lgrep.exceptions to break the
+# indexing <-> embeddings import cycle.
+__all__ = ["IndexStatus", "Indexer", "OperationCancelled"]
 
 
 @dataclass
