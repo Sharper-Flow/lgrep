@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -90,7 +92,19 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
        single batched projection query handles all comparisons.
     3. caller acts on the result. Any errors during the check are treated
        as "fresh" so transient I/O issues never cause an unintended re-embed.
+
+    The whole check is bounded by ``LGREP_STALENESS_DEADLINE_S`` (default
+    4.0s) so a large repo's directory walk cannot eat the entire 8s tool
+    timeout. On deadline, the function returns ``(False, 0)`` and the
+    search proceeds with the slightly-stale index; the next search will
+    trigger a fresh reindex if drift is real.
     """
+    deadline_s = float(os.environ.get("LGREP_STALENESS_DEADLINE_S", "4.0"))
+    deadline = time.monotonic() + deadline_s
+
+    def _over_deadline() -> bool:
+        return time.monotonic() > deadline
+
     try:
         indexer = state.indexer
         if state.latest_indexed_at is None:
@@ -102,6 +116,13 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
         current_rel_paths: set[str] = set()
         project_root = Path(indexer.project_path)
         for fp in indexer.discovery.find_files():
+            if _over_deadline():
+                log.warning(
+                    "staleness_check_deadline_exceeded",
+                    project=str(indexer.project_path),
+                    deadline_s=deadline_s,
+                )
+                return False, 0
             try:
                 rel = str(fp.relative_to(project_root))
                 current.append((fp, fp.stat().st_mtime, rel))
@@ -122,6 +143,13 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
         # Stage 2 — hash only the suspect subset.
         stored = state.db.get_file_hashes()
         for fp, rel in suspects:
+            if _over_deadline():
+                log.warning(
+                    "staleness_check_deadline_exceeded",
+                    project=str(indexer.project_path),
+                    deadline_s=deadline_s,
+                )
+                return False, 0
             try:
                 content = fp.read_bytes()
             except OSError:
