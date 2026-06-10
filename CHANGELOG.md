@@ -1,4 +1,12 @@
-## 2026-05-27 (v3.1.2)\n\n### Changed\n- refresh repo improvement prep
+## 2026-06-10 (v3.1.3)
+
+### Fixed
+
+- **lgrep pool wedge from abandoned index** — the shared MCP daemon no longer permanently wedges its bounded worker pool when a search-triggered auto-index is abandoned at the 8s tool timeout. Cooperative cancellation is now threaded through every blocking seam (`index_all` → `index_file` → `embed_documents` → `_embed_batch_with_retry`), the exponential-backoff retry sleep is interruptible via `cancel_event.wait(timeout=delay)` instead of `time.sleep`, and a hard wall-clock backstop (`LGREP_INDEX_MAX_WALL_S`, default 60s) guarantees `index_all` aborts regardless of where it blocks. Abandoned `index_all` jobs now reach a terminal state and release their worker (verified in production: pokeedge index_all jobs cancel in ~6s via `cancel_event` rather than wedging the pool). `_check_staleness` is additionally bounded by `LGREP_STALENESS_DEADLINE_S` (default 4.0s) so drift detection cannot consume the 8s search budget. `OperationCancelled` moved to `lgrep/exceptions.py` (re-exported from `indexing.py` for backward compatibility).
+
+### Changed
+
+- (v3.1.2) refresh repo improvement prep
 
 ## 2026-05-22 (v3.1.1)
 
