@@ -89,6 +89,7 @@ class Indexer:
                 the per-file loop.
         """
         start_time = time.perf_counter()
+        wall_budget_s = float(os.environ.get("LGREP_INDEX_MAX_WALL_S", "60.0"))
         status = IndexStatus()
 
         log.info("full_index_started", project=str(self.project_path))
@@ -120,6 +121,13 @@ class Indexer:
                     files_processed=status.chunk_count,
                 )
                 raise OperationCancelled("index_all cancelled by cancel_event")
+            if (time.perf_counter() - start_time) > wall_budget_s:
+                log.warning(
+                    "index_all_wall_clock_exceeded",
+                    project=str(self.project_path),
+                    budget_s=wall_budget_s,
+                )
+                raise OperationCancelled("index_all wall-clock budget exceeded")
             file_status = self.index_file(file_path, cancel_event=cancel_event)
             status.chunk_count += file_status.chunk_count
             status.total_tokens += file_status.total_tokens
