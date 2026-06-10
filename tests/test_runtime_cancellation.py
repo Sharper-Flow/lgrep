@@ -103,12 +103,12 @@ def test_index_all_raises_on_mid_loop_cancel(tmp_project):
     call_count = {"n": 0}
     original_index_file = indexer.index_file
 
-    def counting_index_file(file_path):
+    def counting_index_file(file_path, **kwargs):
         call_count["n"] += 1
         if call_count["n"] == 2:
             # Set the event during the second file's index_file call.
             cancel_event.set()
-        return original_index_file(file_path)
+        return original_index_file(file_path, **kwargs)
 
     indexer.index_file = counting_index_file
 

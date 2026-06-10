@@ -120,7 +120,7 @@ class Indexer:
                     files_processed=status.chunk_count,
                 )
                 raise OperationCancelled("index_all cancelled by cancel_event")
-            file_status = self.index_file(file_path)
+            file_status = self.index_file(file_path, cancel_event=cancel_event)
             status.chunk_count += file_status.chunk_count
             status.total_tokens += file_status.total_tokens
 
@@ -170,14 +170,23 @@ class Indexer:
             for i, (chunk_info, vector) in enumerate(zip(chunk_infos, embeddings, strict=False))
         ]
 
-    def index_file(self, file_path: str | Path) -> IndexStatus:
+    def index_file(
+        self, file_path: str | Path, cancel_event: threading.Event | None = None
+    ) -> IndexStatus:
         """Index or re-index a single file.
 
         Args:
             file_path: Absolute or relative path to the file
+            cancel_event: Optional cooperative-cancellation primitive. If
+                set, raises ``OperationCancelled`` before the embedding step
+                or before the storage step.
 
         Returns:
             IndexStatus for this file
+
+        Raises:
+            OperationCancelled: if ``cancel_event`` is set before embedding
+                or before storage.
         """
         start_time = time.perf_counter()
         file_path = Path(file_path)
@@ -206,10 +215,14 @@ class Indexer:
             return IndexStatus(file_count=1)
 
         # 2. Embedding
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("index_file cancelled before embed")
         texts = [c.text for c in chunk_result.chunks]
-        embed_result = self.embedder.embed_documents(texts)
+        embed_result = self.embedder.embed_documents(texts, cancel_event=cancel_event)
 
         # 3. Storage
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("index_file cancelled before storage")
         self.storage.delete_by_file(rel_path)
         code_chunks = self._build_code_chunks(
             chunk_result.chunks, embed_result.embeddings, rel_path, file_hash
