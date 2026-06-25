@@ -162,6 +162,7 @@ class TestSymbolToolResponses:
         assert "_meta" in data
         assert "results" in data
         assert data["max_results"] == 50
+        assert data["error"] == ""
 
     @pytest.mark.asyncio
     async def test_search_text_missing_path_returns_structured_error(self, tmp_path):

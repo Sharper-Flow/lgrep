@@ -33,8 +33,8 @@ the question:
 
 ### Concurrency Safety
 
-- Do NOT fan out broad `lgrep_*` scans in parallel across repos or query variants.
-- For lgrep exploration, issue one broad call at a time; inspect result/failure, then narrow.
+- Do NOT call multiple `lgrep_*` tools in parallel. Treat the lgrep MCP server as a sequential shared service.
+- For lgrep exploration, issue exactly one lgrep call, inspect result/failure, then decide the next call.
 - For exact text searches with multiple terms/repos, prefer built-in `grep` after one lgrep attempt or when query is already literal.
 - If any non-semantic `lgrep_*` call times out or returns a red/tool-error result, stop using non-semantic lgrep for that turn and switch to `grep`/`read`/`glob` as appropriate.
 
@@ -44,7 +44,7 @@ the question:
 - Do NOT use `grep` to find a function by name; use `lgrep_search_symbols`
 - Do NOT use `glob` to discover repo structure; use `lgrep_get_repo_outline` or `lgrep_get_file_tree`
 - Do NOT skip lgrep because "grep is simpler"
-- Do NOT launch multiple broad `lgrep_search_text` calls in parallel as a substitute for planning a narrower search
+- Do NOT launch multiple `lgrep_*` calls in parallel as a substitute for planning a narrower search
 
 ### Agent Override
 

@@ -392,6 +392,7 @@ async def search_text(
         results=result["results"],
         max_results=max_results,
         _meta={"duration_ms": 0.0, "tool": "search_text"},
+        error="",
     )
 
 

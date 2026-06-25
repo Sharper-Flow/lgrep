@@ -228,16 +228,16 @@ class _SearchTextResultRequired(TypedDict):
     results: list[SearchTextMatch]
     max_results: int
     _meta: _Meta
+    error: str
 
 
 class SearchTextResult(_SearchTextResultRequired, total=False):
     """Response for search_text.
 
-    ``error`` is optional so timeout/error responses can remain compatible with
-    FastMCP's structured output schema, which requires success-shape fields.
+    ``error`` is always present. Success uses an empty string so FastMCP's
+    structured-output layer never serializes an omitted optional string as
+    ``null`` for clients that validate strictly.
     """
-
-    error: str
 
 
 class SearchTextMatch(TypedDict):
