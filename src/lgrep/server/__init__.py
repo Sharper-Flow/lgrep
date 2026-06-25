@@ -37,18 +37,27 @@ def time_tool(func):
             return result
         except TimeoutError:
             duration = round((time.perf_counter() - start) * 1000, 2)
+            message = (
+                f"Operation timed out after {TOOL_TIMEOUT_S}s. "
+                "The project may need re-indexing or the Voyage API may be slow. "
+                "Try again or use a non-semantic search tool."
+            )
             log.error(
                 f"{tool_name}_timeout",
                 duration_ms=duration,
                 timeout_s=TOOL_TIMEOUT_S,
             )
+            if tool_name == "search_text":
+                return {
+                    "results": [],
+                    "max_results": kwargs.get("max_results", 50),
+                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "error": message,
+                }
+
             from lgrep.server.responses import error_response as _err
 
-            return _err(
-                f"Operation timed out after {TOOL_TIMEOUT_S}s. "
-                "The project may need re-indexing or the Voyage API may be slow. "
-                "Try again or use a non-semantic search tool."
-            )
+            return _err(message)
         except Exception as e:
             duration = round((time.perf_counter() - start) * 1000, 2)
             log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))

@@ -9,6 +9,7 @@ Verifies:
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -167,7 +168,8 @@ class TestSymbolToolResponses:
         fn = self._get_tool_fn("search_text")
         result = await fn(query="greet", path=str(tmp_path / "missing"))
         assert "error" in result
-        assert "results" not in result
+        assert result["results"] == []
+        assert result["max_results"] == 50
 
     @pytest.mark.asyncio
     async def test_search_text_uses_runtime_supervisor_when_context_available(self, tmp_path):
@@ -200,6 +202,22 @@ class TestSymbolToolResponses:
                 "project": str(tmp_path.resolve()),
             }
         ]
+
+    @pytest.mark.asyncio
+    async def test_search_text_timeout_keeps_schema_shape(self, monkeypatch):
+        import lgrep.server as server_mod
+
+        monkeypatch.setattr(server_mod, "TOOL_TIMEOUT_S", 0.01)
+
+        @server_mod.time_tool
+        async def search_text(max_results=7):
+            await asyncio.sleep(0.05)
+
+        result = await search_text(max_results=7)
+
+        assert result["results"] == []
+        assert result["max_results"] == 7
+        assert "error" in result
 
     @pytest.mark.asyncio
     async def test_get_symbol_missing_index_returns_error(self, tmp_path):

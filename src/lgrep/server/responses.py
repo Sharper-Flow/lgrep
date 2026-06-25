@@ -222,12 +222,22 @@ class SearchSymbolsResult(TypedDict):
     _meta: _Meta
 
 
-class SearchTextResult(TypedDict):
-    """Response for search_text."""
+class _SearchTextResultRequired(TypedDict):
+    """Required response fields for search_text."""
 
     results: list[SearchTextMatch]
     max_results: int
     _meta: _Meta
+
+
+class SearchTextResult(_SearchTextResultRequired, total=False):
+    """Response for search_text.
+
+    ``error`` is optional so timeout/error responses can remain compatible with
+    FastMCP's structured output schema, which requires success-shape fields.
+    """
+
+    error: str
 
 
 class SearchTextMatch(TypedDict):

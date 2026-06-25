@@ -381,7 +381,12 @@ async def search_text(
         )
 
     if "error" in result:
-        return error_response(result["error"])
+        return SearchTextResult(
+            results=[],
+            max_results=max_results,
+            _meta={"duration_ms": 0.0, "tool": "search_text"},
+            error=result["error"],
+        )
 
     return SearchTextResult(
         results=result["results"],
