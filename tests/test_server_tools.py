@@ -9,6 +9,8 @@ Verifies:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from lgrep.server import mcp
@@ -158,6 +160,46 @@ class TestSymbolToolResponses:
         data = result
         assert "_meta" in data
         assert "results" in data
+        assert data["max_results"] == 50
+
+    @pytest.mark.asyncio
+    async def test_search_text_missing_path_returns_structured_error(self, tmp_path):
+        fn = self._get_tool_fn("search_text")
+        result = await fn(query="greet", path=str(tmp_path / "missing"))
+        assert "error" in result
+        assert "results" not in result
+
+    @pytest.mark.asyncio
+    async def test_search_text_uses_runtime_supervisor_when_context_available(self, tmp_path):
+        fn = self._get_tool_fn("search_text")
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        calls = []
+
+        class RuntimeStub:
+            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+                calls.append(
+                    {
+                        "kind": kind,
+                        "caller": caller,
+                        "project": project,
+                    }
+                )
+                return fn_to_run(*args, **kwargs)
+
+        ctx = SimpleNamespace(
+            request_context=SimpleNamespace(lifespan_context=SimpleNamespace(runtime=RuntimeStub()))
+        )
+
+        result = await fn(query="greet", path=str(tmp_path), ctx=ctx)
+
+        assert result["results"]
+        assert calls == [
+            {
+                "kind": "search_text",
+                "caller": "search_text",
+                "project": str(tmp_path.resolve()),
+            }
+        ]
 
     @pytest.mark.asyncio
     async def test_get_symbol_missing_index_returns_error(self, tmp_path):

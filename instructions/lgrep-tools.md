@@ -31,12 +31,20 @@ the question:
 - A non-semantic lgrep tool failed or timed out once this turn; fall back immediately, do not retry
 - lgrep MCP server is not running or not configured
 
+### Concurrency Safety
+
+- Do NOT fan out broad `lgrep_*` scans in parallel across repos or query variants.
+- For lgrep exploration, issue one broad call at a time; inspect result/failure, then narrow.
+- For exact text searches with multiple terms/repos, prefer built-in `grep` after one lgrep attempt or when query is already literal.
+- If any non-semantic `lgrep_*` call times out or returns a red/tool-error result, stop using non-semantic lgrep for that turn and switch to `grep`/`read`/`glob` as appropriate.
+
 ### Anti-Patterns (Do NOT Do These)
 
 - Do NOT start with `glob` then `grep` then `read` for concept queries; use `lgrep_search_semantic`
 - Do NOT use `grep` to find a function by name; use `lgrep_search_symbols`
 - Do NOT use `glob` to discover repo structure; use `lgrep_get_repo_outline` or `lgrep_get_file_tree`
 - Do NOT skip lgrep because "grep is simpler"
+- Do NOT launch multiple broad `lgrep_search_text` calls in parallel as a substitute for planning a narrower search
 
 ### Agent Override
 

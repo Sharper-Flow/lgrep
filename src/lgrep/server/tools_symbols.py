@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Annotated
 
+from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -348,7 +350,8 @@ async def search_text(
         bool,
         Field(description="When true, match text with case sensitivity."),
     ] = False,
-) -> SearchTextResult:
+    ctx: Context | None = None,
+) -> SearchTextResult | ToolError:
     """Search for literal text across all source files in a repository.
 
     Args:
@@ -360,9 +363,26 @@ async def search_text(
     Returns:
         Results list and meta envelope.
     """
-    result = await asyncio.to_thread(
-        _search_text, query, path, max_results=max_results, case_sensitive=case_sensitive
-    )
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+        result = await app_ctx.runtime.run_blocking(
+            "search_text",
+            "search_text",
+            str(Path(path).resolve()),
+            _search_text,
+            query,
+            path,
+            max_results=max_results,
+            case_sensitive=case_sensitive,
+        )
+    else:
+        result = await asyncio.to_thread(
+            _search_text, query, path, max_results=max_results, case_sensitive=case_sensitive
+        )
+
+    if "error" in result:
+        return error_response(result["error"])
+
     return SearchTextResult(
         results=result["results"],
         max_results=max_results,
