@@ -1,3 +1,5 @@
+## 2026-06-25 (v3.1.5)\n\n### Changed\n- checkpoint tk-660caa7e043d
+
 ## 2026-06-25 (v3.1.4)\n\n### Changed\n- checkpoint tk-8e98937e38dc
 
 ## 2026-06-10 (v3.1.3)
