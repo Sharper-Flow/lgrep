@@ -351,7 +351,7 @@ async def search_text(
         Field(description="When true, match text with case sensitivity."),
     ] = False,
     ctx: Context | None = None,
-) -> SearchTextResult | ToolError:
+) -> SearchTextResult:
     """Search for literal text across all source files in a repository.
 
     Args:
