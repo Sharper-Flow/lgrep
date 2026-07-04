@@ -470,14 +470,11 @@ docs/site/
 
 ## Resource profile
 
-Typical operating profile:
+Resource use depends on repository size, enabled engines, and cache history:
 
-| Resource | Idle | During indexing |
-|---|---|---|
-| RAM | ~300MB | ~500MB |
-| CPU | <1% | usually low local CPU; Voyage does most semantic heavy lifting |
-| Disk | ~250MB per semantic index + ~5MB per symbol index | grows with indexed projects |
-| Network | minimal | semantic indexing and semantic queries call Voyage |
+- **RAM/CPU** - the shared server keeps warmed project state available and does most local work during indexing or search requests
+- **Disk** - semantic vectors and symbol indexes are stored locally and grow with indexed projects
+- **Network** - semantic indexing and semantic queries call Voyage; symbol lookup, outlines, and text search stay local
 
 ## Supported languages
 
