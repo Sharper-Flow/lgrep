@@ -1,7 +1,7 @@
 <h1 align="center">lgrep</h1>
 
 <p align="center">
-  <strong>Dual-engine code intelligence for <a href="https://github.com/opencode-ai/opencode">OpenCode</a></strong>
+  <strong>Local-first code intelligence for <a href="https://github.com/opencode-ai/opencode">OpenCode</a></strong>
 </p>
 
 <p align="center">
@@ -26,7 +26,9 @@
 
 ---
 
-`lgrep` gives AI agents a better first move.
+`lgrep` gives AI agents a better first move in codebases they already have on disk.
+
+It is built for active local development, where files are changing, multiple agent sessions may be exploring the same repo, and the first challenge is often finding the right implementation before anyone knows the right symbol name.
 
 Instead of starting with `glob`, `grep`, and random file reads, agents can:
 
@@ -35,11 +37,11 @@ Instead of starting with `glob`, `grep`, and random file reads, agents can:
 - inspect file and repo structure before opening code
 - reuse one warm local server across multiple sessions and agents
 
-That is the whole pitch: fewer bad searches, less wasted context, faster understanding for both humans and agents.
+That is the whole pitch: fewer bad searches, less wasted context, faster understanding for both humans and agents working in local repos.
 
 ## What lgrep is
 
-`lgrep` combines two complementary engines in one MCP server:
+`lgrep` combines two complementary engines in one MCP server for local repositories:
 
 - **Semantic engine** - natural-language code search using Voyage Code 3 embeddings with local LanceDB storage
 - **Symbol engine** - exact symbol, outline, and text tools using tree-sitter parsing with a local JSON index
@@ -56,7 +58,7 @@ Use the symbol engine to answer questions like:
 - "show me the outline for `src/auth.py`"
 - "get the symbol source for `UserService.login`"
 
-Your code stays local. Only short semantic queries and indexing payloads go to Voyage. Symbol lookup stays fully local and works without an API key.
+Your working tree stays local and searchable as it evolves. Only short semantic queries and indexing payloads go to Voyage. Symbol lookup stays fully local and works without an API key.
 
 ## Why it exists
 
@@ -81,7 +83,7 @@ For heavy OpenCode users, this is not a convenience plugin. It is search infrast
 - **Intent-first search** - agents can ask by meaning before they know names
 - **Exact structure tools** - file outlines, repo outlines, symbol lookup, and text search are in the same server
 - **Local-first storage** - vectors and indexes live on disk, not in someone else's SaaS
-- **Shared warm process** - one HTTP MCP server can serve multiple concurrent OpenCode sessions
+- **Shared warm process** - one HTTP MCP server can serve multiple concurrent OpenCode sessions against the same local repos
 - **Commercially usable** - `lgrep` is MIT licensed, so commercial use is allowed
 
 ## Comparisons
@@ -101,26 +103,14 @@ If the code says `jwt.verify()` and your agent asks "where is authentication enf
 - `mgrep` is cloud-oriented
 - `lgrep` keeps vectors local and shares one warm server across agents
 
-### lgrep vs jCodeMunch MCP
+### Best-fit workflow
 
-[`jcodemunch-mcp`](https://github.com/jgravelle/jcodemunch-mcp) is a strong symbol-first MCP server. It is built around tree-sitter indexing and precise byte-offset retrieval, which makes it good when an agent already knows roughly what symbol it wants and wants to minimize context spend.
+`lgrep` is strongest when an agent is already inside a local repo and needs to move from intent to source without wasting context:
 
-`lgrep` is optimized for a different problem: the agent does not know the symbol yet and needs to find the right implementation by intent first, then drill into structure.
-
-| | grep / rg | mgrep | jCodeMunch MCP | **lgrep** |
-|---|---|---|---|---|
-| **Primary strength** | Exact text / regex | Semantic search | Symbol retrieval | **Semantic discovery + symbol retrieval** |
-| **Semantic search** | No | Yes | No | **Yes** |
-| **Symbol tools** | No | No | Yes | **Yes** |
-| **File / repo outline** | No | No | Yes | **Yes** |
-| **Local vector storage** | N/A | No | N/A | **Yes** |
-| **No API key mode** | Yes | No | Yes | **Yes (symbol engine)** |
-| **Commercial usage** | Yes | Subscription service | Paid commercial license required per its README | **Yes (MIT)** |
-| **Best first question** | "find this exact string" | "find code matching this concept" | "find this exact symbol" | **"find the code that implements this idea"** |
-
-If you want the most precise symbol retrieval with no semantic layer, `jcodemunch-mcp` is a credible option.
-
-If you want OpenCode agents to start with intent-level discovery and still have symbol tooling in the same server, `lgrep` is the better fit.
+1. ask by meaning when the right name is unknown
+2. inspect the matching files and outlines
+3. retrieve the exact symbol or text that matters
+4. keep the same warm local server available as the working tree changes
 
 ## How it works
 
