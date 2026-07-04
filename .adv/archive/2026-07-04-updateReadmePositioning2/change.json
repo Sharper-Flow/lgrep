@@ -1,0 +1,789 @@
+{
+  "id": "updateReadmePositioning2",
+  "title": "Update README positioning",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-04T01:56:54.401Z",
+  "tasks": [
+    {
+      "id": "tk-afcb776da4f0",
+      "title": "Update README positioning copy",
+      "type": "docs",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-04T02:24:27.816Z",
+      "metadata": {
+        "tdd_intent": "not_applicable",
+        "delegate": "allowed",
+        "lane": "docs"
+      },
+      "contract_refs": {
+        "implements": [
+          "SC1",
+          "SC2",
+          "SC3",
+          "SC4",
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "DONT1",
+          "DONT2",
+          "DONT3",
+          "DONT4",
+          "DONT5"
+        ]
+      },
+      "evidence_policy": "review",
+      "assignedTo": "agent",
+      "started_at": "2026-07-04T02:33:32.275Z",
+      "verification": "README diff reviewed. Changed headline/intro/What lgrep is/comparison section to emphasize local-first evolving-code workflow; removed direct jCodeMunch comparison/table; no searchcode mention added; `git diff --check` passed; README grep for searchcode/jCodeMunch/jcodemunch/unsupported numeric benchmark/adoption terms returned no matches.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "README now positions lgrep as local-first code intelligence for OpenCode and active local development. Intro, What lgrep is, and best-fit workflow copy emphasize repos already on disk, changing working trees, intent-first semantic discovery, symbol/outline drill-down, and shared warm local server. Direct jCodeMunch section/table was removed; no searchcode mention added.",
+      "filesTouched": [
+        "README.md"
+      ],
+      "touched_files": [
+        "README.md"
+      ],
+      "checkpointSha": "035987ab73c5a4a5c6b2122a1a22f75419d02c7d",
+      "completedAt": "2026-07-04T02:35:38.666Z",
+      "completed_at": "2026-07-04T02:35:38.666Z",
+      "notes": "Updated README positioning copy in README.md. Removed direct jCodeMunch comparison/table, added positive local-first/evolving-code positioning, and preserved implemented-behavior claims only.",
+      "updatedAt": "2026-07-04T02:35:50.251Z"
+    },
+    {
+      "id": "tk-92fc0bbcf001",
+      "title": "Verify README positioning update",
+      "type": "verification",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-07-04T02:25:33.476Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-afcb776da4f0"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "separate_verification",
+        "delegate": "allowed",
+        "lane": "verification"
+      },
+      "contract_refs": {
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6"
+        ],
+        "respects": [
+          "DONT1",
+          "DONT2",
+          "DONT3",
+          "DONT4",
+          "DONT5"
+        ]
+      },
+      "evidence_policy": "static_check",
+      "assignedTo": "agent",
+      "started_at": "2026-07-04T02:36:02.760Z",
+      "verification": "Acceptance reviewer returned READY and applied README resource-profile cleanup to remove unsupported numeric resource claims. Static contract check passed: no searchcode, no jCodeMunch, no benchmark wording, required local-first/intent-first/semantic/symbol/outlines/local cache/shared-server positioning present.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "README.md"
+      ],
+      "touched_files": [
+        "README.md"
+      ],
+      "checkpointSha": "7b9ad3a78406f219cdf99be95c1e91ae9708f6ed",
+      "completedAt": "2026-07-04T02:41:36.958Z",
+      "completed_at": "2026-07-04T02:41:36.958Z",
+      "notes": "README acceptance verification passed via adv_run_test tr_mr5r3k8l_c73b8cfc and git diff --check.",
+      "updatedAt": "2026-07-04T02:36:40.256Z"
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "updateReadmePositioning2",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:discovery-opportunity-scout"
+      },
+      "agent": "adv-researcher",
+      "topic": "README positioning opportunity scout: local-first code intelligence vs jCodeMunch, searchcode complementarity",
+      "sources": [
+        {
+          "label": "jCodeMunch current README (raw)",
+          "locator": "https://raw.githubusercontent.com/jgravelle/jcodemunch-mcp/main/README.md",
+          "summary": "Positions primarily as 'leading, most token-efficient MCP server for precise GitHub source code retrieval via tree-sitter AST'. Leads with token-savings telemetry (95%+ cut, 313B+ tokens saved, 45,000+ developers, $1.58M avoided). Broad client support (Claude Code, Cursor, VS Code, Codex, Continue, Windsurf). Now includes opt-in BM25/fuzzy/semantic/hybrid search, token-budgeted context assembly, call hierarchy, git-diff-to-symbol, PageRank centrality, live watch reindex, agent hooks. Commercial license required; non-commercial free. Indexes local folders OR GitHub repos."
+        },
+        {
+          "label": "lgrep current README",
+          "locator": "/home/jon/dev/lgrep/README.md lines 29-124, 355-382",
+          "summary": "Already has strong local-first pitch, dual-engine (semantic Voyage Code3 + tree-sitter symbol), 'lgrep vs jCodeMunch' section + comparison table (lines 104-123), MIT licensing note. Exposes lgrep_index_symbols_repo(repo) for GitHub symbol indexing (line 372) — a partial remote overlap not framed against searchcode. No explicit searchcode complementarity section exists in README yet."
+        },
+        {
+          "label": "searchcode role",
+          "locator": "https://searchcode.com/llms.txt (cited in agreement.md discovery findings)",
+          "summary": "Analyzes/searches/retrieves code from any public git repo without prebuilt local index; adds language/complexity/tech-stack/static/security analysis. Complementary to lgrep's local lane."
+        },
+        {
+          "label": "Adjacent competitors (Nexus-MCP, other AST-graph MCPs, mgrep)",
+          "locator": "Exa search results, jcodemunch README neighbors",
+          "summary": "Crowded 'fully-local hybrid search + code graph' space (Nexus-MCP: hybrid+graph+memory local; mgrep: semantic-only cloud with web search). Confirms lgrep should differentiate on OpenCode-first shared-warm-server + intent-first-then-drill workflow, not on feature-count."
+        }
+      ],
+      "architecture_assessment": "This is a docs-only positioning change and the approved agreement already captures source-backed discovery findings and AC1-AC6. The existing README already implements most of the intended positioning (local-first pitch, jCodeMunch comparison table, MIT note). Scout surfaced a small number of leverage points and one real risk: (1) jCodeMunch's live positioning has shifted to token-efficiency + GitHub-retrieval-first with heavy telemetry marketing — lgrep's comparison should anchor on the axis (intent-first local discovery for evolving repos vs symbol-first precise retrieval / token-packing) rather than a stale feature checklist, since jCodeMunch now also has opt-in semantic/hybrid search and would make a naive 'Semantic search: No' row inaccurate. (2) lgrep exposes lgrep_index_symbols_repo(repo) for GitHub symbol indexing, a partial remote overlap that must be reconciled with the 'searchcode owns remote/public lane' boundary to avoid an internal contradiction. (3) The crowded fully-local hybrid-search field means lgrep's durable differentiator is the OpenCode-oriented shared-warm-server + intent-first-then-structure flow, which should be the headline, not raw capability breadth. All candidates stay strictly within docs-only scope and respect avoidances (no feature creep, no unsupported benchmarks, no remote-search repositioning).",
+      "validation": {
+        "status": "caution",
+        "blockers": [],
+        "notes": "No release/security/contract blocker. Caution flag: the current README comparison table row 'Semantic search | jCodeMunch | No' (line 113) risks becoming an unsupported/inaccurate competitor claim because jCodeMunch now ships opt-in semantic/hybrid search per its live README. This touches AC4 (competitive claims must be source-backed or removed) and should be corrected during execution. Recommend orchestrator route this to the writer as a required correction rather than an optional polish."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Anchoring the jCodeMunch comparison on a single positioning axis (intent-first-local vs symbol-first-precise) is more durable than a feature matrix, but sacrifices some at-a-glance capability breadth signaling.",
+          "Correcting the 'semantic search: No' jCodeMunch row keeps AC4 accuracy but slightly weakens the visual contrast in the comparison table.",
+          "Explicitly reconciling lgrep_index_symbols_repo with the searchcode boundary adds nuance/length but prevents an internal contradiction that a careful reader would catch."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Leave README as-is (positioning already mostly present)",
+            "disposition": "rejected",
+            "rationale": "Existing comparison table has a now-inaccurate jCodeMunch semantic-search claim and no explicit searchcode complementarity section, both named in the approved ACs (AC3, AC4)."
+          },
+          {
+            "option": "Full competitive feature matrix vs jCodeMunch's current expanded toolset",
+            "disposition": "rejected",
+            "rationale": "Violates avoidance against broad feature-list competition and feature creep; jCodeMunch's toolset is much broader, so a feature race loses and drifts scope."
+          },
+          {
+            "option": "Axis-anchored positioning + AC4 correction + explicit searchcode/GitHub-index boundary note",
+            "disposition": "preferred",
+            "rationale": "Stays docs-only, satisfies AC2/AC3/AC4, corrects the one inaccurate claim, and resolves the internal lgrep_index_symbols_repo vs remote-lane tension."
+          }
+        ],
+        "recommendation": "Proceed to design/execution as docs-only. Feed the writer these bounded scout candidates: (a) REQUIRED — correct the 'jCodeMunch semantic search: No' row to reflect that jCodeMunch now has opt-in semantic/hybrid search, re-anchoring the differentiator on intent-first-local-discovery vs symbol-first-precise-retrieval/token-packing (AC2, AC4); (b) USER-SURFACE — add a short searchcode complementarity note and reconcile lgrep_index_symbols_repo (GitHub symbol indexing exists locally) as convenience, not lgrep's remote/public research lane (AC3); (c) AUTO-ADOPT — headline the OpenCode-first shared-warm-server + intent-first-then-drill flow as the durable differentiator in the crowded local-hybrid-search field. Do NOT add jCodeMunch's telemetry numbers or any lgrep benchmark claims (AC5)."
+      },
+      "recommendation": "Docs-only positioning update is ready to advance. Prioritize the AC4 accuracy correction (jCodeMunch now has opt-in semantic search) as a required writer action, add the searchcode complementarity + GitHub-index reconciliation, and headline the OpenCode shared-warm-server intent-first flow. Keep all competitor claims source-linked and add no benchmark/adoption numbers for lgrep.",
+      "follow_ups": [
+        "Writer must re-verify the jCodeMunch comparison table rows against the live README at edit time; jCodeMunch positioning is actively evolving (semantic/hybrid now opt-in).",
+        "Consider a one-line note distinguishing lgrep_index_symbols_repo (local convenience GitHub symbol indexing) from searchcode's remote/public research lane to avoid reader confusion."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "updateReadmePositioning2",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:design-validator"
+      },
+      "agent": "adv-researcher",
+      "topic": "Design validation: local-first README positioning for lgrep",
+      "sources": [
+        {
+          "label": "lgrep README.md current state (comparison section)",
+          "locator": "/home/jon/dev/lgrep/README.md:104-123",
+          "summary": "Current README has a direct jCodeMunch comparison table. Line 113 asserts jCodeMunch 'Semantic search: No' — the stale claim the design targets. README already contains strong positive local-first positioning (lines 40-85) and no searchcode mention."
+        },
+        {
+          "label": "jCodeMunch official README (opt-in semantic/hybrid search)",
+          "locator": "https://github.com/jgravelle/jcodemunch-mcp/blob/main/README.md",
+          "summary": "Official README lists 'semantic/hybrid search (opt-in, zero mandatory dependencies)' as a shipped feature; recommends `pip install jcodemunch-mcp[local-embed]` bundled ONNX encoder for zero-config semantic search."
+        },
+        {
+          "label": "jCodeMunch USER_GUIDE + SPEC (semantic tool params)",
+          "locator": "https://github.com/jgravelle/jcodemunch-mcp/blob/main/USER_GUIDE.md",
+          "summary": "search_symbols supports semantic/hybrid search via semantic=true, semantic_weight, semantic_only; BM25+embedding blend; embed_repo warm-up. Confirms lgrep README 'Semantic search: No' row for jCodeMunch is factually stale."
+        },
+        {
+          "label": "ADV change contract (SC1-SC4, AC1-AC6, C1-C5, DONT1-DONT5)",
+          "locator": "adv_change_show updateReadmePositioning2",
+          "summary": "Standard-rigor contract; user-approved decisions: remove direct jCodeMunch comparison, no searchcode mention, positive-lane-only positioning, no unsupported benchmark/adoption claims."
+        }
+      ],
+      "architecture_assessment": "Docs-only positioning change. Design chooses durable workflow-based positioning (local repos on disk, evolving code during agent work, intent-first semantic discovery then symbol/outline drill-down) over a fast-moving competitor feature table. The design's central factual premise — that jCodeMunch now ships opt-in semantic/hybrid search making the current README table row 'Semantic search: No' stale — is independently verified against jCodeMunch's official README, USER_GUIDE, and SPEC. Removing the direct comparison table (rather than patching one cell) is the correct maintenance-risk decision: competitor feature tables for actively developed tools structurally invite recurring staleness. Design maps cleanly to every contract item: SC1/AC1 (local-first positioning already partly present, to be strengthened), SC2/AC2 (intent-first then drill-down; removal/rewrite of jCodeMunch table), SC4/AC3 (no searchcode — already absent, design forbids adding), AC4 (claims bounded to implemented behavior: semantic search, symbol search, outlines, local LanceDB/JSON storage, shared warm server — all match README 'What lgrep is'), AC5/DONT5 (no unsupported numbers). Design explicitly preserves grep/rg and mgrep comparisons, which is consistent with the agreement scoping only jCodeMunch/searchcode. Positive-lane-only framing (DONT decision) is consistent with existing README tone. No spec deltas required; documentation-only, preserves lgrepToolSelectionOptimization expectations.",
+      "validation": {
+        "status": "pass",
+        "blockers": [],
+        "notes": "Design satisfies the approved agreement and contract with no unsupported claims. Q1: yes — every design directive traces to a contract item and adds no new product promise; the one factual premise (jCodeMunch semantic search) is source-verified, not invented. Q2: yes — removing the direct comparison eliminates the stale-claim maintenance surface entirely, which is stronger than editing a single stale cell that would re-drift. Q3: yes — positive lane-only positioning is consistent with the current README (lines 79-85 'Why lgrep feels different' already positive/local-first) and matches implemented behavior (semantic engine + symbol engine + local storage + shared warm server all shipped). Q4: no blocker. Minor advisory only: README currently has no searchcode mention, so AC3/DONT2 are satisfied by non-regression; execution must ensure none is introduced. The mgrep/grep comparison rows remain in scope-preserving territory and should be left intact."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Removing the competitor feature table reduces at-a-glance differentiation power in exchange for durability and lower maintenance/staleness risk — the right trade for a fast-moving competitor.",
+          "Workflow-based positioning (intent-first then drill-down) is less directly comparative, so some readers evaluating tools side-by-side lose an explicit matrix; mitigated by retained grep/rg and mgrep comparisons that are stable.",
+          "Positive-lane-only framing forgoes explicit 'what lgrep is not' boundary copy, slightly increasing risk of scope-expectation ambiguity, accepted per explicit user decision."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Patch only the stale 'Semantic search: No' cell in the jCodeMunch table, keep the table",
+            "disposition": "rejected",
+            "rationale": "Leaves a per-cell staleness surface against an actively developed competitor; jCodeMunch's README shows rapid feature growth, so any static feature table re-drifts. Also conflicts with user decision to stop direct comparison."
+          },
+          {
+            "option": "Add a 'what lgrep is not' defensive boundary section",
+            "disposition": "rejected",
+            "rationale": "User explicitly chose positive-lane-only framing; defensive copy adds maintenance surface and negative tone without contract value."
+          },
+          {
+            "option": "Keep jCodeMunch comparison but replace features with narrative prose",
+            "disposition": "deferred",
+            "rationale": "Still names and positions directly against jCodeMunch, retaining a lighter staleness/tone risk; the chosen full-removal is cleaner and matches the user decision. Acceptable fallback only if reviewers want a one-line 'complementary tools exist' nod, which the user declined."
+          }
+        ],
+        "recommendation": "Proceed to design gate completion. Design is contract-complete, source-verified, and low-risk. During execution: (1) strengthen the intro/'What lgrep is' with a concise local-first + evolving-code sentence (SC1/AC1); (2) remove the jCodeMunch section+table (lines ~104-123) rather than editing cells (SC3/AC2/DONT3); (3) preserve grep/rg and mgrep comparisons; (4) verify post-edit README contains zero 'searchcode' occurrences and no numeric/adoption/benchmark claims (AC3/AC5/DONT5) via a grep-based documentation check."
+      },
+      "recommendation": "PASS the design gate. The docs-only design satisfies the approved agreement/contract with no unsupported or invented claims. Its key factual premise (jCodeMunch now ships opt-in semantic/hybrid search, making the README 'Semantic search: No' row stale) is independently verified against jCodeMunch's official README/USER_GUIDE/SPEC. Removing the direct jCodeMunch comparison is the correct durable fix over patching a single stale cell. No blockers, no contract-compromise risk.",
+      "follow_ups": [
+        "Execution: run a grep check for 'searchcode' and stale competitor rows on the final README diff to prove AC3/AC2/DONT2/DONT3 non-regression."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "updateReadmePositioning2",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/updateReadmePositioning2",
+      "scope": {
+        "kind": "change",
+        "scope_key": "review:acceptance"
+      },
+      "agent": "adv-reviewer",
+      "phase": "review",
+      "verdict": "READY",
+      "blocking_findings": [],
+      "nonblocking_findings": [
+        {
+          "id": "positioning-praise-1",
+          "label": "praise",
+          "file": "README.md",
+          "line": 29,
+          "what": "README now leads with local-first active-development positioning and intent-to-symbol workflow.",
+          "why": "Matches SC1/SC2 and AC1 while keeping lane positive."
+        }
+      ],
+      "changes_made": [
+        {
+          "file": "README.md",
+          "summary": "Replaced unsupported numeric resource-profile table with qualitative resource considerations, preserving local storage/shared-server behavior without numeric performance claims.",
+          "verification": "Final README-focused static check passed: no searchcode, no jCodeMunch, no benchmark wording, removed resource numerics absent, and required positioning/workflow/implemented-behavior phrases present."
+        }
+      ],
+      "wisdom_candidates": [],
+      "verification": {
+        "tests_run": [
+          "test -e README.md && printf OK || printf MISSING",
+          "python - <<'PY'\nfrom pathlib import Path\ns=Path('README.md').read_text().lower()\nrequired=[\n('local-first positioning','local-first code intelligence' in s and 'active local development' in s),\n('intent-first workflow','find the implementation by intent' in s and 'narrow to the right file or symbol' in s),\n('implemented behavior semantic/symbol/outlines/local cache/shared server', all(term in s for term in ['semantic engine','symbol engine','outlines','local lancedb storage','shared warm process'])),\n('no searchcode','searchcode' not in s),\n('no jcodemunch','jcodemunch' not in s),\n('no benchmark wording','benchmark' not in s),\n('no removed resource numerics', all(term not in s for term in ['~300mb','~500mb','~250mb','<1%'])),\n]\nfor name, ok in required:\n    print(f'{name}: {\"PASS\" if ok else \"FAIL\"}')\nraise SystemExit(0 if all(ok for _, ok in required) else 1)\nPY"
+        ],
+        "results": "pass",
+        "evidence": "Path preflight returned OK. README static contract check passed all assertions after docs fix. git diff shows only README.md resource-profile wording changed. Initial requested scope_key acceptance-review was rejected by schema, so report used valid review:acceptance scope."
+      },
+      "scope_drift": null,
+      "risks": [
+        "Review was README-focused/static per docs-only scope; no full documentation site render was run."
+      ],
+      "required_main_agent_actions": []
+    }
+  ],
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:00:40.407Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved proposal and duplicate closure: \"approve proposal and close duplicate\"",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "6e158659aa0e7d6db596f90933cb92384e2615afa73ffb214eacb6e5737d43e7",
+        "non_whitespace_chars": 1609,
+        "checked_at": "2026-07-04T01:56:54.431Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:21:46.143Z",
+      "completed_by": "agent",
+      "approval_evidence": "Discovery findings recorded; agreement approved by user with \"approve\"; contract minted with SC1-SC4, AC1-AC6, C1-C5, DONT1-DONT5.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "non_whitespace_chars": 3581,
+        "checked_at": "2026-07-04T01:56:54.432Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:24:10.632Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design artifact persisted. Independent adv-researcher validator returned pass, high confidence, low risk, no blockers; recommended completing design gate.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "cf812c5946ac63fe83970f98131e7edffc73ae9ea2b687bf7213b4d5fe480f91",
+        "non_whitespace_chars": 1757,
+        "checked_at": "2026-07-04T01:56:54.433Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:32:46.472Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved prep task graph with reply: \"approve\"."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:36:53.812Z",
+      "completed_by": "agent",
+      "approval_evidence": "All planned tasks done. README updated and verified via adv_run_test tr_mr5r3k8l_c73b8cfc; checkpoint commit 035987ab73c5a4a5c6b2122a1a22f75419d02c7d."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-04T02:53:46.259Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved acceptance checkpoint with reply: \"approve\" after review summary, passing verification tr_mr5raten_4f21d731, reviewer READY verdict, and 20/20 contract matrix.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "81a85135d1f41d7fbb582403b66a69e220aa94030e68d21e44a0116568b670e5",
+        "non_whitespace_chars": 979,
+        "checked_at": "2026-07-04T01:56:54.434Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [],
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "comp-scan:jcodemunch-positioning-session"
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+      "approvedAt": "2026-07-04T02:21:39.183Z"
+    },
+    "items": [
+      {
+        "id": "SC1",
+        "kind": "success_criterion",
+        "text": "README clearly positions lgrep as local-first code intelligence for repos already on disk and changing during active agent work.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC2",
+        "kind": "success_criterion",
+        "text": "README emphasizes intent-first discovery followed by symbol/outline drill-down.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC3",
+        "kind": "success_criterion",
+        "text": "README no longer relies on direct jCodeMunch comparison claims that can go stale.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC4",
+        "kind": "success_criterion",
+        "text": "README avoids naming searchcode or other complementary tools; it states what lgrep is for positively.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "README intro or \"What lgrep is\" section includes a concise local-first/evolving-code positioning statement.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "README comparison section removes direct jCodeMunch comparison or rewrites it so no stale feature-presence claim remains.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "README does not mention searchcode or position lgrep by contrast with searchcode.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "README keeps claims limited to implemented lgrep behavior: semantic search, symbol search, outlines, local cache/storage, shared warm server.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "README adds no unsupported numeric benchmark, adoption, or performance claim for lgrep.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "Documentation-only verification passes via a README-focused review/check.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Keep README concise and product-facing.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Do not add new product promises for unimplemented features.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Do not change code unless a documentation link/build issue requires it.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Preserve lgrep's OSS/local-first positioning.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C5",
+        "kind": "constraint",
+        "text": "Scope is current repo only.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "No feature creep into graph, call hierarchy, impact analysis, or remote public repo implementation.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "No direct public README positioning against searchcode.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "No direct jCodeMunch feature table likely to go stale.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT4",
+        "kind": "avoidance",
+        "text": "No invented competitor claims.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT5",
+        "kind": "avoidance",
+        "text": "No unsupported benchmark or adoption-number claims for lgrep.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-04T02:42:42.129Z",
+      "rows": [
+        {
+          "contractId": "SC1",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "README lines 4, 29-31, 40-61 position lgrep as local-first code intelligence for repos on disk and changing during active agent work; reviewer verdict READY."
+        },
+        {
+          "contractId": "SC2",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "README lines 106-113 describe best-fit workflow: ask by meaning, inspect files/outlines, retrieve exact symbol/text."
+        },
+        {
+          "contractId": "SC3",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "Direct jCodeMunch comparison section/table removed; final static check tr_mr5raten_4f21d731 found no jCodeMunch/jcodemunch references in README."
+        },
+        {
+          "contractId": "SC4",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "README states positive lgrep lane; final static check tr_mr5raten_4f21d731 found no searchcode references."
+        },
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 asserted required local-first/evolving-code phrases are present."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 asserted jCodeMunch/jcodemunch absent; direct comparison removed from README."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 asserted searchcode absent from README."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 asserted semantic engine, symbol engine, local LanceDB storage, local JSON index, outlines/workflow phrases present; reviewer confirmed implemented-behavior claims only."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 asserted forbidden unsupported numeric/adoption/benchmark terms absent; reviewer removed resource numerics."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "adv_run_test tr_mr5raten_4f21d731 passed README-focused static check and git diff --check; reviewer verdict READY."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "README diff is concise and product-facing; reviewer READY with no blockers."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "README claims limited to implemented behavior verified by adv_run_test tr_mr5raten_4f21d731 and reviewer READY."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Only README.md touched in checkpoint commits 035987a and 7b9ad3a; no code files changed."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "README headline and intro preserve OSS/local-first positioning: Local-first code intelligence, local repos, local storage."
+        },
+        {
+          "contractId": "C5",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Only current repo README.md changed in ADV worktree."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No graph/call hierarchy/impact analysis or remote public repo implementation added; docs-only README change."
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No searchcode mention; adv_run_test tr_mr5raten_4f21d731 verified absence."
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Direct jCodeMunch feature table removed; adv_run_test tr_mr5raten_4f21d731 verified absence."
+        },
+        {
+          "contractId": "DONT4",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No competitor claims remain in README modified positioning; reviewer READY."
+        },
+        {
+          "contractId": "DONT5",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No unsupported benchmark/adoption-number claims added; reviewer removed unsupported resource numerics; static check passed."
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "README intro or \"What lgrep is\" section includes a concise local-first/evolving-code positioning statement.",
+    "README comparison section removes direct jCodeMunch comparison or rewrites it so no stale feature-presence claim remains.",
+    "README does not mention searchcode or position lgrep by contrast with searchcode.",
+    "README keeps claims limited to implemented lgrep behavior: semantic search, symbol search, outlines, local cache/storage, shared warm server.",
+    "README adds no unsupported numeric benchmark, adoption, or performance claim for lgrep.",
+    "Documentation-only verification passes via a README-focused review/check."
+  ],
+  "documents": {
+    "proposal": "# Proposal: Update README positioning\n\n## Problem\nlgrep has strong local semantic + symbol search capabilities, but README positioning can be sharper. Competitive scan surfaced jCodeMunch as a credible symbol-first/token-efficiency comparator. Separately, this project already uses searchcode for public/remote repo exploration, so lgrep should not try to position itself primarily as a public repo research tool.\n\n## Scope\nAffected files are expected to be documentation-only:\n\n- `README.md` positioning copy and comparison sections\n- optionally `CHANGELOG.md` only if the project convention requires a user-facing docs note\n\nResearch inputs:\n\n- jCodeMunch public README/docs/product claims\n- existing lgrep README and implemented behavior\n- searchcode's role as complementary public/remote repository research tooling\n\n## Direction\nResearch jCodeMunch's public positioning and implementation-facing claims, then update lgrep's README to emphasize:\n\n- local-first code intelligence for repos already on disk\n- fast agent discovery while code is changing locally\n- semantic-first search when agents do not know the right symbol yet\n- symbol/outline drill-down once the likely area is found\n- clear boundary with searchcode: remote/public repo exploration is complementary, not lgrep's core lane\n- clear boundary with jCodeMunch: jCodeMunch is symbol-first/context-retrieval oriented; lgrep is intent-first plus symbol drill-down for local OpenCode workflows\n\n## Out of scope\n- Implementing new graph/call-impact features\n- Replacing searchcode or adding public SaaS repo exploration to lgrep\n- Benchmark claims without source-backed or locally measured evidence\n- Broad README rewrite unrelated to positioning/comparison sections\n\n## Discovery Findings\n\n### Discovery Checklist\n\n| Step | Result | Reason |\n|---|---|---|\n| Skill Discovery | PASS | Loaded `adv-comp-research`; no trusted skill with pending review found. |\n| Prior Research Extension | PASS | Extended `docs/repo-improve-prep.md` with new jCodeMunch/searchcode positioning finding. |\n| Conflict & Related-Work Scan | PASS | Found duplicate draft `updateReadmePositioning`, closed as superseded; validation warnings `NO_TASKS`/`NO_DELTAS` expected pre-prep; agenda empty before scout. |\n| Edge Case Investigation | PASS | Gap is documentation-positioning; edge cases recorded below. |\n| Design Question Depth | PASS | User-facing choices captured for agreement round; technical direction is docs-only. |\n| Draft Spec Delta Shapes | SKIP | No spec behavior changes required; README docs must remain consistent with existing `lgrepToolSelectionOptimization` docs requirement `rq-4`. |\n| P25 Related-Pattern Scan | PASS | README comparison section and `docs/repo-improve-prep.md` are the only relevant local patterns. |\n| LBP Check | PASS | Best direction is concise docs correction and positioning update, not feature expansion. |\n| Completeness Verification | PASS | Problem and solution scope are docs-only and bounded to positioning/comparison language. |\n\n### Skills Considered\n\n- `adv-comp-research`: matched competitive scan and evidence-cited comparison work; loaded and applied.\n- `adv-improve`: related but not loaded; existing `docs/repo-improve-prep.md` already supplies prior research pack.\n- Pending-review scan: no actual `review_status: \"pending\"` skill frontmatter found; one instructional mention in `adv-skill-author` was not a pending skill.\n\n### Extends\n\n- Prior artifact: `docs/repo-improve-prep.md`.\n  - Relevant prior findings: jCodeMunch is a high-relevance comparator; graph/call-impact features are promising but should not be pulled into this docs-only change; local-first bounded daemon positioning matters.\n  - New finding: current jCodeMunch README now includes opt-in semantic/hybrid search, so the existing README table row `Semantic search: No` for jCodeMunch is stale and must be corrected or removed.\n\n### Conflict Scan\n\n- Active/closed changes: current `updateReadmePositioning2`; duplicate `updateReadmePositioning` closed as superseded.\n- Validation: passed; `NO_TASKS` and `NO_DELTAS` are expected before planning for a docs-only change.\n- Agenda: no overlapping agenda before scout; scout worker later noted two follow-up agenda items.\n\n### Current State\n\n- `README.md` already states lgrep is dual-engine: semantic engine using Voyage Code 3 with local LanceDB storage, and symbol engine using tree-sitter/local JSON index.\n- `README.md` already has comparisons against `mgrep` and `jcodemunch-mcp`.\n- `README.md` does not mention searchcode or clearly state the public/remote-repo research boundary.\n- `README.md` currently says jCodeMunch has no semantic search; public jCodeMunch README now describes opt-in semantic/hybrid search, so that comparison is stale.\n- Spec `lgrepToolSelectionOptimization` `rq-4` requires documentation decision matrix and validated setup/transport guidance; this change should preserve that docs contract.\n\n### Edge Cases\n\nGap: stale/incomplete competitor positioning.\n\n1. README claims jCodeMunch lacks semantic search after jCodeMunch added opt-in semantic/hybrid search; result: inaccurate competitive claim.\n2. README overcorrects by feature-listing jCodeMunch's broad toolset; result: lgrep positioning gets diluted by unrelated features.\n3. README names searchcode as if it is part of lgrep; result: public readers may misunderstand lgrep's own capabilities.\n4. README omits `lgrep_index_symbols_repo` nuance; result: \"remote is not lgrep's lane\" sounds inconsistent with an existing GitHub symbol-indexing tool.\n\n### Open Design Questions\n\n1. How explicit should the README be about searchcode?\n   - Trust model: user preference for public product positioning.\n   - Blast radius: a too-explicit mention may confuse lgrep capability boundaries; too-generic wording may fail AC3.\n   - Alternatives: name searchcode directly; mention \"remote/public repo tools such as searchcode\"; keep it internal-only.\n\n2. How should jCodeMunch be framed after discovering it has semantic/hybrid search?\n   - Trust model: joint; facts are evidence-backed, tone is product judgment.\n   - Blast radius: stale or unfair comparison breaks AC4 and harms credibility.\n   - Alternatives: remove table row; update row to \"opt-in\"; rewrite comparison around primary workflow rather than feature presence.\n\n3. Should README add a short \"what lgrep is not\" boundary?\n   - Trust model: user/product preference.\n   - Blast radius: could clarify scope or make README feel defensive.\n   - Alternatives: add a one-paragraph lane statement; only adjust comparison text; no explicit negative positioning.\n\n### Draft Spec Deltas\n\nNo spec deltas required. Documentation must remain consistent with existing `lgrepToolSelectionOptimization` `rq-4`.\n\n### Related Pattern Scan\n\n- `README.md` lines 87-123: comparison section is directly in scope.\n- `docs/repo-improve-prep.md` lines 161-193: prior competitor/alternative framing exists but is broader than this change.\n- No other local searchcode mentions found.\n\n### Completeness Verification\n\n- Problem completeness: full problem identified with medium-high confidence. This is not a code defect; it is a stale/underspecified README positioning surface. The key symptom is jCodeMunch comparison staleness, but the full problem includes lgrep's local-evolving-code lane and searchcode boundary.\n- Solution-scope completeness: full intended solution is docs-only with high confidence. Secondary surfaces: `README.md` in scope; `docs/repo-improve-prep.md` out of scope because it is a prior research artifact; `CHANGELOG.md` optional only if project convention requires docs notes.\n- Sole-entry claim: none; no cross-cutting operation claimed.\n- Reproduction classification: N/A; no bug reproduction-sourced finding.\n\n### LBP Check\n\nLong-term best practice is to correct stale claims and position on durable workflow differences, not competitor feature-count comparison. The README should emphasize lgrep's local, rapidly evolving codebase workflow and OpenCode/Vision shared warm server lane. External-solution check is satisfied by cited jCodeMunch/searchcode docs and prior `repo-improve-prep.md`; no `/adv-improve` rerun needed for this narrow docs change.\n\n### Discovery Opportunity Scout\n\nScout ran via `adv-researcher`.\n\n- Candidates: 5\n- Auto-adopt: 2\n  - Re-anchor jCodeMunch comparison on intent-first local discovery vs symbol-first precise retrieval/context packing.\n  - Headline OpenCode-first shared-warm-server + intent-first-then-drill differentiator.\n- User-surface: 3\n  - Correct stale `jCodeMunch semantic search: No` table row.\n  - Decide how explicit to make searchcode complementarity.\n  - Reconcile `lgrep_index_symbols_repo` nuance with the searchcode remote lane.\n- Inconclusive: 0\n\n### AMBIGUITY ANALYSIS\n\nB1 MEDIUM Boundaries: README should mention searchcode, but naming a specific externally installed MCP in a public project README may confuse product boundaries.\n  Evidence: \"Clarify that searchcode remains complementary: public/remote repo analysis and competitive/library research, not lgrep's core lane.\"\n  Reason: unclear because the exact public wording is a product positioning choice.\n\nF1 MEDIUM Functional Scope: The proposal allows optional `CHANGELOG.md` but does not require it.\n  Evidence: \"optionally `CHANGELOG.md` only if the project convention requires a user-facing docs note\"\n  Reason: acceptable because docs verification can decide; not a blocking ambiguity.\n\nS1 CLEAR Completion Signals: AC1-AC6 are observable and docs-focused.\n  Evidence: \"README includes...\", \"README comparison language distinguishes...\", \"No unsupported numeric benchmark/adoption claim is added...\"\n  Reason: completion can be checked by README review and lightweight docs verification.\n\nM1 CLEAR Missing Information: Required source inputs are available.\n  Evidence: jCodeMunch README, searchcode llms.txt, local README, `docs/repo-improve-prep.md`.\n  Reason: enough evidence exists to proceed.\n\nCoverage: B:P F:C S:C M:C\n\n### Recommended Objectives\n\n1. Correct stale README comparison claims about jCodeMunch.\n2. Reframe comparison around workflow and implementation posture rather than broad feature parity.\n3. Add a concise local-first/evolving-code positioning statement.\n4. Clarify searchcode's public/remote-repo complementarity without implying it is part of lgrep.\n5. Preserve docs-only scope and avoid unsupported numeric claims.\n\n## Deliverable\nUpdated README copy and comparison language, source-backed by jCodeMunch public docs/README, searchcode public docs, and existing lgrep behavior.",
+    "problemStatement": "lgrep's README currently positions the project against adjacent tools, but it does not fully reflect the intended local-first niche: fast code discovery for repositories agents already have locally, especially while code is evolving during active development. Recent competitive scanning suggests jCodeMunch has a stronger symbol-first/token-efficiency positioning, while searchcode already covers our public/remote-repo exploration need. We need to study jCodeMunch's README/product claims and update lgrep's README so it clearly differentiates lgrep's local evolving-code workflow without overclaiming or drifting into unrelated feature expansion.",
+    "agreement": "# Agreement\n\n## Objectives\n\n1. Update README positioning to say lgrep is optimized for repositories already present locally, especially active codebases changing during agent work.\n2. Keep lgrep's differentiator centered on semantic discovery first, then symbol/outline drill-down.\n3. Stop using direct jCodeMunch comparison claims as the README's main positioning device; avoid stale feature-presence tables.\n4. State lgrep's lane positively without naming searchcode or other complementary remote/public-repo tools.\n5. Avoid unsupported claims about competitor performance, user counts, or lgrep benchmarks.\n\n## Success Criteria\n\n1. README clearly positions lgrep as local-first code intelligence for repos already on disk and changing during active agent work.\n2. README emphasizes intent-first discovery followed by symbol/outline drill-down.\n3. README no longer relies on direct jCodeMunch comparison claims that can go stale.\n4. README avoids naming searchcode or other complementary tools; it states what lgrep is for positively.\n\n## Acceptance Criteria\n\n1. README intro or \"What lgrep is\" section includes a concise local-first/evolving-code positioning statement.\n2. README comparison section removes direct jCodeMunch comparison or rewrites it so no stale feature-presence claim remains.\n3. README does not mention searchcode or position lgrep by contrast with searchcode.\n4. README keeps claims limited to implemented lgrep behavior: semantic search, symbol search, outlines, local cache/storage, shared warm server.\n5. README adds no unsupported numeric benchmark, adoption, or performance claim for lgrep.\n6. Documentation-only verification passes via a README-focused review/check.\n\n## Constraints\n\n- Keep README concise and product-facing.\n- Do not add new product promises for unimplemented features.\n- Do not change code unless a documentation link/build issue requires it.\n- Preserve lgrep's OSS/local-first positioning.\n- Scope is current repo only.\n\n## Avoidances\n\n- No feature creep into graph, call hierarchy, impact analysis, or remote public repo implementation.\n- No direct public README positioning against searchcode.\n- No direct jCodeMunch feature table likely to go stale.\n- No invented competitor claims.\n- No unsupported benchmark or adoption-number claims for lgrep.\n\n## Preview Applicability\n\n- `visual_surface: false`\n- Rationale: README text changes affect documentation, not browser UI or visual application output.\n- `preview_expectation.exact_route_required: not_applicable`\n- `preview_expectation.data_state_expectation: not_applicable`\n- `preview_expectation.viewport_expectation: not_applicable`\n- `preview_expectation.rationale: documentation-only change; no app preview required`\n\n## Decisions\n\n### User Decisions\n\n1. Searchcode wording\n   - Question: How explicit should README be about searchcode as complementary public/remote repo tooling?\n   - User answer: \"just say what lgrep is for, dont mention others\"\n   - Decision: Do not mention searchcode in README.\n\n2. jCodeMunch framing\n   - Question: How should README compare against jCodeMunch now that its README describes opt-in semantic/hybrid search?\n   - User answer: \"dont compare directly anymore.\"\n   - Decision: Remove direct jCodeMunch comparison rather than maintaining feature-presence claims.\n\n3. Boundary note\n   - Question: Should README add a short \"what lgrep is not\" boundary?\n   - User answer: \"Positive lane only\"\n   - Decision: State lgrep's lane positively; avoid defensive boundary copy.\n\n### Agent Decisions (LBP)\n\n1. Discovery should not expand into competitor feature parity.\n   - Reason: current user goal is positioning and same-feature accuracy, not new code intelligence capabilities.\n\n2. README should avoid competitor feature tables for fast-moving tools.\n   - Reason: jCodeMunch public docs changed enough that the existing \"Semantic search: No\" claim became stale; durable workflow positioning is safer.\n\n3. No spec deltas are needed.\n   - Reason: change modifies documentation positioning only and must preserve existing `lgrepToolSelectionOptimization` documentation expectations.\n\n## Deferred Questions\n\nNone.\n\n## Sign-Off\n\nUser approved criteria with: \"approve\".",
+    "design": "# Design\n\n## Chosen Direction\n\nUpdate README positioning through a small docs-only copy change centered on lgrep's own lane, not direct competitor comparison.\n\nThe README should say lgrep is for:\n\n- local repositories already on disk\n- codebases changing during active agent work\n- intent-first semantic discovery when the agent does not yet know the right symbol\n- symbol, outline, and text drill-down once the likely area is found\n- a shared warm OpenCode/Vision-friendly server for repeated agent sessions\n\n## README Strategy\n\n1. Strengthen the opening pitch and/or `What lgrep is` section with a positive local-first/evolving-code sentence.\n2. Keep claims bounded to implemented lgrep behavior:\n   - semantic search\n   - symbol search\n   - file/repo outlines\n   - local vector/index storage\n   - shared warm process\n3. Remove or rewrite direct jCodeMunch comparison so the README does not maintain stale feature-presence claims.\n4. Do not mention searchcode. The README should state what lgrep is for, not explain the user's broader tool stack.\n5. Preserve existing setup, tool list, transport/security, and usage guidance unless wording must move for clarity.\n\n## Rationale\n\njCodeMunch public docs now describe opt-in semantic/hybrid search, so the current README table row claiming it lacks semantic search is stale. Direct feature tables against fast-moving competitors create maintenance risk. A durable positioning statement based on lgrep's own workflow is safer and clearer.\n\n## Scope Boundaries\n\n- In scope: `README.md` positioning and comparison copy.\n- Optional: `CHANGELOG.md` only if repo convention requires documentation-change notes.\n- Out of scope: code changes, benchmarks, graph/call-impact features, public remote-repo tooling, searchcode positioning.\n\n## Verification Plan\n\n- Review README diff against approved AC1-AC6.\n- Run a lightweight documentation check appropriate for the repo.\n- Confirm no unsupported numeric/adoption/performance claims were added.\n- Confirm README contains no `searchcode` mention and no stale direct jCodeMunch feature table.",
+    "executiveSummary": "# Executive Summary\n\nREADME positioning was updated to state lgrep's lane positively: local-first code intelligence for OpenCode and active local repositories. The copy now emphasizes repos already on disk, changing working trees, intent-first semantic discovery, symbol/outline drill-down, and a shared warm local server.\n\nThe stale direct jCodeMunch comparison and feature table were removed rather than patched. README does not mention searchcode. Claims are limited to implemented lgrep behavior: semantic search, symbol search, outlines/text tools, local vector/index storage, and shared warm process.\n\nVerification passed through README-focused static checks and independent reviewer acceptance review. Reviewer also removed unsupported numeric resource-profile claims and re-verified the contract.\n\nEvidence:\n\n- Implementation checkpoint: `035987ab73c5a4a5c6b2122a1a22f75419d02c7d`\n- Review cleanup checkpoint: `7b9ad3a78406f219cdf99be95c1e91ae9708f6ed`\n- Static verification: `adv_run_test tr_mr5raten_4f21d731`\n- Reviewer verdict: READY, no blockers\n- Contract review matrix: 20/20 rows passing or respected",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-04T02:42:42.129Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| SC1 | success_criterion | README clearly positions lgrep as local-first code intelligence for repos already on disk and changing during active agent work. | pass | README lines 4, 29-31, 40-61 position lgrep as local-first code intelligence for repos on disk and changing during active agent work; reviewer verdict READY. |\n| SC2 | success_criterion | README emphasizes intent-first discovery followed by symbol/outline drill-down. | pass | README lines 106-113 describe best-fit workflow: ask by meaning, inspect files/outlines, retrieve exact symbol/text. |\n| SC3 | success_criterion | README no longer relies on direct jCodeMunch comparison claims that can go stale. | pass | Direct jCodeMunch comparison section/table removed; final static check tr_mr5raten_4f21d731 found no jCodeMunch/jcodemunch references in README. |\n| SC4 | success_criterion | README avoids naming searchcode or other complementary tools; it states what lgrep is for positively. | pass | README states positive lgrep lane; final static check tr_mr5raten_4f21d731 found no searchcode references. |\n| AC1 | acceptance_criterion | README intro or \"What lgrep is\" section includes a concise local-first/evolving-code positioning statement. | pass | adv_run_test tr_mr5raten_4f21d731 asserted required local-first/evolving-code phrases are present. |\n| AC2 | acceptance_criterion | README comparison section removes direct jCodeMunch comparison or rewrites it so no stale feature-presence claim remains. | pass | adv_run_test tr_mr5raten_4f21d731 asserted jCodeMunch/jcodemunch absent; direct comparison removed from README. |\n| AC3 | acceptance_criterion | README does not mention searchcode or position lgrep by contrast with searchcode. | pass | adv_run_test tr_mr5raten_4f21d731 asserted searchcode absent from README. |\n| AC4 | acceptance_criterion | README keeps claims limited to implemented lgrep behavior: semantic search, symbol search, outlines, local cache/storage, shared warm server. | pass | adv_run_test tr_mr5raten_4f21d731 asserted semantic engine, symbol engine, local LanceDB storage, local JSON index, outlines/workflow phrases present; reviewer confirmed implemented-behavior claims only. |\n| AC5 | acceptance_criterion | README adds no unsupported numeric benchmark, adoption, or performance claim for lgrep. | pass | adv_run_test tr_mr5raten_4f21d731 asserted forbidden unsupported numeric/adoption/benchmark terms absent; reviewer removed resource numerics. |\n| AC6 | acceptance_criterion | Documentation-only verification passes via a README-focused review/check. | pass | adv_run_test tr_mr5raten_4f21d731 passed README-focused static check and git diff --check; reviewer verdict READY. |\n| C1 | constraint | Keep README concise and product-facing. | respected | README diff is concise and product-facing; reviewer READY with no blockers. |\n| C2 | constraint | Do not add new product promises for unimplemented features. | respected | README claims limited to implemented behavior verified by adv_run_test tr_mr5raten_4f21d731 and reviewer READY. |\n| C3 | constraint | Do not change code unless a documentation link/build issue requires it. | respected | Only README.md touched in checkpoint commits 035987a and 7b9ad3a; no code files changed. |\n| C4 | constraint | Preserve lgrep's OSS/local-first positioning. | respected | README headline and intro preserve OSS/local-first positioning: Local-first code intelligence, local repos, local storage. |\n| C5 | constraint | Scope is current repo only. | respected | Only current repo README.md changed in ADV worktree. |\n| DONT1 | avoidance | No feature creep into graph, call hierarchy, impact analysis, or remote public repo implementation. | respected | No graph/call hierarchy/impact analysis or remote public repo implementation added; docs-only README change. |\n| DONT2 | avoidance | No direct public README positioning against searchcode. | respected | No searchcode mention; adv_run_test tr_mr5raten_4f21d731 verified absence. |\n| DONT3 | avoidance | No direct jCodeMunch feature table likely to go stale. | respected | Direct jCodeMunch feature table removed; adv_run_test tr_mr5raten_4f21d731 verified absence. |\n| DONT4 | avoidance | No invented competitor claims. | respected | No competitor claims remain in README modified positioning; reviewer READY. |\n| DONT5 | avoidance | No unsupported benchmark or adoption-number claims for lgrep. | respected | No unsupported benchmark/adoption-number claims added; reviewer removed unsupported resource numerics; static check passed. |\n\n"
+  },
+  "artifacts": {
+    "proposal": {
+      "updatedAt": "2026-07-04T02:08:42.956Z",
+      "contentHash": "88f59cd57b344b974540f98e7f17736c88638a378e8fd5fc9ab3ad334c4e0c10",
+      "source": "temporal",
+      "readable": false
+    },
+    "problemStatement": {
+      "updatedAt": "2026-07-04T01:56:54.436Z",
+      "contentHash": "4e8c2c27b0ffcc32c68ed0590905593858021f952a462c3151a78f53a5bf3303",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-04T02:21:33.942Z",
+      "contentHash": "a181bddfc8733cf05daf8c1364e7bfcc52fb5a9bfdc0bb82c5499a4cb992ee32",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-04T02:22:20.653Z",
+      "contentHash": "cf812c5946ac63fe83970f98131e7edffc73ae9ea2b687bf7213b4d5fe480f91",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-04T02:43:10.638Z",
+      "contentHash": "81a85135d1f41d7fbb582403b66a69e220aa94030e68d21e44a0116568b670e5",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "lastSignalAt": "2026-07-04T02:53:46.259Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true
+}
