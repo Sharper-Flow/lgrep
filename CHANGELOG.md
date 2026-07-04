@@ -1,3 +1,5 @@
+## 2026-07-04 (v3.1.8)\n\n### Changed\n- checkpoint main before archiving updateReadmePositioning2\n- checkpoint tk-92fc0bbcf001\n- checkpoint tk-afcb776da4f0
+
 ## 2026-06-25 (v3.1.7)\n\n### Changed\n- checkpoint tk-87be31396184
 
 ## 2026-06-25 (v3.1.6)\n\n### Changed\n- checkpoint tk-e592560ea67b
