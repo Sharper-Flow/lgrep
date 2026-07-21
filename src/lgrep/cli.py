@@ -404,12 +404,15 @@ def _cmd_prune_symbols(args: list[str]) -> int:
 
 
 def _cmd_gc(args: list[str]) -> int:
-    """Run garbage collection: prune orphans + clean worktree aliases."""
+    """Run garbage collection: prune orphans + clean worktree aliases + prune symbol indexes."""
     if "--help" in args or "-h" in args:
         print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR]")
         print()
-        print("Run garbage collection on semantic caches.")
-        print("Combines orphan pruning with worktree alias cleanup.")
+        print("Run garbage collection across both on-disk stores.")
+        print("Combines three sweeps:")
+        print("  - prune_orphans      whole orphan semantic-cache directories")
+        print("  - gc_worktree_meta   stale worktree aliases inside live cache dirs")
+        print("  - prune_symbols      stale symbol-store index_*.json files")
         print()
         print("options:")
         print("  --execute                      actually delete orphan caches")
