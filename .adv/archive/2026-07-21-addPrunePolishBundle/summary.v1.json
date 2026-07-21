@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-21T04:53:37.486Z",
+  "capabilities": [],
+  "change_hash": "7fa6c86532c87549d73223437ea1d68c0a6baa0d75d1559fe1b6735901488df3",
+  "change_id": "addPrunePolishBundle",
+  "completed_tasks": 3,
+  "created_at": "2026-07-21T04:29:16.620Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-21T04:52:53.939Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "fd81157d7dc048b85b4f2d9093cb05b4adc44291c04145226c70a8c4cb749dd0",
+  "task_count": 3,
+  "title": "Add prune polish bundle",
+  "version": "1"
+}

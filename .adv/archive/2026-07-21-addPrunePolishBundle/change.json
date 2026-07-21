@@ -1,0 +1,757 @@
+{
+  "id": "addPrunePolishBundle",
+  "title": "Add prune polish bundle",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-21T04:29:16.620Z",
+  "tasks": [
+    {
+      "id": "tk-f4d35ef699fb",
+      "title": "Add structlog per-event warnings to BOTH prune paths (parity).",
+      "type": "code",
+      "section": "Observability",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-21T04:39:01.854Z",
+      "metadata": {
+        "delegation_hint": "delegate_allowed",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "SC1"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "verifies": [
+          "AC4"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "rationale": "Behavior-visible observability addition. capture_logs assertion verifies the events fire with the right shape. Static check alone cannot confirm the wiring.",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "verification": "Added structlog per-event warnings to BOTH prune_orphans.py and prune_symbols.py at the three failure-capture sites in each execute branch: prune_refused_symlink, prune_refused_outside_root, prune_unlink_failed. Each event carries a store=\"orphans\"|\"symbols\" kwarg for filterability. Pattern mirrors index_store.py and index_repo.py. C2 honored: failures[] shape unchanged (log.warning is strictly additive). 6 new capture_logs tests added (3 per file). Full suite 657 passed, ruff clean.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "CHANGELOG.md",
+        "src/lgrep/cli.py",
+        "src/lgrep/tools/prune_orphans.py",
+        "src/lgrep/tools/prune_symbols.py",
+        "tests/test_cli.py",
+        "tests/test_prune_orphans.py",
+        "tests/test_prune_symbols.py"
+      ],
+      "touched_files": [
+        "CHANGELOG.md",
+        "src/lgrep/cli.py",
+        "src/lgrep/tools/prune_orphans.py",
+        "src/lgrep/tools/prune_symbols.py",
+        "tests/test_cli.py",
+        "tests/test_prune_orphans.py",
+        "tests/test_prune_symbols.py"
+      ],
+      "checkpointSha": "bdbd84960f4f2a29a59d3f7f5f65b31a568fe783",
+      "completedAt": "2026-07-21T04:49:19.220Z",
+      "completed_at": "2026-07-21T04:49:19.220Z",
+      "updatedAt": "2026-07-21T04:53:23.689Z"
+    },
+    {
+      "id": "tk-e7758df671b2",
+      "title": "Add `--symbols-dir DIR` flag to `_cmd_gc`, forwarded to the embedded `prune_symbols` sweep.",
+      "type": "code",
+      "section": "CLI",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-21T04:39:01.868Z",
+      "metadata": {
+        "delegation_hint": "delegate_allowed",
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC2",
+          "SC2"
+        ],
+        "respects": [
+          "DONT1",
+          "DONT2"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "rationale": "CLI behavior change with observable effect (storage_dir forwarding). Test asserts the kwarg reaches prune_symbols.",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "verification": "Added --symbols-dir DIR flag to _cmd_gc, mirroring existing --cache-dir pattern exactly: help text updated, parser branch added, symbols_dir initialized None alongside cache_dir, forwarded via prune_symbols(dry_run=dry_run, storage_dir=symbols_dir). DONT1 honored: combined-report key set unchanged. 3 new tests added (forwarding, absent-passes-None, help-text). Full suite 657 pass, ruff clean.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "bdbd84960f4f2a29a59d3f7f5f65b31a568fe783",
+      "completedAt": "2026-07-21T04:49:28.853Z",
+      "completed_at": "2026-07-21T04:49:28.853Z"
+    },
+    {
+      "id": "tk-35ba33994af2",
+      "title": "Add CHANGELOG entry for the prune-symbols capability shipped in addPrunePolishBundle (merge 6eafc1d3).",
+      "type": "docs",
+      "section": "Docs",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-07-21T04:39:01.932Z",
+      "metadata": {
+        "delegation_hint": "delegate_allowed",
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC3",
+          "SC3"
+        ],
+        "respects": [
+          "DONT4"
+        ]
+      },
+      "evidence_policy": "artifact_reference",
+      "evidence_plan": {
+        "policy": "artifact_reference",
+        "proof_target": "Artifact reference or operational output",
+        "rationale": "Docs-only task. Artifact (CHANGELOG.md entry) is itself the evidence; cross-referenced against shipped code in commit 6eafc1d3.",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "verification": "Added CHANGELOG.md entry under '## Unreleased' describing the prune-symbols capability shipped in addPrunePolishBundle (merge 6eafc1d3): CLI subcommand, MCP tool, extended lgrep gc (3 sweeps + new --symbols-dir), LGREP_SYMBOLS_DIR env var, structlog per-event observability. Closes issue #5. Format matches existing v3.1.7/3.1.8 entries. Cross-referenced against shipped code in commit 6eafc1d3.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "bdbd84960f4f2a29a59d3f7f5f65b31a568fe783",
+      "completedAt": "2026-07-21T04:49:28.950Z",
+      "completed_at": "2026-07-21T04:49:28.950Z"
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "addPrunePolishBundle",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:prune-polish-design-validation"
+      },
+      "agent": "adv-researcher",
+      "topic": "Prune polish bundle design validation",
+      "sources": [
+        {
+          "label": "Existing structlog use",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/storage/index_store.py",
+          "summary": "Uses module-level structlog.get_logger() and named event calls with structured keyword fields."
+        },
+        {
+          "label": "Existing remote-index logging",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/tools/index_repo.py",
+          "summary": "Uses the same module-level logger and log.warning(event_name, field=value) pattern."
+        },
+        {
+          "label": "Server logging configuration",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/server/bootstrap.py",
+          "summary": "Configures WriteLoggerFactory to stderr, not standard-library LoggerFactory."
+        },
+        {
+          "label": "pytest caplog documentation",
+          "locator": "https://docs.pytest.org/en/stable/how-to/logging.html",
+          "summary": "caplog captures logging records and supports caplog.set_level()."
+        },
+        {
+          "label": "structlog standard-library integration",
+          "locator": "https://www.structlog.org/en/stable/standard-library.html",
+          "summary": "Standard-library record integration requires stdlib LoggerFactory and render_to_log_kwargs-style configuration."
+        },
+        {
+          "label": "structlog testing documentation",
+          "locator": "https://www.structlog.org/en/stable/testing.html",
+          "summary": "capture_logs/LogCapture are supported structured-log assertion mechanisms."
+        },
+        {
+          "label": "GC command implementation",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/cli.py",
+          "summary": "_cmd_gc currently exposes --cache-dir, parses it with Path(...).resolve(), and calls prune_symbols without storage_dir."
+        },
+        {
+          "label": "Prune implementations",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/tools/prune_orphans.py",
+          "summary": "prune_orphans and gc_worktree_meta are separate maintenance operations; report returns include a typed failures array."
+        },
+        {
+          "label": "Symbol prune implementation",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/src/lgrep/tools/prune_symbols.py",
+          "summary": "prune_symbols has an analogous typed report and failures array."
+        },
+        {
+          "label": "Changelog convention",
+          "locator": "file:///home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addPrunePolishBundle/CHANGELOG.md",
+          "summary": "Top entries use a dated version heading and Added/Changed/Fixed sections."
+        }
+      ],
+      "architecture_assessment": "The proposed module-level structlog logger and warning event call exactly match existing local patterns. The GC symbols-dir option can mirror cache-dir parsing and pass storage_dir=... to prune_symbols. Do not use caplog: configured production structlog writes directly to stderr rather than creating stdlib LogRecords. Use structlog.testing.capture_logs and assert the structured event dictionary. Preserve report construction exactly; emit an event after the report is computed, not by appending data to failures[]. store is a new, unambiguous field name; no repository evidence favors path_kind or target_store.",
+      "validation": {
+        "status": "caution",
+        "blockers": [],
+        "notes": "Design is compatible except a caplog.records assertion would not verify current WriteLoggerFactory output. Scope should explicitly decide whether gc_worktree_meta, the third sweep in lgrep gc, also merits a completion event."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Structured-log tests use structlog's testing capture rather than pytest's generic caplog fixture.",
+          "Logging only the two prune functions leaves gc_worktree_meta without an equivalent maintenance completion event; logging every internal branch would add noise."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Use pytest caplog.records",
+            "disposition": "rejected",
+            "rationale": "Current server configuration uses structlog.WriteLoggerFactory to stderr, while caplog captures standard-library LogRecords; official structlog docs show stdlib LoggerFactory integration is required for that path."
+          },
+          {
+            "option": "Reconfigure production logging to stdlib solely for tests",
+            "disposition": "rejected",
+            "rationale": "Unnecessary wider logging architecture change; structlog supplies capture_logs for structured-event tests."
+          },
+          {
+            "option": "Emit events from every classification and failure branch",
+            "disposition": "rejected",
+            "rationale": "Higher-volume, noisier logs; one completion/summary event per maintenance operation is simpler."
+          }
+        ],
+        "recommendation": "Ship with caveats: add summary events after prune reports are computed, test them with structlog.testing.capture_logs, mirror --cache-dir exactly for --symbols-dir and pass it only to prune_symbols, and keep failures[] untouched."
+      },
+      "recommendation": "Revise test design from caplog to structlog.testing.capture_logs. Otherwise implement the lightweight bundle as designed; consider adding a summary event for gc_worktree_meta only if the change scope defines all three GC sweeps as observability targets.",
+      "follow_ups": [
+        "Packet omitted SCOPE KEY, IN_SCOPE, OUT_OF_SCOPE, DONE_WHEN, STOP_WHEN, and VERIFICATION anchors; report scope key is a transport placeholder, not inferred contract scope.",
+        "No project convention exists for store, target_store, or path_kind keyword fields; store='orphans'|'symbols' is clear and minimally scoped."
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-f4d35ef699fb": [
+      {
+        "runId": "tr_mru66eiq_6da2bd51",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_prune_orphans.py tests/test_prune_symbols.py --tb=short --no-header -q 2>&1 | tail -10",
+        "durationMs": 1274.6434839991853,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-21T04:44:54.982Z"
+      },
+      {
+        "runId": "tr_mru66ue9_39db27c7",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_prune_orphans.py tests/test_prune_symbols.py --tb=short --no-header -q 2>&1 | tail -10",
+        "durationMs": 5402.464087000117,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-21T04:45:15.570Z"
+      },
+      {
+        "runId": "tr_mru69fnj_6db8bd31",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_prune_orphans.py tests/test_prune_symbols.py -v --tb=short --no-header -k logging 2>&1 | tail -15",
+        "durationMs": 3627.003739999607,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-21T04:47:16.381Z"
+      },
+      {
+        "runId": "tr_mru6buzj_2c69dce3",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/ --tb=short --no-header -q 2>&1 | tail -3",
+        "durationMs": 14606.892614000477,
+        "recordedAt": "2026-07-21T04:49:09.596Z"
+      }
+    ],
+    "tk-e7758df671b2": [
+      {
+        "runId": "tr_mru6b1ev_b22187dc",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run ruff check . 2>&1 | tail -3 && echo \"--- FULL SUITE ---\" && uv run pytest tests/ --tb=short --no-header -q 2>&1 | tail -8",
+        "durationMs": 17334.048272999935,
+        "recordedAt": "2026-07-21T04:48:31.274Z"
+      }
+    ]
+  },
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-21T04:33:59.662Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved via Tier A 'approve'. Proposal artifact written with 4 ACs + 4 constraints + 2 avoidances. Scope: items 1+2+3 from addPrunePolishBundle backlog triage; item 4 (KD7 race mutex) explicitly deferred.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "0684e28862efe5f1c274f7f6034325a8594af55dbb11a8ca504bf8fa797e74ad",
+        "non_whitespace_chars": 2409,
+        "checked_at": "2026-07-21T04:29:16.660Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "started_at": "2026-07-21T04:34:41.402Z",
+      "completed_at": "2026-07-21T04:35:04.506Z",
+      "completed_by": "agent",
+      "approval_evidence": "Contract minted (20 items: 3 SC, 4 AC, 4 C, 5 DONT, 4 OOS). Agreement artifact persisted.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "non_whitespace_chars": 2895,
+        "checked_at": "2026-07-21T04:29:16.661Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-21T04:38:34.898Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design lightweight (mirror existing patterns). Validator ship_with_caveats resolved: caplog incompatible with project's WriteLoggerFactory structlog config; switched to structlog.testing.capture_logs. Pattern sources confirmed (index_store.py, index_repo.py, _cmd_gc --cache-dir, CHANGELOG v3.1.7/3.1.8). gc_worktree_meta intentionally out of scope (different sweep kind).",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "a42edf76eb2203f9e9a6d64e010a5edec714808e8ea9c937d9f671ca39881e79",
+        "non_whitespace_chars": 4730,
+        "checked_at": "2026-07-21T04:29:16.662Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-21T04:43:14.828Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved via Tier A 'approve'. 3 independent tasks (structlog parity, gc --symbols-dir, CHANGELOG). No file overlap, parallel-safe. Design validator ship_with_caveats resolved (capture_logs). Contract: 20 items."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-21T04:49:37.570Z",
+      "completed_by": "agent",
+      "approval_evidence": "All 3 tasks done (structlog parity + gc --symbols-dir + CHANGELOG). 657 tests pass (was 648; +9 new: 6 capture_logs + 3 gc forwarding). Ruff clean. Workers spawned but returned empty (session-history issue); inline fallback per P31."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-21T04:52:53.939Z",
+      "completed_by": "agent",
+      "approval_evidence": "Inline review APPROVED. Matrix 16 rows / 0 failing. Executive summary persisted (contentHash 0655180e). All ACs verified via tests; constraints respected.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "0655180e727abce9792d17ae66b8571c924d3a48a0fc6133a347786731d1edd4",
+        "non_whitespace_chars": 3458,
+        "checked_at": "2026-07-21T04:29:16.663Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [],
+  "origin": {
+    "kind": "adhoc"
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+      "approvedAt": "2026-07-21T04:34:41.417Z"
+    },
+    "items": [
+      {
+        "id": "SC1",
+        "kind": "success_criterion",
+        "text": "Both `prune_orphans` and `prune_symbols` emit `log.warning` events on refused-symlink, refused-out-of-root, and per-entry unlink-failure. Events include path and reason/error.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC2",
+        "kind": "success_criterion",
+        "text": "`lgrep gc --symbols-dir DIR` forwards the override to `prune_symbols`; help text lists the flag.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC3",
+        "kind": "success_criterion",
+        "text": "`CHANGELOG.md` carries a dated entry describing the new capability (CLI subcommand + MCP tool + extended gc).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "For each of {refused-symlink, refused-out-of-root, per-entry-unlink-failure} in BOTH `prune_orphans` and `prune_symbols`, a `log.warning` event is emitted with at minimum `{path, reason|error}` fields. Existing `failures[]` capture unchanged (additive only).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "`lgrep gc [--symbols-dir DIR]` parses the flag and forwards to `prune_symbols(storage_dir=...)`. The combined report's `prune_symbols` key reflects the override. Help text lists the flag.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "`CHANGELOG.md` has a new entry (Unreleased or version-dated) describing the prune-symbols surfaces: CLI `lgrep prune-symbols` subcommand, MCP `prune_symbols` tool, extended `lgrep gc` (3 sweeps). Entry is consistent with the existing format.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "All existing tests pass; new tests cover (a) structlog emission via caplog fixture, (b) gc --symbols-dir forwarding via existing test pattern.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "C1 (parity): structlog emission pattern must match between `prune_orphans` and `prune_symbols` — same event-name conventions, same kwarg shape. No divergence.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "C2 (additive only): `failures[]` array shape and content stays identical. Structlog events are additional, not replacement.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "C3 (style conformance): structlog usage follows the established pattern (`log = structlog.get_logger()` at module top; `log.warning(\"snake_case_event\", kw=val)` calls).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "C4 (no new env vars): no new env knobs introduced.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "do not change `lgrep gc` combined-report key set (`prune_orphans`, `gc_worktree_meta`, `prune_symbols` preserved).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "do not change existing `--cache-dir` semantics or help text in gc.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "do not add the scan→unlink mutex here (KD7 deferred — separate change if pursued).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT4",
+        "kind": "avoidance",
+        "text": "do not rewrite the existing prune-symbols/prune-orphans core logic; only add observability alongside existing capture.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT5",
+        "kind": "avoidance",
+        "text": "do not change `lgrep prune-symbols` standalone CLI surface (it already has `--storage-dir`).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "scan→unlink race mutex (KD7) — dedicated change if pursued.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "any new MCP tool, CLI subcommand, or env var.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "behavior change to existing prune logic, classification, or guards.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS4",
+        "kind": "out_of_scope",
+        "text": "spec-delta modifications to `lgrepSymbolStoreLifecycle` capability (the new capability already ships the right invariants; this change is polish only).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-21T04:50:00.000Z",
+      "rows": [
+        {
+          "contractId": "SC1",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Both prune_orphans.py and prune_symbols.py emit log.warning at all 3 failure-capture sites. 6 capture_logs tests pass (3 per file). Events: prune_refused_symlink, prune_refused_outside_root, prune_unlink_failed. store kwarg distinguishes orphans/symbols."
+        },
+        {
+          "contractId": "SC2",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "_cmd_gc --symbols-dir DIR parses and forwards via prune_symbols(storage_dir=symbols_dir). test_gc_symbols_dir_forwarded_to_prune_symbols verifies Path resolution."
+        },
+        {
+          "contractId": "SC3",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "artifact_reference",
+          "evidence": "CHANGELOG.md has '## Unreleased' entry describing CLI subcommand, MCP tool, extended gc, LGREP_SYMBOLS_DIR, structlog observability. Format matches existing v3.1.7/3.1.8."
+        },
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "prune_orphans.py:333,347,364,389 + prune_symbols.py:378,392,409,435 — log.warning at all 3 failure sites in both files. tests/test_prune_orphans.py + tests/test_prune_symbols.py: 6 new capture_logs tests pass."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "cli.py:419,439,451-453,465 — help text, parser, forwarding. tests/test_cli.py::TestGcSymbolsDir: 3 tests (forwarding, absent-passes-None, help-text)."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "artifact_reference",
+          "evidence": "CHANGELOG.md:1-16 — new '## Unreleased' entry with all 5 bullet points (CLI subcommand, MCP tool, gc extension, env var, structlog). Cross-referenced against shipped code 6eafc1d3."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Full suite 657 passed (was 648; +9 new: 6 capture_logs + 3 gc forwarding). Ruff clean. TDD: structlog tests written first then implementation added (existing tests still green during transition)."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Event names identical between files: prune_refused_symlink, prune_refused_outside_root, prune_unlink_failed. Kwargs shape identical (path, store, [error]). Only store value differs ('orphans' vs 'symbols')."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "git diff shows log.warning calls are ADDED alongside existing failures.append calls; no failures.append payload modified. Existing failure tests still pass unchanged."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "import structlog + log = structlog.get_logger() pattern matches index_store.py:23-25 and tools/index_repo.py:15-18. Event names follow snake_case convention with descriptive kwargs."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "git diff main..HEAD -- src/lgrep/ shows no new os.environ references. No new env knobs."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "cli.py:466-470 combined dict still has exactly {prune_orphans, gc_worktree_meta, prune_symbols} keys. test_gc_combined_report_includes_prune_symbols still passes."
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "cli.py --cache-dir help text and parser unchanged. Only --symbols-dir added."
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No fcntl/flock/lock-file imports added. KD7 deferred."
+        },
+        {
+          "contractId": "DONT4",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "git diff shows only log.warning calls added to prune_orphans.py and prune_symbols.py. No classification, guard, or return-shape changes."
+        },
+        {
+          "contractId": "DONT5",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "_cmd_prune_symbols standalone CLI surface unchanged (still --execute/--dry-run/--storage-dir). Only _cmd_gc got the new --symbols-dir flag."
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "For each of {refused-symlink, refused-out-of-root, per-entry-unlink-failure} in BOTH `prune_orphans` and `prune_symbols`, a `log.warning` event is emitted with at minimum `{path, reason|error}` fields. Existing `failures[]` capture unchanged (additive only).",
+    "`lgrep gc [--symbols-dir DIR]` parses the flag and forwards to `prune_symbols(storage_dir=...)`. The combined report's `prune_symbols` key reflects the override. Help text lists the flag.",
+    "`CHANGELOG.md` has a new entry (Unreleased or version-dated) describing the prune-symbols surfaces: CLI `lgrep prune-symbols` subcommand, MCP `prune_symbols` tool, extended `lgrep gc` (3 sweeps). Entry is consistent with the existing format.",
+    "All existing tests pass; new tests cover (a) structlog emission via caplog fixture, (b) gc --symbols-dir forwarding via existing test pattern."
+  ],
+  "documents": {
+    "proposal": "# Polish bundle: prune observability + gc ergonomics + CHANGELOG\n\n## Problem\nThree small follow-up items surfaced during `addSymbolStorePrune` review and deferred to a separate change:\n\n1. **Observability gap (advisory)** — both `prune_orphans` and `prune_symbols` capture refused-symlink / refused-out-of-root / per-entry unlink failures in their respective `failures[]` arrays but emit no `structlog` events. Ops running the MCP server see only the JSON report; the daemon's structured logs carry no per-event trace of security-relevant refusals.\n2. **CLI ergonomics gap** — `lgrep gc` accepts `--cache-dir DIR` (semantic cache override) but has no equivalent override for the symbol store. Operators who relocated their symbol store via `LGREP_SYMBOLS_DIR` must invoke `lgrep prune-symbols` separately rather than getting both sweeps in one gc pass.\n3. **Release-prep docs gap** — `CHANGELOG.md` has no entry for the new `prune-symbols` capability shipped in `addSymbolStorePrune` (now on `main` as merge `6eafc1d3`).\n\n## Scope\n- Add structured `log.warning` events alongside existing `failures[]` capture in both prune paths (parity).\n- Add `--symbols-dir DIR` flag to `_cmd_gc`, forwarded to the embedded `prune_symbols` call.\n- Add a CHANGELOG entry under a new version documenting the new capability.\n\n## Out of scope\n- scan→unlink race mutex (KD7) — remains deferred; the proper fix covers `IndexStore.save` + both prune paths in one dedicated change. Atomic temp+rename keeps the practical window tiny.\n- New env vars, new commands, new spec capabilities.\n- Behavior changes to existing `prune-orphans`, `prune_symbols`, `invalidate_cache`, or `lgrep gc` existing keys.\n\n## Acceptance criteria\n- AC1: Refused-symlink, refused-out-of-root, and per-entry unlink-failure events in both `prune_orphans` and `prune_symbols` emit `log.warning` with the path and reason. Existing `failures[]` capture unchanged.\n- AC2: `lgrep gc --symbols-dir DIR` forwards the override to `prune_symbols`. Help text lists the new flag.\n- AC3: `CHANGELOG.md` entry exists, dated, describing the new capability surfaces.\n- AC4: Existing tests pass; new tests cover the structlog emission and the gc symbols-dir forwarding.\n\n## Constraints\n- C1 (parity): structlog emission pattern must match between prune_orphans and prune_symbols; no divergence.\n- C2 (no behavior change): the `failures[]` array shape and content stays identical; structlog events are additional, not replacement.\n- DONT1: do not change `lgrep gc` combined-report key set (`prune_orphans`, `gc_worktree_meta`, `prune_symbols` preserved).\n- DONT2: do not change existing `--cache-dir` semantics in gc.\n\n## Avoidances\n- DONT3: do not add the scan→unlink mutex here (KD7 defer).\n- DONT4: do not rewrite the existing prune-symbols/prune-orphans core logic.",
+    "agreement": "# Agreement: addPrunePolishBundle\n\n## Objectives\n1. **Observability parity** — security-relevant refusal events in both prune paths emit `structlog` warnings alongside existing `failures[]` capture. Ops get per-event visibility in daemon logs without parsing JSON reports.\n2. **gc ergonomics** — `lgrep gc` accepts `--symbols-dir DIR` and forwards to the embedded `prune_symbols` sweep, matching the existing `--cache-dir` pattern.\n3. **Release-docs currency** — `CHANGELOG.md` has an entry for the prune-symbols capability shipped in `addPrunePolishBundle` (currently unreleased on `main` post v3.1.8).\n\n## Success Criteria\n- SC1: Both `prune_orphans` and `prune_symbols` emit `log.warning` events on refused-symlink, refused-out-of-root, and per-entry unlink-failure. Events include path and reason/error.\n- SC2: `lgrep gc --symbols-dir DIR` forwards the override to `prune_symbols`; help text lists the flag.\n- SC3: `CHANGELOG.md` carries a dated entry describing the new capability (CLI subcommand + MCP tool + extended gc).\n\n## Acceptance Criteria\n- AC1: For each of {refused-symlink, refused-out-of-root, per-entry-unlink-failure} in BOTH `prune_orphans` and `prune_symbols`, a `log.warning` event is emitted with at minimum `{path, reason|error}` fields. Existing `failures[]` capture unchanged (additive only).\n- AC2: `lgrep gc [--symbols-dir DIR]` parses the flag and forwards to `prune_symbols(storage_dir=...)`. The combined report's `prune_symbols` key reflects the override. Help text lists the flag.\n- AC3: `CHANGELOG.md` has a new entry (Unreleased or version-dated) describing the prune-symbols surfaces: CLI `lgrep prune-symbols` subcommand, MCP `prune_symbols` tool, extended `lgrep gc` (3 sweeps). Entry is consistent with the existing format.\n- AC4: All existing tests pass; new tests cover (a) structlog emission via caplog fixture, (b) gc --symbols-dir forwarding via existing test pattern.\n\n## Constraints\n- C1 (parity): structlog emission pattern must match between `prune_orphans` and `prune_symbols` — same event-name conventions, same kwarg shape. No divergence.\n- C2 (additive only): `failures[]` array shape and content stays identical. Structlog events are additional, not replacement.\n- C3 (style conformance): structlog usage follows the established pattern (`log = structlog.get_logger()` at module top; `log.warning(\"snake_case_event\", kw=val)` calls).\n- C4 (no new env vars): no new env knobs introduced.\n\n## Avoidances\n- DONT1: do not change `lgrep gc` combined-report key set (`prune_orphans`, `gc_worktree_meta`, `prune_symbols` preserved).\n- DONT2: do not change existing `--cache-dir` semantics or help text in gc.\n- DONT3: do not add the scan→unlink mutex here (KD7 deferred — separate change if pursued).\n- DONT4: do not rewrite the existing prune-symbols/prune-orphans core logic; only add observability alongside existing capture.\n- DONT5: do not change `lgrep prune-symbols` standalone CLI surface (it already has `--storage-dir`).\n\n## Out of Scope\n- OOS1: scan→unlink race mutex (KD7) — dedicated change if pursued.\n- OOS2: any new MCP tool, CLI subcommand, or env var.\n- OOS3: behavior change to existing prune logic, classification, or guards.\n- OOS4: spec-delta modifications to `lgrepSymbolStoreLifecycle` capability (the new capability already ships the right invariants; this change is polish only).",
+    "design": "# Design: addPrunePolishBundle\n\n## Architecture\nNo new modules, no new surfaces. Three independent edits to existing files, each mirroring an established pattern:\n\n### 1. Structlog emission in prune paths (AC1)\n\n**Pattern source**: `src/lgrep/storage/index_store.py:23,161,194,196,303,315` and `src/lgrep/tools/index_repo.py:18,97,118,146`.\n\nBoth `prune_orphans.py` and `prune_symbols.py` get:\n- `import structlog` + `log = structlog.get_logger()` at module top (after existing imports)\n- `log.warning(...)` calls at the three existing `failures.append(...)` sites:\n  - Refused symlink at delete time\n  - Refused out-of-root path at delete time\n  - Per-entry unlink OSError\n\n**Event names** (snake_case, descriptive, prefixed with `prune_` for filterability):\n- `prune_refused_symlink` — kwargs: `{path, store: \"orphans\"|\"symbols\"}`\n- `prune_refused_outside_root` — kwargs: `{path, store}`\n- `prune_unlink_failed` — kwargs: `{path, store, error}`\n\nThe `store` kwarg lets ops filter prune events by store kind without parsing the call site. Existing `failures[]` capture remains identical (additive only per C2).\n\n### 2. gc --symbols-dir flag (AC2)\n\n**Pattern source**: existing `--cache-dir` flag in `_cmd_gc` at `src/lgrep/cli.py:446-448`.\n\nAdd parallel `--symbols-dir DIR` parsing in the same `while i < len(args)` loop. Forward via `prune_symbols(dry_run=dry_run, storage_dir=symbols_dir)`. Update help text to list the new flag. Combined-report key set unchanged (DONT1).\n\n### 3. CHANGELOG entry (AC3)\n\n**Pattern source**: existing v3.1.7 / v3.1.8 entries in `CHANGELOG.md`.\n\nAdd a new top entry under `## Unreleased` (or version-dated if project prefers) describing:\n- New CLI subcommand `lgrep prune-symbols`\n- New MCP tool `prune_symbols`\n- Extended `lgrep gc` (now 3 sweeps)\n- New env var `LGREP_SYMBOLS_DIR`\n- Default dry-run on every surface; transport coercion on shared HTTP\n\n## LBP decisions\n- **Why `store` kwarg on every event?** Locality + filterability. Without it, ops grepping daemon logs cannot distinguish prune_orphans events from prune_symbols events without call-site context. With it, `grep prune_refused_symlink | jq 'select(.store==\"symbols\")'` works.\n- **Why not introduce a shared `_log_prune_failure()` helper?** Two modules, three call sites each = six total. A helper would add indirection for a one-liner. Keep the `log.warning(...)` inline next to the existing `failures.append(...)` for locality (P04).\n- **Why Unreleased vs version-dated CHANGELOG?** Project auto-releases via conventional commits; the bump happens at release time. `## Unreleased` is the conventional slot for not-yet-released main-branch work.\n- **Why is `gc_worktree_meta` excluded from structlog emission?** It's a maintenance sweep (alias-entry cleanup) with a different failure shape, not a \"prune path\" in the same sense. AC1 explicitly scopes to `prune_orphans` and `prune_symbols` only. gc_worktree_meta could get its own observability in a separate change if needed.\n\n## Test fixture (validator caveat resolved)\n\nProject structlog config uses `WriteLoggerFactory` (writes to stderr directly), NOT stdlib `LogRecord`s (per `src/lgrep/server/bootstrap.py`). This means pytest's `caplog.records` will NOT capture events from `log.warning(...)` calls.\n\n**Use `structlog.testing.capture_logs` instead:**\n```python\nfrom structlog.testing import capture_logs\n\ndef test_prune_symbols_warns_on_refused_symlink(tmp_path, monkeypatch):\n    # ... set up symlink refusal scenario ...\n    with capture_logs() as cap_logs:\n        prune_symbols(storage_dir=storage, dry_run=False)\n    matching = [e for e in cap_logs if e[\"event\"] == \"prune_refused_symlink\" and e[\"store\"] == \"symbols\"]\n    assert len(matching) == 1\n```\n\nThis is the canonical structlog test pattern (per [structlog testing docs](https://www.structlog.org/en/stable/testing.html)). `capture_logs` temporarily replaces the configured processors and captures events as dicts.\n\n## Implementation strategy\nThree independent tasks, no dependencies. Can execute sequentially or in parallel. Each task is self-contained:\n- Task A (structlog): edits `prune_orphans.py` + `prune_symbols.py`; tests use `structlog.testing.capture_logs`\n- Task B (gc flag): edits `cli.py`; tests use existing `_cmd_gc` test pattern\n- Task C (CHANGELOG): edits `CHANGELOG.md`; no tests (docs)\n\n## Risks\n- **Log volume**: prune operations over large stores with many refusals could emit many warnings. Mitigation: warnings only fire on refusals (not on every examined entry), so volume is bounded by refusal count, not store size.\n- **capture_logs context manager**: must wrap the call site exactly; events outside the `with` block are not captured. Tests must include the prune invocation inside the `with` block.\n\n## Verification\n- `uv run pytest tests/` — full suite must pass (was 648 after `addPrunePolishBundle`; expect +N new tests)\n- `uv run ruff check .` — clean\n- Manual: `lgrep gc --symbols-dir /tmp/test-symbols --dry-run` should produce a combined report with `prune_symbols` reflecting the override\n- Manual: induce a symlink refusal and confirm `log.warning` fires (covered by automated test via `capture_logs`)\n\n## Validator verdict\n`ship_with_caveats` from adv-researcher (attempt 1). Caveat was the caplog/capture_logs distinction; resolved in this revision by specifying `structlog.testing.capture_logs` as the test fixture. All other aspects (pattern compatibility, kwarg shape, gc flag mirror, CHANGELOG format) confirmed pass.",
+    "executiveSummary": "# Executive Summary\n\n## Outcome\nThree small follow-up items from `addPrunePolishBundle` review are now implemented: observability parity (structlog events in both prune paths), CLI ergonomics (`lgrep gc --symbols-dir DIR`), and CHANGELOG entry for the previously-shipped prune-symbols capability. No behavior change to existing surfaces.\n\n## Why It Matters\nMulti-agent hosts running the lgrep MCP daemon get structured-log visibility into security-relevant prune refusals (symlinks, out-of-root paths, unlink failures) without parsing JSON reports. Operators with relocated symbol stores can override via gc in one pass instead of invoking `prune-symbols` separately. CHANGELOG now documents the capability that shipped in `addPrunePolishBundle` (commit `6eafc1d3`).\n\n## Verdict\nAPPROVED — 0 blockers, 0 issues. Inline review (small polish change; scanner fan-out not warranted for mirror-existing-pattern work).\n\n## What Was Built\n1. **Structlog parity** (`src/lgrep/tools/prune_orphans.py`, `src/lgrep/tools/prune_symbols.py`) — `log.warning(...)` events at all 3 failure-capture sites in both execute branches. Events: `prune_refused_symlink`, `prune_refused_outside_root`, `prune_unlink_failed`. Each carries a `store: \"orphans\"|\"symbols\"` kwarg for filterability. Pattern mirrors `index_store.py` and `tools/index_repo.py`. Existing `failures[]` capture unchanged (strictly additive per C2).\n2. **gc --symbols-dir flag** (`src/lgrep/cli.py`) — new `--symbols-dir DIR` parsed identically to existing `--cache-dir`, forwarded via `prune_symbols(storage_dir=symbols_dir)`. Help text updated. Combined-report key set unchanged (DONT1).\n3. **CHANGELOG entry** (`CHANGELOG.md`) — new `## Unreleased` section with 5 bullets covering: CLI subcommand, MCP tool, extended gc, LGREP_SYMBOLS_DIR env var, structlog observability. Closes issue #5.\n\n## What Was Verified\n- Verdict: APPROVED (inline review, 0 blockers / 0 issues).\n- Tests: `uv run pytest tests/` → **657 passed, 0 failures** (was 648 baseline; +9 new: 6 capture_logs + 3 gc forwarding). `uv run ruff check .` → clean.\n- Preview URL: `not_applicable` — pure CLI/library/code observability change, no browser/UI surface.\n- Contract matrix: 15 rows persisted; 3 SC pass; 4 AC pass; 4 C respected; 5 DONT respected. 0 failing rows.\n\n## Remaining Concerns\nNone. KD7 race mutex intentionally deferred (separate change if pursued).\n\n## Supporting Evidence\n- Code: `src/lgrep/tools/prune_orphans.py`, `src/lgrep/tools/prune_symbols.py`, `src/lgrep/cli.py`.\n- Tests: `tests/test_prune_orphans.py` (+3 capture_logs), `tests/test_prune_symbols.py` (+3 capture_logs), `tests/test_cli.py::TestGcSymbolsDir` (+3 forwarding/help/absent).\n- Docs: `CHANGELOG.md`.\n- Contract matrix: 15 rows via `adv_contract_review_matrix_set`.\n- Commit: `bdbd849` (single checkpoint covering all 3 tasks).\n\n## Consequence Context\n1. **Delivered value:** Observability parity + gc ergonomics + release-docs currency. No new surfaces; purely polish on existing capability.\n2. **Enabling-only/follow-up dependency:** None.\n3. **Ops readiness:** Additive only. Default dry-run unchanged; transport coercion unchanged; mutex unchanged.\n4. **Migration/data impact:** `n/a` — no schema or behavior change.\n5. **Frontend/preview impact:** `not_applicable`.\n6. **Collision/release risk:** Very low. All changes additive; existing tests + combined-report shape preserved.\n7. **Open follow-ups:** KD7 race mutex deferred (dedicated change if pursued).\n8. **Next action:** Archive sign-off → `adv_change_archive phase9:\"run\"` → local deploy from merged main.\n\n## Release Readiness Summary\n- **Release gate ready:** All 7 gates complete (proposal, discovery, design, planning, execution, acceptance, release-pending). Contract matrix warning-free (0 failing rows).\n- **Verification:** 657 tests pass, ruff clean.\n- **Backlog items not blocking:** KD7 race mutex (separate change).\n- **Archive readiness:** GREEN. Ready for Tier B sign-off.",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-21T04:50:00.000Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| SC1 | success_criterion | Both `prune_orphans` and `prune_symbols` emit `log.warning` events on refused-symlink, refused-out-of-root, and per-entry unlink-failure. Events include path and reason/error. | pass | Both prune_orphans.py and prune_symbols.py emit log.warning at all 3 failure-capture sites. 6 capture_logs tests pass (3 per file). Events: prune_refused_symlink, prune_refused_outside_root, prune_unlink_failed. store kwarg distinguishes orphans/symbols. |\n| SC2 | success_criterion | `lgrep gc --symbols-dir DIR` forwards the override to `prune_symbols`; help text lists the flag. | pass | _cmd_gc --symbols-dir DIR parses and forwards via prune_symbols(storage_dir=symbols_dir). test_gc_symbols_dir_forwarded_to_prune_symbols verifies Path resolution. |\n| SC3 | success_criterion | `CHANGELOG.md` carries a dated entry describing the new capability (CLI subcommand + MCP tool + extended gc). | pass | CHANGELOG.md has '## Unreleased' entry describing CLI subcommand, MCP tool, extended gc, LGREP_SYMBOLS_DIR, structlog observability. Format matches existing v3.1.7/3.1.8. |\n| AC1 | acceptance_criterion | For each of {refused-symlink, refused-out-of-root, per-entry-unlink-failure} in BOTH `prune_orphans` and `prune_symbols`, a `log.warning` event is emitted with at minimum `{path, reason|error}` fields. Existing `failures[]` capture unchanged (additive only). | pass | prune_orphans.py:333,347,364,389 + prune_symbols.py:378,392,409,435 — log.warning at all 3 failure sites in both files. tests/test_prune_orphans.py + tests/test_prune_symbols.py: 6 new capture_logs tests pass. |\n| AC2 | acceptance_criterion | `lgrep gc [--symbols-dir DIR]` parses the flag and forwards to `prune_symbols(storage_dir=...)`. The combined report's `prune_symbols` key reflects the override. Help text lists the flag. | pass | cli.py:419,439,451-453,465 — help text, parser, forwarding. tests/test_cli.py::TestGcSymbolsDir: 3 tests (forwarding, absent-passes-None, help-text). |\n| AC3 | acceptance_criterion | `CHANGELOG.md` has a new entry (Unreleased or version-dated) describing the prune-symbols surfaces: CLI `lgrep prune-symbols` subcommand, MCP `prune_symbols` tool, extended `lgrep gc` (3 sweeps). Entry is consistent with the existing format. | pass | CHANGELOG.md:1-16 — new '## Unreleased' entry with all 5 bullet points (CLI subcommand, MCP tool, gc extension, env var, structlog). Cross-referenced against shipped code 6eafc1d3. |\n| AC4 | acceptance_criterion | All existing tests pass; new tests cover (a) structlog emission via caplog fixture, (b) gc --symbols-dir forwarding via existing test pattern. | pass | Full suite 657 passed (was 648; +9 new: 6 capture_logs + 3 gc forwarding). Ruff clean. TDD: structlog tests written first then implementation added (existing tests still green during transition). |\n| C1 | constraint | C1 (parity): structlog emission pattern must match between `prune_orphans` and `prune_symbols` — same event-name conventions, same kwarg shape. No divergence. | respected | Event names identical between files: prune_refused_symlink, prune_refused_outside_root, prune_unlink_failed. Kwargs shape identical (path, store, [error]). Only store value differs ('orphans' vs 'symbols'). |\n| C2 | constraint | C2 (additive only): `failures[]` array shape and content stays identical. Structlog events are additional, not replacement. | respected | git diff shows log.warning calls are ADDED alongside existing failures.append calls; no failures.append payload modified. Existing failure tests still pass unchanged. |\n| C3 | constraint | C3 (style conformance): structlog usage follows the established pattern (`log = structlog.get_logger()` at module top; `log.warning(\"snake_case_event\", kw=val)` calls). | respected | import structlog + log = structlog.get_logger() pattern matches index_store.py:23-25 and tools/index_repo.py:15-18. Event names follow snake_case convention with descriptive kwargs. |\n| C4 | constraint | C4 (no new env vars): no new env knobs introduced. | respected | git diff main..HEAD -- src/lgrep/ shows no new os.environ references. No new env knobs. |\n| DONT1 | avoidance | do not change `lgrep gc` combined-report key set (`prune_orphans`, `gc_worktree_meta`, `prune_symbols` preserved). | respected | cli.py:466-470 combined dict still has exactly {prune_orphans, gc_worktree_meta, prune_symbols} keys. test_gc_combined_report_includes_prune_symbols still passes. |\n| DONT2 | avoidance | do not change existing `--cache-dir` semantics or help text in gc. | respected | cli.py --cache-dir help text and parser unchanged. Only --symbols-dir added. |\n| DONT3 | avoidance | do not add the scan→unlink mutex here (KD7 deferred — separate change if pursued). | respected | No fcntl/flock/lock-file imports added. KD7 deferred. |\n| DONT4 | avoidance | do not rewrite the existing prune-symbols/prune-orphans core logic; only add observability alongside existing capture. | respected | git diff shows only log.warning calls added to prune_orphans.py and prune_symbols.py. No classification, guard, or return-shape changes. |\n| DONT5 | avoidance | do not change `lgrep prune-symbols` standalone CLI surface (it already has `--storage-dir`). | respected | _cmd_prune_symbols standalone CLI surface unchanged (still --execute/--dry-run/--storage-dir). Only _cmd_gc got the new --symbols-dir flag. |\n| OOS1 | out_of_scope | scan→unlink race mutex (KD7) — dedicated change if pursued. | missing |  |\n| OOS2 | out_of_scope | any new MCP tool, CLI subcommand, or env var. | missing |  |\n| OOS3 | out_of_scope | behavior change to existing prune logic, classification, or guards. | missing |  |\n| OOS4 | out_of_scope | spec-delta modifications to `lgrepSymbolStoreLifecycle` capability (the new capability already ships the right invariants; this change is polish only). | missing |  |\n\n"
+  },
+  "artifacts": {
+    "proposal": {
+      "updatedAt": "2026-07-21T04:29:16.729Z",
+      "contentHash": "0684e28862efe5f1c274f7f6034325a8594af55dbb11a8ca504bf8fa797e74ad",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-21T04:34:31.870Z",
+      "contentHash": "ba0538f888325e33269a2d8792fb1aeb7f687c5a29a9a8b6625c65af39f51aa7",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-21T04:38:27.954Z",
+      "contentHash": "a42edf76eb2203f9e9a6d64e010a5edec714808e8ea9c937d9f671ca39881e79",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-21T04:50:22.402Z",
+      "contentHash": "0655180e727abce9792d17ae66b8571c924d3a48a0fc6133a347786731d1edd4",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "lastSignalAt": "2026-07-21T04:53:23.689Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true
+}
