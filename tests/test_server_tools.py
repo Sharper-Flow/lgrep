@@ -1,7 +1,7 @@
-"""MCP contract tests for all 19 registered tools.
+"""MCP contract tests for all 20 registered tools.
 
 Verifies:
-- All 19 tools are registered in the MCP server (5 semantic + 13 symbol/admin + 1 diagnostics)
+- All 20 tools are registered in the MCP server (5 semantic + 14 symbol/admin + 1 diagnostics)
 - Renamed semantic tools preserve response shape
 - New symbol/admin tools return valid JSON with _meta envelope
 - Unknown tool returns structured error (via tool dispatch)
@@ -39,6 +39,7 @@ EXPECTED_SYMBOL_TOOLS = {
     "get_symbols",
     "invalidate_cache",
     "prune_orphans",
+    "prune_symbols",
     "invalidate_worktree_cache",
 }
 
@@ -262,3 +263,72 @@ class TestSymbolToolResponses:
             "failures",
             "_meta",
         } <= set(result.keys())
+
+
+class TestPruneSymbolsTool:
+    """MCP contract and transport-safety tests for prune_symbols."""
+
+    def _get_tool_fn(self, name: str):
+        """Get the tool function by name."""
+        for t in mcp._tool_manager.list_tools():
+            if t.name == name:
+                return t.fn
+        raise KeyError(f"Tool not found: {name}")
+
+    def _make_context(self, transport: str):
+        """Build a fake MCP Context with the given transport kind."""
+
+        class RuntimeStub:
+            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+                return fn_to_run(*args, **kwargs)
+
+        return SimpleNamespace(
+            request_context=SimpleNamespace(
+                lifespan_context=SimpleNamespace(
+                    transport=transport,
+                    projects={},
+                    runtime=RuntimeStub(),
+                )
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_prune_symbols_registered_as_mcp_tool(self):
+        fn = self._get_tool_fn("prune_symbols")
+        assert fn is not None
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_symbols_dry_run_default_response_shape(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        fn = self._get_tool_fn("prune_symbols")
+        result = await fn()
+        assert isinstance(result, dict)
+        assert {
+            "dry_run",
+            "files_examined",
+            "stale_indexes",
+            "skipped_active",
+            "deleted_files",
+            "reclaimed_bytes",
+            "failures",
+            "_meta",
+        } <= set(result.keys())
+        assert result["dry_run"] is True
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_symbols_stdio_honors_dry_run_false(self, tmp_path, monkeypatch):
+        """Stdio transport is single-user; caller may opt into destructive run."""
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        fn = self._get_tool_fn("prune_symbols")
+        ctx = self._make_context("stdio")
+        result = await fn(dry_run=False, ctx=ctx)
+        assert result["dry_run"] is False
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_symbols_non_stdio_coerces_dry_run_true(self, tmp_path, monkeypatch):
+        """HTTP transports are shared; destructive prune must be coerced to dry-run."""
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        fn = self._get_tool_fn("prune_symbols")
+        ctx = self._make_context("streamable-http")
+        result = await fn(dry_run=False, ctx=ctx)
+        assert result["dry_run"] is True
