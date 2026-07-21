@@ -455,3 +455,60 @@ def test_prune_files_examined_counts_index_shaped_only(tmp_path):
     report = prune_symbols(storage_dir=tmp_path, dry_run=True)
 
     assert report["files_examined"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Edge cases for _classify JSON-shape tolerance
+# (defensive paths unverified by the core AC tests; added at harden)
+# ---------------------------------------------------------------------------
+
+
+def test_classify_non_object_json_list(tmp_path):
+    # Valid JSON but a list, not an object → unreadable_index_json.
+    _make_index(tmp_path, "list-shape", raw_body="[1,2,3]")
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "unreadable_index_json" for e in results)
+
+
+def test_classify_non_object_json_string(tmp_path):
+    # Valid JSON but a bare string → unreadable_index_json.
+    _make_index(tmp_path, "str-shape", raw_body='"just-a-string"')
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "unreadable_index_json" for e in results)
+
+
+def test_classify_non_object_json_number(tmp_path):
+    # Valid JSON but a bare number → unreadable_index_json.
+    _make_index(tmp_path, "num-shape", raw_body="42")
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "unreadable_index_json" for e in results)
+
+
+def test_classify_empty_file(tmp_path):
+    # Zero-byte file → json.loads("") raises JSONDecodeError → unreadable_index_json.
+    _make_index(tmp_path, "empty", raw_body="")
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "unreadable_index_json" for e in results)
+
+
+def test_classify_repo_path_null(tmp_path):
+    # Explicit {"repo_path": null} → missing_repo_path_field
+    # (collapsed with missing-key and empty-string per parity with prune_orphans).
+    _make_index(
+        tmp_path,
+        "null-path",
+        raw_body='{"repo_path": null, "files": {}, "symbols": {}, "version": "2.0"}',
+    )
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "missing_repo_path_field" for e in results)
+
+
+def test_classify_repo_path_non_string(tmp_path):
+    # Non-string repo_path (integer) → missing_repo_path_field.
+    _make_index(
+        tmp_path,
+        "int-path",
+        raw_body='{"repo_path": 123, "files": {}, "symbols": {}, "version": "2.0"}',
+    )
+    results = find_stale_indexes(storage_dir=tmp_path)
+    assert any(e["reason"] == "missing_repo_path_field" for e in results)

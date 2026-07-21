@@ -82,6 +82,16 @@ class TestCLIDispatch:
         assert rc == 0
         mock_prune.assert_called_once_with(["--help"])
 
+    def test_main_dispatches_to_prune_symbols(self):
+        """'lgrep prune-symbols' should dispatch to _cmd_prune_symbols."""
+        with (
+            patch("sys.argv", ["lgrep", "prune-symbols", "--help"]),
+            patch("lgrep.cli._cmd_prune_symbols", return_value=0) as mock_prune,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_prune.assert_called_once_with(["--help"])
+
     def test_main_server_defaults_to_stdio(self):
         """No subcommand should start MCP server with stdio defaults."""
         with (

@@ -43,6 +43,7 @@ from typing import Literal
 
 from typing_extensions import TypedDict
 
+from lgrep.storage.index_store import DEFAULT_SYMBOLS_DIR as _DEFAULT_SYMBOLS_DIR
 from lgrep.tools._meta import make_meta
 
 # Symbol-store index files are produced by
@@ -52,12 +53,6 @@ from lgrep.tools._meta import make_meta
 # pruning — this is the scan-time TOCTOU/shape guard that prevents
 # unrelated files under the storage root from being unlinked.
 _INDEX_FILE_RE = re.compile(r"^index_[0-9a-f]{16}\.json$")
-
-# Default symbol storage directory. Mirrors ``IndexStore.__init__`` default
-# so the pruner reaches the same location a fresh IndexStore would. Kept
-# local rather than imported to avoid coupling prune_symbols to the
-# IndexStore constructor surface; both default to ``~/.cache/lgrep/symbols``.
-_DEFAULT_SYMBOLS_DIR = Path.home() / ".cache" / "lgrep" / "symbols"
 
 # Non-local repo_path prefix. ``github:owner/name@ref`` keys have no
 # local filesystem path to staleness-check; skip them outright.
