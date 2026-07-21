@@ -406,7 +406,7 @@ def _cmd_prune_symbols(args: list[str]) -> int:
 def _cmd_gc(args: list[str]) -> int:
     """Run garbage collection: prune orphans + clean worktree aliases + prune symbol indexes."""
     if "--help" in args or "-h" in args:
-        print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR]")
+        print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR] [--symbols-dir DIR]")
         print()
         print("Run garbage collection across both on-disk stores.")
         print("Combines three sweeps:")
@@ -418,6 +418,7 @@ def _cmd_gc(args: list[str]) -> int:
         print("  --execute                      actually delete orphan caches")
         print("  --dry-run                      preview only (default)")
         print("  --cache-dir DIR                override semantic cache directory")
+        print("  --symbols-dir DIR              override symbol index storage directory")
         return 0
 
     from pathlib import Path
@@ -435,6 +436,7 @@ def _cmd_gc(args: list[str]) -> int:
 
     dry_run = True
     cache_dir = None
+    symbols_dir = None
     i = 0
     while i < len(args):
         if args[i] == "--execute":
@@ -445,6 +447,9 @@ def _cmd_gc(args: list[str]) -> int:
             i += 1
         elif args[i] == "--cache-dir" and i + 1 < len(args):
             cache_dir = Path(args[i + 1]).resolve()
+            i += 2
+        elif args[i] == "--symbols-dir" and i + 1 < len(args):
+            symbols_dir = Path(args[i + 1]).resolve()
             i += 2
         elif args[i].startswith("-"):
             print(f"Unknown option: {args[i]}", file=sys.stderr)
@@ -457,7 +462,7 @@ def _cmd_gc(args: list[str]) -> int:
     # and stale symbol-store index cleanup.
     prune_report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
     meta_report = gc_worktree_meta(dry_run=dry_run, cache_dir=cache_dir)
-    symbols_report = prune_symbols(dry_run=dry_run)
+    symbols_report = prune_symbols(dry_run=dry_run, storage_dir=symbols_dir)
 
     combined = {
         "prune_orphans": prune_report,

@@ -41,10 +41,13 @@ import time
 from pathlib import Path
 from typing import Literal
 
+import structlog
 from typing_extensions import TypedDict
 
 from lgrep.storage.index_store import DEFAULT_SYMBOLS_DIR as _DEFAULT_SYMBOLS_DIR
 from lgrep.tools._meta import make_meta
+
+log = structlog.get_logger()
 
 # Symbol-store index files are produced by
 # ``lgrep.storage.index_store.IndexStore._index_path`` as
@@ -372,6 +375,11 @@ def prune_symbols(
             # storage tree — record as a failure instead.
             try:
                 if entry_path.is_symlink():
+                    log.warning(
+                        "prune_refused_symlink",
+                        path=str(entry_path),
+                        store="symbols",
+                    )
                     failures.append(
                         {
                             "path": str(entry_path),
@@ -380,6 +388,12 @@ def prune_symbols(
                     )
                     continue
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(entry_path),
+                    store="symbols",
+                    error=str(exc),
+                )
                 failures.append({"path": str(entry_path), "error": str(exc)})
                 continue
 
@@ -390,9 +404,20 @@ def prune_symbols(
             try:
                 resolved = entry_path.resolve()
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(entry_path),
+                    store="symbols",
+                    error=str(exc),
+                )
                 failures.append({"path": str(entry_path), "error": str(exc)})
                 continue
             if not _is_under(resolved, root_resolved):
+                log.warning(
+                    "prune_refused_outside_root",
+                    path=str(entry_path),
+                    store="symbols",
+                )
                 failures.append(
                     {
                         "path": str(entry_path),
@@ -406,6 +431,12 @@ def prune_symbols(
                 deleted_files += 1
                 reclaimed_bytes += entry["bytes"]
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(entry_path),
+                    store="symbols",
+                    error=str(exc),
+                )
                 failures.append({"path": str(entry_path), "error": str(exc)})
 
     return {

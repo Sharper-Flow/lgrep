@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
+import structlog
 from typing_extensions import TypedDict
 
 from lgrep.storage import (
@@ -19,6 +20,8 @@ from lgrep.storage import (
     read_project_meta,
 )
 from lgrep.tools._meta import make_meta
+
+log = structlog.get_logger()
 
 # Semantic-cache directory names are the first 12 hex chars of a
 # SHA-256 of the absolute project path (see
@@ -328,6 +331,11 @@ def prune_orphans(
             # tree — record as a failure instead.
             try:
                 if orphan_path.is_symlink():
+                    log.warning(
+                        "prune_refused_symlink",
+                        path=str(orphan_path),
+                        store="orphans",
+                    )
                     failures.append(
                         {
                             "path": str(orphan_path),
@@ -336,6 +344,12 @@ def prune_orphans(
                     )
                     continue
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(orphan_path),
+                    store="orphans",
+                    error=str(exc),
+                )
                 failures.append({"path": str(orphan_path), "error": str(exc)})
                 continue
 
@@ -346,9 +360,20 @@ def prune_orphans(
             try:
                 resolved = orphan_path.resolve()
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(orphan_path),
+                    store="orphans",
+                    error=str(exc),
+                )
                 failures.append({"path": str(orphan_path), "error": str(exc)})
                 continue
             if not _is_under(resolved, root_resolved):
+                log.warning(
+                    "prune_refused_outside_root",
+                    path=str(orphan_path),
+                    store="orphans",
+                )
                 failures.append(
                     {
                         "path": str(orphan_path),
@@ -362,6 +387,12 @@ def prune_orphans(
                 deleted_dirs += 1
                 reclaimed_bytes += orphan["bytes"]
             except OSError as exc:
+                log.warning(
+                    "prune_unlink_failed",
+                    path=str(orphan_path),
+                    store="orphans",
+                    error=str(exc),
+                )
                 failures.append({"path": str(orphan_path), "error": str(exc)})
 
     return {

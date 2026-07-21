@@ -844,3 +844,50 @@ class TestGcPruneSymbols:
             rc = main()
         assert rc == 0
         mock_prune.assert_called_once_with(["--help"])
+
+
+class TestGcSymbolsDir:
+    """Tests for the --symbols-dir flag forwarding to prune_symbols."""
+
+    def test_gc_symbols_dir_forwarded_to_prune_symbols(self, tmp_path, monkeypatch):
+        """lgrep gc --symbols-dir DIR forwards the override to prune_symbols."""
+        symbols_path = tmp_path / "custom-symbols"
+        symbols_path.mkdir()
+
+        with (
+            patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
+            patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
+            patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+        ):
+            mock_prune.return_value = {"dry_run": True}
+            mock_gc.return_value = {"removed_aliases": 0}
+            mock_prune_symbols.return_value = {"dry_run": True}
+
+            _cmd_gc(["--symbols-dir", str(symbols_path), "--dry-run"])
+
+        # storage_dir kwarg must be the resolved Path of the override.
+        forwarded = mock_prune_symbols.call_args[1]["storage_dir"]
+        assert forwarded == symbols_path.resolve()
+
+    def test_gc_symbols_dir_absent_passes_none(self, tmp_path, monkeypatch):
+        """Without --symbols-dir, prune_symbols is called with storage_dir=None."""
+        with (
+            patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
+            patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
+            patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+        ):
+            mock_prune.return_value = {"dry_run": True}
+            mock_gc.return_value = {"removed_aliases": 0}
+            mock_prune_symbols.return_value = {"dry_run": True}
+
+            _cmd_gc(["--dry-run"])
+
+        assert mock_prune_symbols.call_args[1]["storage_dir"] is None
+
+    def test_gc_help_lists_symbols_dir(self, capsys):
+        """gc --help mentions --symbols-dir so operators can discover it."""
+        rc = _cmd_gc(["--help"])
+        out = capsys.readouterr().out
+
+        assert rc == 0
+        assert "--symbols-dir DIR" in out

@@ -512,3 +512,106 @@ def test_classify_repo_path_non_string(tmp_path):
     )
     results = find_stale_indexes(storage_dir=tmp_path)
     assert any(e["reason"] == "missing_repo_path_field" for e in results)
+
+
+# ---------------------------------------------------------------------------
+# Structlog per-event emission (AC1 — observability parity)
+# ---------------------------------------------------------------------------
+
+
+def test_logging_refused_symlink_at_delete_time(tmp_path, monkeypatch):
+    # execute branch symlink refusal emits log.warning("prune_refused_symlink").
+    from structlog.testing import capture_logs
+
+    from lgrep.tools import prune_symbols as module
+
+    outside = tmp_path / "outside-target"
+    outside.mkdir()
+    storage = tmp_path / "symbols"
+    storage.mkdir()
+    link = storage / "index-feedfacefeedface.json"
+    link.symlink_to(outside)
+
+    def tampered(storage_dir, active_set=(), grace_seconds=None):
+        return [
+            {
+                "path": str(link),
+                "reason": "repo_path_enoent",
+                "bytes": 1024,
+                "repo_path": str(outside),
+            }
+        ]
+
+    monkeypatch.setattr(module, "find_stale_indexes", tampered)
+
+    with capture_logs() as cap:
+        prune_symbols(storage_dir=storage, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_refused_symlink" and e["store"] == "symbols"
+    ]
+    assert len(matching) == 1
+    assert matching[0]["path"] == str(link)
+
+
+def test_logging_refused_outside_root(tmp_path, monkeypatch):
+    # execute branch path-confinement refusal emits log.warning("prune_refused_outside_root").
+    from structlog.testing import capture_logs
+
+    from lgrep.tools import prune_symbols as module
+
+    escape_target = tmp_path / "escape-target"
+    escape_target.mkdir()
+    storage = tmp_path / "symbols"
+    storage.mkdir()
+
+    def tampered(storage_dir, active_set=(), grace_seconds=None):
+        return [
+            {
+                "path": str(escape_target),
+                "reason": "repo_path_enoent",
+                "bytes": 1024,
+                "repo_path": None,
+            }
+        ]
+
+    monkeypatch.setattr(module, "find_stale_indexes", tampered)
+
+    with capture_logs() as cap:
+        prune_symbols(storage_dir=storage, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_refused_outside_root" and e["store"] == "symbols"
+    ]
+    assert len(matching) == 1
+
+
+def test_logging_unlink_failed(tmp_path, monkeypatch):
+    # execute branch unlink OSError emits log.warning("prune_unlink_failed").
+    from structlog.testing import capture_logs
+
+    missing_repo = tmp_path / "gone"
+    stale = _make_index(tmp_path, "log-fail", repo_path=str(missing_repo))
+
+    original_unlink = Path.unlink
+
+    def flaky_unlink(self, *args, **kwargs):
+        if self == stale:
+            raise PermissionError("blocked")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+
+    with capture_logs() as cap:
+        prune_symbols(storage_dir=tmp_path, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_unlink_failed"
+        and e["store"] == "symbols"
+        and e["path"] == str(stale)
+    ]
+    assert len(matching) == 1
+    assert "blocked" in matching[0]["error"]

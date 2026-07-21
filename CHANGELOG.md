@@ -1,3 +1,19 @@
+## Unreleased
+
+### Added
+
+- **`lgrep prune-symbols` CLI subcommand** — finds and optionally deletes stale symbol-store index files (`~/.cache/lgrep/symbols/index_*.json`) whose `repo_path` references deleted worktree paths. Defaults to dry-run; `--execute` performs deletion; `--execute` and `--dry-run` are mutually exclusive (exit 2). Mirrors `lgrep prune-orphans` flag shape.
+
+- **`prune_symbols` MCP tool** — same capability exposed via MCP for agent-driven cleanup. Coerces `dry_run=True` on non-stdio transports (HTTP/streamable-http) for safety on shared deployments; stdio honors caller's choice. Mirrors `prune_orphans` transport-safety pattern.
+
+- **`lgrep gc` extended** — now runs three sweeps in one pass: `prune_orphans` (semantic cache), `gc_worktree_meta` (worktree alias cleanup), and `prune_symbols` (stale symbol indexes). Combined JSON report nests results under `prune_orphans`, `gc_worktree_meta`, `prune_symbols` keys. Accepts `--symbols-dir DIR` to override the symbol-store directory.
+
+- **`LGREP_SYMBOLS_DIR` env var** — overrides the default symbol-store directory (`~/.cache/lgrep/symbols/`).
+
+- **Structlog per-event observability** — both `prune_orphans` and `prune_symbols` now emit `log.warning` events for refused-symlink, refused-out-of-root, and per-entry unlink failures (alongside existing `failures[]` capture). Events include a `store: "orphans"|"symbols"` kwarg for filtering.
+
+Closes issue #5 (multi-agent hosts accumulate stale symbol indexes forever).
+
 ## 2026-07-04 (v3.1.8)\n\n### Changed\n- checkpoint main before archiving updateReadmePositioning2\n- checkpoint tk-92fc0bbcf001\n- checkpoint tk-afcb776da4f0
 
 ## 2026-06-25 (v3.1.7)\n\n### Changed\n- checkpoint tk-87be31396184

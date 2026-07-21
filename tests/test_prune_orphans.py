@@ -360,3 +360,107 @@ def test_prune_dirs_examined_counts_all_attempted(tmp_path):
     report = prune_orphans(cache_dir=tmp_path, dry_run=True)
 
     assert report["dirs_examined"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Structlog per-event emission (AC1 — observability parity)
+# ---------------------------------------------------------------------------
+
+
+def test_logging_refused_symlink_at_delete_time(tmp_path, monkeypatch):
+    # execute branch symlink refusal emits log.warning("prune_refused_symlink").
+    from structlog.testing import capture_logs
+
+    from lgrep.tools import prune_orphans as module
+
+    decoy = tmp_path / "decoy-target"
+    decoy.mkdir()
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    link = cache_root / _hash_name("symlink-cache")
+    link.symlink_to(decoy, target_is_directory=True)
+
+    def tampered(cache_dir, active_set=(), grace_seconds=None):
+        return [
+            {
+                "path": str(link),
+                "reason": "missing_meta",
+                "bytes": 1024,
+                "project_path": None,
+            }
+        ]
+
+    monkeypatch.setattr(module, "find_orphans", tampered)
+
+    with capture_logs() as cap:
+        prune_orphans(cache_dir=cache_root, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_refused_symlink" and e["store"] == "orphans"
+    ]
+    assert len(matching) == 1
+    assert matching[0]["path"] == str(link)
+
+
+def test_logging_refused_outside_cache_root(tmp_path, monkeypatch):
+    # execute branch path-confinement refusal emits log.warning("prune_refused_outside_root").
+    from structlog.testing import capture_logs
+
+    from lgrep.tools import prune_orphans as module
+
+    escape_target = tmp_path / "escape-target"
+    escape_target.mkdir()
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+
+    def tampered(cache_dir, active_set=(), grace_seconds=None):
+        return [
+            {
+                "path": str(escape_target),
+                "reason": "missing_meta",
+                "bytes": 1024,
+                "project_path": None,
+            }
+        ]
+
+    monkeypatch.setattr(module, "find_orphans", tampered)
+
+    with capture_logs() as cap:
+        prune_orphans(cache_dir=cache_root, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_refused_outside_root" and e["store"] == "orphans"
+    ]
+    assert len(matching) == 1
+
+
+def test_logging_rmtree_failed(tmp_path, monkeypatch):
+    # execute branch shutil.rmtree OSError emits log.warning("prune_unlink_failed").
+    import shutil
+
+    from structlog.testing import capture_logs
+
+    orphan_dir = _make_cache_dir(tmp_path, "log-fail", with_meta=False, with_chunks=True)
+
+    original_rmtree = shutil.rmtree
+
+    def flaky_rmtree(path, *args, **kwargs):
+        if str(path) == str(orphan_dir):
+            raise PermissionError("blocked")
+        return original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr("lgrep.tools.prune_orphans.shutil.rmtree", flaky_rmtree)
+
+    with capture_logs() as cap:
+        prune_orphans(cache_dir=tmp_path, dry_run=False)
+
+    matching = [
+        e for e in cap
+        if e["event"] == "prune_unlink_failed"
+        and e["store"] == "orphans"
+        and e["path"] == str(orphan_dir)
+    ]
+    assert len(matching) == 1
+    assert "blocked" in matching[0]["error"]
