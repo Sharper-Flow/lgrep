@@ -1,0 +1,18 @@
+{
+  "archived_at": "2026-07-21T04:23:21.080Z",
+  "capabilities": [
+    "lgrep-symbol-store-lifecycle"
+  ],
+  "change_hash": "36ac30d88aa04bc58e0802e13f86833e48876e892cb436cbdcab613f90ac4299",
+  "change_id": "addSymbolStorePrune",
+  "completed_tasks": 5,
+  "created_at": "2026-07-21T02:36:36.204Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-21T04:14:44.771Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "80144737001d855be1f0942804a7e8376a206ae8e9d116aafed643603f803125",
+  "task_count": 5,
+  "title": "Add symbol store prune",
+  "version": "1"
+}

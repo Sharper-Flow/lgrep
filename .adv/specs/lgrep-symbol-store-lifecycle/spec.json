@@ -1,0 +1,245 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/spec.schema.json",
+  "name": "lgrep-symbol-store-lifecycle",
+  "title": "Lgrep Symbol Store Lifecycle",
+  "purpose": "Capability: Lgrep Symbol Store Lifecycle",
+  "version": "1.0.0",
+  "updated_at": "2026-07-21T04:23:21.080Z",
+  "requirements": [
+    {
+      "id": "rq-V7kP9mNx4hD",
+      "title": "Stale index classification by filesystem existence",
+      "body": "When `find_stale_indexes` scans the symbol store, each `index_*.json` file MUST be classified into exactly one of three stable reasons: `repo_path_enoent` (the `repo_path` field references a path that does not exist on disk), `unreadable_index_json` (the file exists but is not valid JSON), or `missing_repo_path_field` (the file is valid JSON but lacks a `repo_path` key). A file whose `repo_path` references an existing directory MUST NOT be classified as stale. Transient filesystem errors (e.g., `PermissionError` during `is_dir()`) MUST be treated as 'preserve, do not classify' rather than as stale.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-V7kP9mNx4hD.1",
+          "title": "repo_path field references deleted path",
+          "given": [
+            "a symbol index file `index_abc.json` exists in the storage directory",
+            "the file is valid JSON with `{\"repo_path\": \"/tmp/deleted-repo\", ...}`",
+            "the directory `/tmp/deleted-repo` does not exist on disk"
+          ],
+          "when": "find_stale_indexes scans the storage directory",
+          "then": [
+            "the file is classified with reason `repo_path_enoent`",
+            "the file appears in the returned stale list"
+          ]
+        },
+        {
+          "id": "rq-V7kP9mNx4hD.2",
+          "title": "Malformed JSON in index file",
+          "given": [
+            "a symbol index file `index_xyz.json` exists",
+            "the file contents are not valid JSON (truncated or malformed)"
+          ],
+          "when": "find_stale_indexes scans the storage directory",
+          "then": [
+            "the file is classified with reason `unreadable_index_json`",
+            "the file appears in the returned stale list"
+          ]
+        },
+        {
+          "id": "rq-V7kP9mNx4hD.3",
+          "title": "Valid JSON without repo_path key",
+          "given": [
+            "a symbol index file `index_def.json` exists",
+            "the file is valid JSON but lacks a `repo_path` key"
+          ],
+          "when": "find_stale_indexes scans the storage directory",
+          "then": [
+            "the file is classified with reason `missing_repo_path_field`",
+            "the file appears in the returned stale list"
+          ]
+        },
+        {
+          "id": "rq-V7kP9mNx4hD.4",
+          "title": "Healthy index not classified as stale",
+          "given": [
+            "a symbol index file `index_ok.json` exists",
+            "the file is valid JSON with `repo_path: /existing/repo`",
+            "the directory `/existing/repo` exists on disk"
+          ],
+          "when": "find_stale_indexes scans the storage directory",
+          "then": [
+            "the file is NOT classified as stale",
+            "the file does not appear in the returned stale list"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-5gL9xM2vHz",
+      "title": "Delete-time guards: path-confinement, TOCTOU, grace window, batch isolation",
+      "body": "When `dry_run=False`, `prune_symbols` MUST enforce four guards: (1) path-confinement — the resolved path of each index file MUST be strictly under the resolved storage root; tampered paths outside the root MUST be refused and recorded in `failures[]`; (2) TOCTOU — symlinks MUST be refused at scan time (skip silently) and at delete time (record in `failures[]`); (3) grace window — entries whose mtime is within `LGREP_PRUNE_MIN_AGE_S` seconds (default 3600, overridable via env var) AND whose reason is `unreadable_index_json` MUST be preserved; reasons `repo_path_enoent` and `missing_repo_path_field` bypass the grace check (they are unambiguous); (4) batch isolation — per-entry `unlink` failures MUST be captured in `failures[]` with the file path and error message, and MUST NOT abort processing of remaining entries.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-5gL9xM2vHz.1",
+          "title": "Path-confinement refuses out-of-root paths at delete time",
+          "given": [
+            "a stale index whose resolved path resolves to `/etc/passwd` (outside storage root)"
+          ],
+          "when": "prune_symbols(dry_run=False) processes the entry",
+          "then": [
+            "the entry is refused",
+            "the entry appears in `failures[]` with an explanatory error",
+            "the file `/etc/passwd` is not deleted"
+          ]
+        },
+        {
+          "id": "rq-5gL9xM2vHz.2",
+          "title": "TOCTOU refuses symlinks at delete time",
+          "given": [
+            "a stale index whose file is a symlink to another location"
+          ],
+          "when": "prune_symbols(dry_run=False) processes the entry",
+          "then": [
+            "the entry is refused",
+            "the entry appears in `failures[]`",
+            "the symlink target is not deleted"
+          ]
+        },
+        {
+          "id": "rq-5gL9xM2vHz.3",
+          "title": "Grace window preserves recent unreadable_index_json",
+          "given": [
+            "a stale index with reason `unreadable_index_json`",
+            "the file's mtime is 60 seconds ago",
+            "LGREP_PRUNE_MIN_AGE_S is set to 3600 (default)"
+          ],
+          "when": "prune_symbols(dry_run=False) processes the entry",
+          "then": [
+            "the entry is NOT deleted",
+            "the entry does not appear in `deleted_dirs` (or equivalent count field)",
+            "the entry is noted as grace-preserved in the report"
+          ]
+        },
+        {
+          "id": "rq-5gL9xM2vHz.4",
+          "title": "Per-entry unlink failure does not abort batch",
+          "given": [
+            "three stale index files in the storage directory",
+            "the second file raises `OSError` on `unlink()`"
+          ],
+          "when": "prune_symbols(dry_run=False) processes the batch",
+          "then": [
+            "the first file is deleted",
+            "the second file appears in `failures[]` with the OSError message",
+            "the third file is deleted (processing continues)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-3dV8kP6rBx",
+      "title": "lgrep gc umbrella invokes prune_symbols and nests result in combined report",
+      "body": "The `lgrep gc` command MUST invoke `prune_symbols` alongside the existing `prune_orphans` and `gc_worktree_meta` sweeps. The combined report dict MUST nest the prune_symbols result under a new top-level key spelled exactly `prune_symbols` (snake_case, matching the existing `prune_orphans` and `gc_worktree_meta` key convention). Existing report keys (`prune_orphans`, `gc_worktree_meta`) MUST be preserved with their respective shapes and values unchanged.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-3dV8kP6rBx.1",
+          "title": "gc combined report nests prune_symbols alongside existing keys",
+          "given": [
+            "the `lgrep gc` command is invoked with default flags"
+          ],
+          "when": "lgrep gc completes its sweep",
+          "then": [
+            "the combined report contains exactly the top-level keys `prune_orphans`, `gc_worktree_meta`, and `prune_symbols`",
+            "the `prune_orphans` and `gc_worktree_meta` values match what those functions return when invoked standalone",
+            "the `prune_symbols` value matches what `prune_symbols(...)` returns when invoked standalone with equivalent arguments"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-2bF6tR8nKp",
+      "title": "Dry-run default on every surface with reclaimed_bytes projection",
+      "body": "The core `prune_symbols(...)` function and every operator-facing surface (CLI subcommand `lgrep prune-symbols`, MCP tool `prune_symbols`) MUST default to `dry_run=True` when no explicit argument is provided. The dry-run response MUST include a `reclaimed_bytes` field equal to the projected sum of stale entry file sizes (each `Path(entry).stat().st_size`). The CLI MUST treat `--execute` and `--dry-run` as mutually exclusive flags and exit non-zero with a stderr message when both are passed.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-2bF6tR8nKp.1",
+          "title": "Default invocation preserves disk and reports projected bytes",
+          "given": [
+            "a storage directory with one stale index file of size 4096 bytes"
+          ],
+          "when": "prune_symbols() is called with no arguments",
+          "then": [
+            "no files are deleted from the storage directory",
+            "the returned report has `dry_run: true`",
+            "the returned report has `reclaimed_bytes: 4096`"
+          ]
+        },
+        {
+          "id": "rq-2bF6tR8nKp.2",
+          "title": "CLI rejects both --execute and --dry-run",
+          "given": [
+            "the CLI subcommand `lgrep prune-symbols`"
+          ],
+          "when": "invoked with both `--execute` and `--dry-run` flags simultaneously",
+          "then": [
+            "the process exits with a non-zero status code",
+            "an error message is written to stderr explaining the mutual exclusion"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-8sJ3vQ1wYz",
+      "title": "Non-local (github:) entries skipped upfront",
+      "body": "Entries whose `repo_path` field starts with the literal prefix `github:` MUST be skipped by `find_stale_indexes` before any stale classification logic runs. They MUST NOT appear in the returned stale list and MUST NOT be deleted by the execute path. These entries represent non-local indexes (e.g., `github:owner/name@ref`) with no local filesystem path to staleness-check.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-8sJ3vQ1wYz.1",
+          "title": "github: prefix skipped entirely",
+          "given": [
+            "a symbol index file with `repo_path: github:owner/name@ref`",
+            "the file is otherwise valid"
+          ],
+          "when": "find_stale_indexes scans the storage directory",
+          "then": [
+            "the file is NOT in the returned stale list",
+            "the file is preserved on disk after prune_symbols(dry_run=False) returns"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rq-7cT4wN1qJs",
+      "title": "MCP transport safety: non-stdio coerces dry_run=True",
+      "body": "The MCP `prune_symbols` tool MUST coerce `dry_run=True` when the MCP transport is not stdio (i.e., HTTP, streamable-http, or unknown). Transport kind is sourced from the application lifespan context. Unknown transport MUST be treated as non-local (defensive default). The tool's user-facing description MUST direct callers to use the CLI (`lgrep prune-symbols --execute`) for destructive prunes on shared deployments, mirroring the `prune_orphans` MCP tool description convention.",
+      "priority": "must",
+      "scenarios": [
+        {
+          "id": "rq-7cT4wN1qJs.1",
+          "title": "stdio transport allows caller-chosen dry_run",
+          "given": [
+            "an MCP request invokes `prune_symbols` with `dry_run: false`",
+            "the transport is stdio"
+          ],
+          "when": "the MCP handler processes the request",
+          "then": [
+            "the request proceeds with `dry_run: false`",
+            "destructive deletion is allowed"
+          ]
+        },
+        {
+          "id": "rq-7cT4wN1qJs.2",
+          "title": "HTTP transport coerces dry_run=True",
+          "given": [
+            "an MCP request invokes `prune_symbols` with `dry_run: false`",
+            "the transport is HTTP or streamable-http"
+          ],
+          "when": "the MCP handler processes the request",
+          "then": [
+            "the handler coerces `dry_run: true`",
+            "no files are deleted",
+            "the response indicates the coercion (e.g., `dry_run: true` in the report)"
+          ]
+        }
+      ]
+    }
+  ]
+}

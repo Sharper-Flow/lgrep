@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "change_id": "addSymbolStorePrune",
+  "delta_set_sha256": "feb56823be9d9309d8f83d07d5edcfb240af9239ac329737995f8c04c49812a1",
+  "capabilities": [
+    {
+      "capability": "lgrep-symbol-store-lifecycle",
+      "base_version": "0.0.0",
+      "target_version": "1.0.0",
+      "spec_sha256": "7dc4794d24228817e5f23e75d4ad005f75a8fe91bb28d70fcfac8a13b3b25cdc",
+      "document_sha256": "0e47c949bfe3a9eb2810f682259f9eb29f1312527661cdabdeba174f3026c212",
+      "requirement_sha256": {
+        "rq-V7kP9mNx4hD": "4ce3f7033528fc7c97aed22c61745fc23116456606123a271e169fd16f399010",
+        "rq-5gL9xM2vHz": "0e0e97fcb5107a0e3fac00cc69faceb616d0d71b8786ac3a710e1b504490081f",
+        "rq-3dV8kP6rBx": "3faabcd5421eb5bbff8ad21bf8cc1ec2058682b7ac51b64593d0bd1cca8054ce",
+        "rq-2bF6tR8nKp": "104f5a14c7c6205d925cbbbef32cb299c90ff02434d11961c29afdb8df50a95a",
+        "rq-8sJ3vQ1wYz": "26213afec14ad3424a9b60b49536516c61ea465d2a0442cdf3c97367b50facf7",
+        "rq-7cT4wN1qJs": "7aa8277f2c3550b79bd986f47b049359bafd6e453d37b647bebcebe7e1b2d338"
+      },
+      "dispositions": [
+        {
+          "deltaId": "dl-V7kP9mNx4hD",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-V7kP9mNx4hD"
+        },
+        {
+          "deltaId": "dl-5gL9xM2vHz",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-5gL9xM2vHz"
+        },
+        {
+          "deltaId": "dl-3dV8kP6rBx",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-3dV8kP6rBx"
+        },
+        {
+          "deltaId": "dl-2bF6tR8nKp",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-2bF6tR8nKp"
+        },
+        {
+          "deltaId": "dl-8sJ3vQ1wYz",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-8sJ3vQ1wYz"
+        },
+        {
+          "deltaId": "dl-7cT4wN1qJs",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-7cT4wN1qJs"
+        }
+      ]
+    }
+  ]
+}
