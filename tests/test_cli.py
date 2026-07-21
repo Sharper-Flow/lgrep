@@ -1,10 +1,11 @@
 """Tests for CLI search and index subcommands."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lgrep.cli import _cmd_gc, _cmd_init_ignore, main
+from lgrep.cli import _cmd_gc, _cmd_init_ignore, _cmd_prune_symbols, main
 from lgrep.cli import _cmd_index_semantic as _cmd_index
 from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
@@ -76,6 +77,16 @@ class TestCLIDispatch:
         with (
             patch("sys.argv", ["lgrep", "prune-orphans", "--help"]),
             patch("lgrep.cli._cmd_prune_orphans", return_value=0) as mock_prune,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_prune.assert_called_once_with(["--help"])
+
+    def test_main_dispatches_to_prune_symbols(self):
+        """'lgrep prune-symbols' should dispatch to _cmd_prune_symbols."""
+        with (
+            patch("sys.argv", ["lgrep", "prune-symbols", "--help"]),
+            patch("lgrep.cli._cmd_prune_symbols", return_value=0) as mock_prune,
         ):
             rc = main()
         assert rc == 0
@@ -657,10 +668,179 @@ class TestGcSubcommand:
         assert "mutually exclusive" in err
         mock_prune.assert_not_called()
 
-    def test_gc_dispatch(self, capsys):
-        """main() dispatches 'gc' subcommand."""
-        with patch("sys.argv", ["lgrep", "gc", "--help"]):
-            rc = main()
+
+class TestCmdPruneSymbols:
+    """Tests for lgrep prune-symbols CLI subcommand."""
+
+    def test_prune_symbols_help(self, capsys):
+        """lgrep prune-symbols --help should print usage text."""
+        rc = _cmd_prune_symbols(["--help"])
         assert rc == 0
         out = capsys.readouterr().out
-        assert "gc" in out
+        assert "prune-symbols" in out
+        assert "--execute" in out
+        assert "--storage-dir" in out
+
+    @patch("lgrep.tools.prune_symbols.prune_symbols")
+    def test_prune_symbols_dry_run_default(self, mock_prune, capsys, tmp_path):
+        """lgrep prune-symbols (no flags) runs dry_run and reports reclaim."""
+        mock_prune.return_value = {
+            "dry_run": True,
+            "files_examined": 1,
+            "stale_indexes": [],
+            "skipped_active": [],
+            "deleted_files": 0,
+            "reclaimed_bytes": 42,
+            "failures": [],
+            "_meta": {},
+        }
+
+        rc = _cmd_prune_symbols(["--storage-dir", str(tmp_path)])
+        out = capsys.readouterr().out
+        data = json.loads(out)
+
+        assert rc == 0
+        assert mock_prune.call_args.kwargs["dry_run"] is True
+        assert data["reclaimed_bytes"] == 42
+
+    @patch("lgrep.tools.prune_symbols.prune_symbols")
+    def test_prune_symbols_execute_flag(self, mock_prune, capsys, tmp_path):
+        """lgrep prune-symbols --execute deletes with dry_run=False."""
+        mock_prune.return_value = {
+            "dry_run": False,
+            "files_examined": 1,
+            "stale_indexes": [],
+            "skipped_active": [],
+            "deleted_files": 1,
+            "reclaimed_bytes": 42,
+            "failures": [],
+            "_meta": {},
+        }
+
+        rc = _cmd_prune_symbols(["--execute", "--storage-dir", str(tmp_path)])
+
+        assert rc == 0
+        assert mock_prune.call_args.kwargs["dry_run"] is False
+
+    @patch("lgrep.tools.prune_symbols.prune_symbols")
+    def test_prune_symbols_rejects_execute_and_dry_run_together(self, mock_prune, capsys):
+        """--execute and --dry-run are mutually exclusive."""
+        rc = _cmd_prune_symbols(["--execute", "--dry-run"])
+
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "mutually exclusive" in err
+        mock_prune.assert_not_called()
+
+    def test_prune_symbols_execute_deletes_stale_index(self, tmp_path, monkeypatch, capsys):
+        """lgrep prune-symbols --execute deletes a stale symbol index file."""
+        monkeypatch.setenv("LGREP_PRUNE_MIN_AGE_S", "0")
+        storage_dir = tmp_path / "symbols"
+        storage_dir.mkdir()
+
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        index_file = storage_dir / "index_1234567890abcdef.json"
+        index_file.write_text(json.dumps({"repo_path": str(repo_path)}))
+
+        # Move the index file outside the grace window so the default grace
+        # check does not preserve it.
+        old_time = 0
+        index_file.touch()
+        os.utime(index_file, (old_time, old_time))
+
+        # Now the repo is gone, so the index is stale.
+        repo_path.rmdir()
+
+        rc = _cmd_prune_symbols(["--execute", "--storage-dir", str(storage_dir)])
+        out = capsys.readouterr().out
+        data = json.loads(out)
+
+        assert rc == 0
+        assert data["dry_run"] is False
+        assert data["deleted_files"] == 1
+        assert not index_file.exists()
+
+
+class TestGcPruneSymbols:
+    """Regression tests for the prune_symbols integration in gc."""
+
+    def test_gc_combined_report_includes_prune_symbols(self, tmp_path, monkeypatch, capsys):
+        """lgrep gc combined report contains prune_symbols alongside existing keys."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        symbol_report = {
+            "dry_run": True,
+            "files_examined": 0,
+            "stale_indexes": [],
+            "skipped_active": [],
+            "deleted_files": 0,
+            "reclaimed_bytes": 0,
+            "failures": [],
+            "_meta": {},
+        }
+
+        with (
+            patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
+            patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
+            patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+        ):
+            mock_prune.return_value = {
+                "dry_run": True,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+            mock_gc.return_value = {"removed_aliases": 0, "examined": 0}
+            mock_prune_symbols.return_value = symbol_report
+
+            rc = _cmd_gc([])
+            out = capsys.readouterr().out
+            data = json.loads(out)
+
+        assert rc == 0
+        assert set(data.keys()) == {"prune_orphans", "gc_worktree_meta", "prune_symbols"}
+        assert data["prune_symbols"] == symbol_report
+        assert data["prune_orphans"] == mock_prune.return_value
+        assert data["gc_worktree_meta"] == mock_gc.return_value
+
+    def test_gc_preserves_existing_key_behavior(self, tmp_path, monkeypatch, capsys):
+        """lgrep gc still passes dry_run through to prune_orphans and gc_worktree_meta."""
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+
+        with (
+            patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
+            patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
+            patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+        ):
+            mock_prune.return_value = {
+                "dry_run": True,
+                "dirs_examined": 0,
+                "orphans": [],
+                "skipped_active": [],
+                "deleted_dirs": 0,
+                "reclaimed_bytes": 0,
+                "failures": [],
+            }
+            mock_gc.return_value = {"removed_aliases": 0, "examined": 0}
+            mock_prune_symbols.return_value = {"reclaimed_bytes": 0}
+
+            rc = _cmd_gc(["--execute"])
+
+        assert rc == 0
+        assert mock_prune.call_args[1]["dry_run"] is False
+        assert mock_gc.call_args[1]["dry_run"] is False
+        assert mock_prune_symbols.call_args[1]["dry_run"] is False
+
+    def test_gc_dispatch_prune_symbols(self):
+        """main() dispatches 'prune-symbols' subcommand."""
+        with (
+            patch("sys.argv", ["lgrep", "prune-symbols", "--help"]),
+            patch("lgrep.cli._cmd_prune_symbols", return_value=0) as mock_prune,
+        ):
+            rc = main()
+        assert rc == 0
+        mock_prune.assert_called_once_with(["--help"])

@@ -300,6 +300,39 @@ class PruneOrphansResult(TypedDict):
     _meta: _Meta
 
 
+class PruneSymbolsEntry(TypedDict):
+    """Single stale symbol index entry in a prune report."""
+
+    path: str
+    reason: str  # one of StaleReason values; kept loose for cross-module reuse
+    bytes: int
+    repo_path: str | None
+
+
+class PruneSymbolsFailureEntry(TypedDict):
+    """Single failure entry in a symbol prune report."""
+
+    path: str
+    error: str
+
+
+class PruneSymbolsResult(TypedDict):
+    """Response for the prune_symbols maintenance tool.
+
+    Mirrors ``lgrep.tools.prune_symbols.PruneSymbolsReport`` at the MCP layer
+    so all MCP tool responses share the same response-pattern convention.
+    """
+
+    dry_run: bool
+    files_examined: int
+    stale_indexes: list[PruneSymbolsEntry]
+    skipped_active: list[str]
+    deleted_files: int
+    reclaimed_bytes: int
+    failures: list[PruneSymbolsFailureEntry]
+    _meta: _Meta
+
+
 class WorktreeInvalidationEntry(TypedDict):
     """Single worktree invalidation result entry."""
 

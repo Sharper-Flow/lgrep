@@ -24,6 +24,10 @@ import structlog
 
 log = structlog.get_logger()
 
+# Default symbol index storage directory. Importable so sibling modules
+# (tools/prune_symbols.py) do not duplicate this default and drift.
+DEFAULT_SYMBOLS_DIR = Path.home() / ".cache" / "lgrep" / "symbols"
+
 
 @dataclass
 class CodeIndex:
@@ -82,7 +86,7 @@ class IndexStore:
                          ~/.cache/lgrep/symbols/
         """
         if storage_dir is None:
-            storage_dir = Path.home() / ".cache" / "lgrep" / "symbols"
+            storage_dir = DEFAULT_SYMBOLS_DIR
         self._dir = Path(storage_dir)
 
     def _index_path(self, repo_path: str) -> Path:

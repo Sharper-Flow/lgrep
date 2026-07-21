@@ -1,9 +1,10 @@
 """Maintenance MCP tools for the lgrep server.
 
-Currently exposes ``prune_orphans`` and ``invalidate_worktree_cache``.
-Kept in its own module because these are neither semantic-search tools
-nor symbol-intelligence tools — grouping them with either would confuse
-the response contracts and the tool organisation in ``@mcp.tool`` metadata.
+Currently exposes ``prune_orphans``, ``prune_symbols`` and
+``invalidate_worktree_cache``. Kept in its own module because these are
+neither semantic-search tools nor symbol-intelligence tools — grouping
+them with either would confuse the response contracts and the tool
+organisation in ``@mcp.tool`` metadata.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pydantic import Field
 from lgrep.server import mcp, time_tool
 from lgrep.server.responses import (
     PruneOrphansResult,  # noqa: TC001 — FastMCP evaluates return annotation at runtime
+    PruneSymbolsResult,  # noqa: TC001
     WorktreeInvalidationResult,  # noqa: TC001
 )
 from lgrep.tools._meta import make_meta
@@ -26,6 +28,7 @@ from lgrep.tools.invalidate_worktree import (
     invalidate_worktree_cache as _invalidate_worktree_cache,
 )
 from lgrep.tools.prune_orphans import prune_orphans as _prune_orphans
+from lgrep.tools.prune_symbols import prune_symbols as _prune_symbols
 
 
 async def _run_blocking(
@@ -123,6 +126,56 @@ async def prune_orphans(
         "prune_orphans",
         None,
         _prune_orphans,
+        dry_run=effective_dry_run,
+        active_set=active_set,
+    )
+
+
+@mcp.tool(
+    description=(
+        "Prune stale symbol-store index files. Dry-run by default; set "
+        "dry_run=false to delete. Skips active in-memory projects. "
+        "Destructive on HTTP transports is refused for safety — run the "
+        "CLI (`lgrep prune-symbols --execute`) instead. "
+        "MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+@time_tool
+async def prune_symbols(
+    dry_run: Annotated[
+        bool,
+        Field(description="Preview only when true; actually delete stale indexes when false."),
+    ] = True,
+    ctx: Context | None = None,
+) -> PruneSymbolsResult:
+    """Inspect or delete stale symbol-store index files.
+
+    Applies a transport-aware safety: if the MCP transport is not stdio
+    (i.e. a shared HTTP/SSE deployment) the handler coerces
+    ``dry_run=True`` regardless of the caller's request. Operators that
+    need destructive prunes on shared servers should run the CLI
+    (``lgrep prune-symbols --execute``) out-of-band.
+    """
+    active_set: list[str] = []
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+        active_set = list(app_ctx.projects.keys())
+
+    effective_dry_run = dry_run
+    if not dry_run and not _transport_is_local(ctx):
+        effective_dry_run = True
+
+    return await _run_blocking(
+        ctx,
+        "prune_symbols",
+        None,
+        _prune_symbols,
         dry_run=effective_dry_run,
         active_set=active_set,
     )

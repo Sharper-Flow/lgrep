@@ -38,6 +38,9 @@ def main() -> int:
     if args and args[0] == "prune-orphans":
         return _cmd_prune_orphans(args[1:])
 
+    if args and args[0] == "prune-symbols":
+        return _cmd_prune_symbols(args[1:])
+
     if args and args[0] == "gc":
         return _cmd_gc(args[1:])
 
@@ -102,6 +105,7 @@ def _print_help() -> None:
     print("  index-symbols [path]           index symbols for a project")
     print("  init-ignore [path]             create recommended .lgrepignore")
     print("  prune-orphans                  inspect or delete orphan semantic caches")
+    print("  prune-symbols                  inspect or delete stale symbol-store indexes")
     print("  gc                             prune orphans + clean worktree aliases")
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
@@ -344,13 +348,71 @@ def _cmd_prune_orphans(args: list[str]) -> int:
     return 0
 
 
+def _cmd_prune_symbols(args: list[str]) -> int:
+    """Inspect or delete stale symbol-store index files."""
+    if "--help" in args or "-h" in args:
+        print("usage: lgrep prune-symbols [--execute] [--dry-run] [--storage-dir DIR]")
+        print()
+        print("Inspect or delete stale symbol-store index files.")
+        print()
+        print("options:")
+        print("  --execute                      actually delete stale symbol indexes")
+        print("  --dry-run                      preview only (default)")
+        print("  --storage-dir DIR              override symbol index storage directory")
+        print()
+        print("Deletion is refused for any path outside the resolved storage")
+        print("directory and for any symlinked index file. Recently-modified")
+        print("indexes (default 1 hour) are preserved; override with")
+        print("LGREP_PRUNE_MIN_AGE_S=<seconds>.")
+        return 0
+
+    from pathlib import Path
+
+    from lgrep.tools.prune_symbols import prune_symbols
+
+    # Mutual exclusion: refuse ambiguous intent if both flags are passed.
+    if "--execute" in args and "--dry-run" in args:
+        print(
+            "error: --execute and --dry-run are mutually exclusive",
+            file=sys.stderr,
+        )
+        return 2
+
+    dry_run = True
+    storage_dir = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--execute":
+            dry_run = False
+            i += 1
+        elif args[i] == "--dry-run":
+            dry_run = True
+            i += 1
+        elif args[i] == "--storage-dir" and i + 1 < len(args):
+            storage_dir = Path(args[i + 1]).resolve()
+            i += 2
+        elif args[i].startswith("-"):
+            print(f"Unknown option: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+
+    report = prune_symbols(dry_run=dry_run, storage_dir=storage_dir)
+    print(json.dumps(report))
+    return 0
+
+
 def _cmd_gc(args: list[str]) -> int:
-    """Run garbage collection: prune orphans + clean worktree aliases."""
+    """Run garbage collection: prune orphans + clean worktree aliases + prune symbol indexes."""
     if "--help" in args or "-h" in args:
         print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR]")
         print()
-        print("Run garbage collection on semantic caches.")
-        print("Combines orphan pruning with worktree alias cleanup.")
+        print("Run garbage collection across both on-disk stores.")
+        print("Combines three sweeps:")
+        print("  - prune_orphans      whole orphan semantic-cache directories")
+        print("  - gc_worktree_meta   stale worktree aliases inside live cache dirs")
+        print("  - prune_symbols      stale symbol-store index_*.json files")
         print()
         print("options:")
         print("  --execute                      actually delete orphan caches")
@@ -361,6 +423,7 @@ def _cmd_gc(args: list[str]) -> int:
     from pathlib import Path
 
     from lgrep.tools.prune_orphans import gc_worktree_meta, prune_orphans
+    from lgrep.tools.prune_symbols import prune_symbols
 
     # Mutual exclusion (same pattern as _cmd_prune_orphans)
     if "--execute" in args and "--dry-run" in args:
@@ -390,13 +453,16 @@ def _cmd_gc(args: list[str]) -> int:
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
 
-    # Run both passes: orphan whole-dir cleanup + alias entry cleanup.
+    # Run all three passes: orphan whole-dir cleanup, alias entry cleanup,
+    # and stale symbol-store index cleanup.
     prune_report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
     meta_report = gc_worktree_meta(dry_run=dry_run, cache_dir=cache_dir)
+    symbols_report = prune_symbols(dry_run=dry_run)
 
     combined = {
         "prune_orphans": prune_report,
         "gc_worktree_meta": meta_report,
+        "prune_symbols": symbols_report,
     }
     print(json.dumps(combined))
     return 0

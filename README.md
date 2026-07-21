@@ -273,6 +273,25 @@ Each orphan is deleted independently. If `shutil.rmtree` fails for one entry (fo
 
 Deletion is refused for any path outside the resolved cache directory (path-confinement guard) and for any symlinked cache entry (TOCTOU guard) — both show up in `failures[]` rather than as successful deletes.
 
+### 6. Optional: inspect or prune stale symbol-store indexes
+
+```bash
+lgrep prune-symbols --dry-run
+lgrep prune-symbols --execute --storage-dir /path/to/storage
+```
+
+`prune-symbols` is dry-run by default. Use `--execute` to actually delete stale symbol-store index files (`index_<hash>.json`). `--storage-dir` overrides `LGREP_SYMBOLS_DIR` for a single run (default: `~/.cache/lgrep/symbols/`). `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_symbols` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+
+**Grace window.** Recently modified index files are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). Only the `unreadable_index_json` reason is grace-eligible; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass the grace check because they are unambiguous.
+
+**Transport-aware MCP safety.** When lgrep is reached over a shared transport (for example `streamable-http`), the MCP tool coerces `dry_run=True` regardless of the caller's request. Destructive symbol-store prunes on shared deployments must go through the CLI (`lgrep prune-symbols --execute`) so the operator is explicit.
+
+### Troubleshooting `prune-symbols --execute`
+
+Each stale index is deleted independently. If an unlink fails for one entry (for example a lingering file lock or permission issue), the batch continues and the failure is recorded in the response under `failures[]` as `{path, error}`; the rest of the reclaim still lands. Re-run `lgrep prune-symbols --execute` after addressing the error, or inspect with `--dry-run` first to confirm the stale index is still present.
+
+Deletion is refused for any path outside the resolved storage directory (path-confinement guard) and for any symlinked index file (TOCTOU guard) — both show up in `failures[]` rather than as successful deletes.
+
 ## First-use workflow
 
 Typical OpenCode flow:
@@ -370,6 +389,7 @@ Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If yo
 | `lgrep_get_symbols(symbol_ids, path)` | Retrieve multiple symbols |
 | `lgrep_invalidate_cache(path)` | Drop the symbol index for a repo |
 | `lgrep_prune_orphans(dry_run=True)` | Report (or with `dry_run=False`, delete) orphan semantic cache dirs; skips active projects and the `symbols/` cache |
+| `lgrep_prune_symbols(dry_run=True)` | Report (or with `dry_run=False`, delete) stale symbol-store index files; skips active projects and non-local `github:` entries |
 
 ### Symbol ID format
 
@@ -420,6 +440,7 @@ Security notes:
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
 | `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
+| `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
 | `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
 
@@ -448,7 +469,7 @@ lgrep:
 - Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent agents cannot create unbounded blocking work.
 - Use `lgrep_diagnostics` when investigating high CPU/thread count. It reports PID, uptime, loaded projects, worker limit, active jobs, recent abandoned/finished jobs, and full local project paths without exposing API keys or environment values.
 - `lgrep_status_semantic(path="")` is intentionally cheap and memory-only. Pass a specific `path` when you need deep file/chunk counts.
-- Destructive cache cleanup over shared HTTP is forced to dry-run; run `lgrep prune-orphans --execute` from a local shell when an operator intentionally wants deletion.
+- Destructive cache cleanup over shared HTTP is forced to dry-run; run `lgrep prune-orphans --execute` (or `lgrep prune-symbols --execute` for symbol indexes) from a local shell when an operator intentionally wants deletion.
 
 Agent fallback rule: if a default hybrid `lgrep_search_semantic` call times out
 or hits a deadline, retry once with `hybrid:false` and a small limit such as
@@ -507,12 +528,13 @@ With this flag, lgrep resolves each project path through `git rev-parse --git-co
 invalidate_worktree_cache(paths: ["/path/to/worktree"])
 ```
 
-**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs two passes:
+**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs three passes:
 
 1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
 2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files (worktrees that were deleted without calling `invalidate_worktree_cache`)
+3. `prune_symbols` — deletes stale symbol-store index files (`index_<hash>.json`) whose `repo_path` is missing, unreadable, or absent from the JSON
 
-Both passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects.
+The `prune_orphans` and `gc_worktree_meta` passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects. The `prune_symbols` pass respects the same grace window, but only for the `unreadable_index_json` reason; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass grace, and non-local `github:` entries are skipped.
 
 ## Troubleshooting
 
