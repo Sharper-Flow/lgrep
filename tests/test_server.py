@@ -1712,6 +1712,17 @@ class TestBackgroundReindex:
             *[_schedule_background_reindex(app_ctx, project_path, project) for _ in range(5)]
         )
 
+        # Let the scheduled task start.  There must be exactly one background
+        # task, rather than one leader plus untracked follower tasks; shutdown
+        # relies on this registry to cancel all reindex work.
+        await asyncio.sleep(0)
+        active_background_tasks = [
+            task
+            for task in asyncio.all_tasks()
+            if task.get_name() == f"bg_reindex:{project_path}" and not task.done()
+        ]
+        assert len(active_background_tasks) == 1
+
         # Wait for all spawned background tasks to finish.
         while app_ctx._bg_reindex_tasks:
             await asyncio.sleep(0.01)

@@ -412,7 +412,12 @@ async def _schedule_background_reindex(
     cancellation.
     """
     async with app_ctx._lock:
-        if project_path in app_ctx._indexing_events:
+        # The event is installed by the background task after it starts.  Use
+        # the task registry too: concurrent scheduler calls can otherwise all
+        # run before the first task gets its initial time slice, producing
+        # untracked follower tasks and leaving the leader uncancellable during
+        # shutdown.
+        if project_path in app_ctx._indexing_events or project_path in app_ctx._bg_reindex_tasks:
             return  # already in flight
         task = asyncio.create_task(
             _auto_index_project_single_flight(app_ctx, project_path, path_obj),
