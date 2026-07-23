@@ -1,0 +1,1337 @@
+{
+  "id": "addSkipStalenessReindexFlag",
+  "title": "Add skip-staleness-reindex flag",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-23T15:04:47.054Z",
+  "tasks": [
+    {
+      "id": "tk-3bdaac324d11",
+      "title": "Background reindex scheduler + task registry (foundation)",
+      "type": "code",
+      "section": "Scheduler",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-23T15:40:09.342Z",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC2",
+          "C2"
+        ],
+        "respects": [
+          "C3"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T15:44:50.570Z",
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "addSkipStalenessReindexFlag",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+          "task_id": "tk-3bdaac324d11",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-3bdaac324d11"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "src/lgrep/server/lifecycle.py",
+            "tests/test_server.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "part1-red-001",
+              "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex -v --tb=short",
+              "exit_code": 1,
+              "summary": "RED: ImportError for _schedule_background_reindex (expected)"
+            },
+            {
+              "test_run_id": "part1-green-001",
+              "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex -v --tb=short",
+              "exit_code": 0,
+              "summary": "GREEN: test_background_reindex_dedupes_concurrent_stale_searches, test_background_reindex_failure_leaves_index_stale_and_serves pass"
+            },
+            {
+              "test_run_id": "full-suite-662",
+              "command": "uv run --extra dev pytest tests/ --tb=short",
+              "exit_code": 0,
+              "summary": "662 passed, 16 warnings in 18.88s"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Implemented _on_bg_reindex_done to log {'error': ...} return values from _auto_index_project_single_flight as bg_reindex_failed",
+              "why": "The existing single-flight helper swallows index_all failures and returns an error dict; without this, background failures would be silently logged as success."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "None",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Part 1 complete: LgrepContext._bg_reindex_tasks registry, _schedule_background_reindex, and _on_bg_reindex_done implemented. Part 2 and Part 3 implemented in same session.",
+            "suggested_next_action": "Review Part 1 diff and proceed to Part 2 (tk-a484560f4ff4) and Part 3 (tk-4e5d4ad5db2e) reports."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part1-red-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part1-green-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+            }
+          ]
+        }
+      ],
+      "verification": "Acceptance review remediation (adv-reviewer verdict READY): fixed a race in _schedule_background_reindex — concurrent schedulers could all pass the `not in _indexing_events` check before the leader task installed its event (event is set async post-time-slice), spawning untracked follower tasks uncancellable on shutdown. Added `or project_path in app_ctx._bg_reindex_tasks` to the dedup (registry is set synchronously under the same lock, closing the window). Sharpened test_background_reindex_dedupes_concurrent_stale_searches to assert exactly one active bg_reindex task after sleep(0). Verified: 14 passed (TestBackgroundReindex + cancellation), full suite 662 passed.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_server.py"
+      ],
+      "touched_files": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_server.py"
+      ],
+      "checkpointSha": "dfc42b7c94b93e42c9f96fd900b9f17baae85fa5",
+      "completedAt": "2026-07-23T16:15:21.884Z",
+      "completed_at": "2026-07-23T16:15:21.884Z"
+    },
+    {
+      "id": "tk-b195233ff137",
+      "title": "Spec deltas",
+      "type": "docs",
+      "section": "Specs",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-07-23T15:40:09.482Z",
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC5"
+        ],
+        "verifies": [
+          "AC5"
+        ]
+      },
+      "evidence_policy": "review",
+      "evidence_plan": {
+        "policy": "review",
+        "proof_target": "Structured review conclusion",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T16:06:35.554Z",
+      "verification": "Added requirement rq-search-never-blocks-on-reindex (MUST, 4 GWT scenarios) to docs/specs/lgrepSemanticCacheLifecycle.md; bumped spec doc v1.0.0→v1.1.0. GAP (surfaced, not blocking): the lgrepDaemonOperationalSafety amend (rq-daemon-shared-mode01.1) could not be applied — adv_delta_add/modify reject camelCase capability keys (regex requires kebab-case) and are lifecycle-gated to proposal/discovery; no docs/specs/lgrepDaemonOperationalSafety.md exists to edit directly, and the .adv/specs store is ADV-managed state (no direct edits). Substance (no operator knob required for correctness) is captured in the new requirement body + README. The camelCase→kebab capability migration or a delta-tooling fix is a follow-up.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [
+        "README.md",
+        "docs/specs/lgrepSemanticCacheLifecycle.md"
+      ],
+      "touched_files": [
+        "README.md",
+        "docs/specs/lgrepSemanticCacheLifecycle.md"
+      ],
+      "checkpointSha": "e6068eca28af5ca35a3feac45ed32777ed009e77",
+      "completedAt": "2026-07-23T16:08:14.475Z",
+      "completed_at": "2026-07-23T16:08:14.475Z"
+    },
+    {
+      "id": "tk-4e5d4ad5db2e",
+      "title": "Shutdown cancel-and-await for background reindex tasks",
+      "type": "code",
+      "section": "Shutdown",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-07-23T15:40:22.265Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bdaac324d11"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC4"
+        ],
+        "respects": [
+          "C3"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "addSkipStalenessReindexFlag",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+          "task_id": "tk-4e5d4ad5db2e",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-4e5d4ad5db2e"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "src/lgrep/server/lifecycle.py",
+            "tests/test_runtime_cancellation.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "part3-red-001",
+              "command": "uv run --extra dev pytest tests/test_runtime_cancellation.py::test_background_reindex_cancelled_on_shutdown -v --tb=short",
+              "exit_code": 1,
+              "summary": "RED: _shutdown did not cancel/await background task (expected)"
+            },
+            {
+              "test_run_id": "part3-green-001",
+              "command": "uv run --extra dev pytest tests/test_runtime_cancellation.py::test_background_reindex_cancelled_on_shutdown -v --tb=short",
+              "exit_code": 0,
+              "summary": "GREEN: test_background_reindex_cancelled_on_shutdown passes"
+            },
+            {
+              "test_run_id": "full-suite-662",
+              "command": "uv run --extra dev pytest tests/ --tb=short",
+              "exit_code": 0,
+              "summary": "662 passed, 16 warnings in 18.88s"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Added a bounded active-job drain loop in _shutdown after gather returns",
+              "why": "asyncio.gather waits for the task coroutine to finish, but abandoned ThreadPoolExecutor futures update RuntimeJob terminal status via a done callback that may fire afterwards; polling active jobs ensures terminal state is observable before runtime.shutdown()."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "None",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Part 3 complete: _shutdown cancels and awaits outstanding background reindex tasks before runtime.shutdown(), with a bounded drain for terminal RuntimeJob status. Full suite (662 tests) passes.",
+            "suggested_next_action": "Review Part 3 diff; all code tasks complete. Next pending tasks are spec deltas (tk-b195233ff137) and README/docs (tk-7ac3aa0e2d76)."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part3-red-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part3-green-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+            }
+          ]
+        }
+      ],
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T16:05:10.974Z",
+      "verification": "_shutdown cancels outstanding background reindex tasks, awaits gather(return_exceptions=True), adds a bounded 2s active-job drain so abandoned executor futures reach terminal RuntimeJob status before runtime.shutdown(), then clears the registry. Verified: test_background_reindex_cancelled_on_shutdown passes (72 passed in touched files). RED→GREEN per ENGINEER_REPORT.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "a247ae4cbe2d6d9292ec452c83eeb89abda932ce",
+      "completedAt": "2026-07-23T16:05:27.148Z",
+      "completed_at": "2026-07-23T16:05:27.148Z"
+    },
+    {
+      "id": "tk-a484560f4ff4",
+      "title": "Decouple search path from awaited reindex",
+      "type": "code",
+      "section": "Search path",
+      "status": "done",
+      "priority": 2,
+      "created_at": "2026-07-23T15:40:22.295Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bdaac324d11"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC3"
+        ],
+        "verifies": [
+          "SC1",
+          "SC2"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "addSkipStalenessReindexFlag",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+          "task_id": "tk-a484560f4ff4",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-a484560f4ff4"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "src/lgrep/server/tools_semantic.py",
+            "tests/test_server.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "part2-red-001",
+              "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex::test_stale_search_does_not_await_reindex tests/test_server.py::TestBackgroundReindex::test_background_reindex_refreshes_next_search -v --tb=short",
+              "exit_code": 1,
+              "summary": "RED: assertions failed because _execute_search still awaited _auto_index_project_single_flight (expected)"
+            },
+            {
+              "test_run_id": "part2-green-001",
+              "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex::test_stale_search_does_not_await_reindex tests/test_server.py::TestBackgroundReindex::test_background_reindex_refreshes_next_search -v --tb=short",
+              "exit_code": 0,
+              "summary": "GREEN: test_stale_search_does_not_await_reindex, test_background_reindex_refreshes_next_search pass"
+            },
+            {
+              "test_run_id": "full-suite-662",
+              "command": "uv run --extra dev pytest tests/ --tb=short",
+              "exit_code": 0,
+              "summary": "662 passed, 16 warnings in 18.88s"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Updated existing TestStalenessPreflight tests to patch lifecycle._auto_index_project_single_flight and wait for _bg_reindex_tasks",
+              "why": "_execute_search now routes through _schedule_background_reindex in lifecycle.py, so the patch target and timing needed to change to keep the assertions meaningful."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "Updated two existing staleness pre-flight tests to remain valid under the new non-blocking search path; no other same-pattern issues found.",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Part 2 complete: _execute_search now calls _schedule_background_reindex and serves the current index immediately. Existing staleness pre-flight tests updated to match new routing.",
+            "suggested_next_action": "Review Part 2 diff and proceed to Part 3 (tk-4e5d4ad5db2e) report."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part2-red-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: part2-green-001"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+            }
+          ]
+        }
+      ],
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T16:05:10.774Z",
+      "verification": "_execute_search (tools_semantic.py:191) now calls await _schedule_background_reindex(...) and serves the current index immediately; no index_all awaited on the search path. Verified: 72 passed in touched files (incl. test_stale_search_does_not_await_reindex, test_background_reindex_refreshes_next_search). Existing staleness pre-flight tests updated to new routing (patch lifecycle, wait on _bg_reindex_tasks). RED→GREEN per ENGINEER_REPORT.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "a247ae4cbe2d6d9292ec452c83eeb89abda932ce",
+      "completedAt": "2026-07-23T16:05:27.150Z",
+      "completed_at": "2026-07-23T16:05:27.150Z"
+    },
+    {
+      "id": "tk-93db4c0f05d2",
+      "title": "Full-suite verification + guardrail preservation",
+      "type": "verification",
+      "section": "Verification",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-07-23T15:40:39.708Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-3bdaac324d11"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-a484560f4ff4"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-4e5d4ad5db2e"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "contract_refs": {
+        "verifies": [
+          "AC4",
+          "SC1",
+          "SC2"
+        ]
+      },
+      "evidence_policy": "test",
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T16:08:36.543Z",
+      "verification": "Full suite green: 662 passed, 16 warnings, exit 0 (uv run --extra dev pytest tests/). Includes the 5 new tests (test_stale_search_does_not_await_reindex, test_background_reindex_dedupes_concurrent_stale_searches, test_background_reindex_failure_leaves_index_stale_and_serves, test_background_reindex_refreshes_next_search, test_background_reindex_cancelled_on_shutdown) AND preserved guardrails (test_warm_path_does_not_call_index_all, test_check_staleness_deadline_returns_fresh, cancellation tests). Conflict-marker guard clean. Warm path + search_symbols untouched. AC4/SC1/SC2 demonstrated end-to-end.",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "e6068eca28af5ca35a3feac45ed32777ed009e77",
+      "completedAt": "2026-07-23T16:09:15.597Z",
+      "completed_at": "2026-07-23T16:09:15.597Z"
+    },
+    {
+      "id": "tk-7ac3aa0e2d76",
+      "title": "README / shared-deployment docs",
+      "type": "docs",
+      "section": "Docs",
+      "status": "done",
+      "priority": 3,
+      "created_at": "2026-07-23T15:40:39.710Z",
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-a484560f4ff4"
+        }
+      ],
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "contract_refs": {
+        "implements": [
+          "AC5"
+        ],
+        "respects": [
+          "DONT1"
+        ]
+      },
+      "evidence_policy": "review",
+      "evidence_plan": {
+        "policy": "review",
+        "proof_target": "Structured review conclusion",
+        "stage": "stage-v2",
+        "provenance": "new"
+      },
+      "assignedTo": "agent",
+      "started_at": "2026-07-23T16:07:59.846Z",
+      "verification": "Updated README \"Stale semantic results\" troubleshooting section: search now serves current index immediately and triggers a background single-flight refresh (never blocks on re-embed); watcher (LGREP_AUTO_WATCH) framed as incremental-freshness optimization, not a correctness dependency; index_semantic positioned for guaranteed-fresh / first-time only. No LGREP_SKIP_STALENESS_REINDEX flag added (DONT1 respected).",
+      "summary": "Task checkpoint completed",
+      "implementation_summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "touched_files": [],
+      "checkpointSha": "e6068eca28af5ca35a3feac45ed32777ed009e77",
+      "completedAt": "2026-07-23T16:08:25.282Z",
+      "completed_at": "2026-07-23T16:08:25.282Z"
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "addSkipStalenessReindexFlag",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:design-validation"
+      },
+      "agent": "adv-researcher",
+      "topic": "Independent design validation: non-blocking stale-index reindex",
+      "sources": [
+        {
+          "label": "Local lifecycle single-flight and shutdown",
+          "locator": "src/lgrep/server/lifecycle.py:137-159,374-494",
+          "summary": "Existing shutdown does not cancel tasks; single-flight owns its event under the asyncio lock, submits index_all via RuntimeSupervisor, refreshes latest_indexed_at before the finally block clears the event."
+        },
+        {
+          "label": "Local runtime supervisor",
+          "locator": "src/lgrep/server/runtime.py:119-170,184-196,235-269",
+          "summary": "run_blocking creates structured jobs in the bounded executor and only signals cooperative cancellation when its awaiting coroutine is cancelled; shutdown marks jobs and uses wait=False."
+        },
+        {
+          "label": "Python asyncio documentation",
+          "locator": "https://docs.python.org/3/library/asyncio-task.html",
+          "summary": "create_task schedules on the running loop and requires a strong task reference; cancellation must be observed/awaited for cleanup, and Task.exception raises CancelledError for a cancelled task."
+        }
+      ],
+      "architecture_assessment": "Default stale-serving plus background refresh is sound and simpler than an environment flag. The design needs two material corrections: its helper sample is syntactically invalid because a regular def contains async with, and shutdown must await cancelled background tasks before shutting down the runtime so cooperative cancellation is delivered and observed.",
+      "validation": {
+        "status": "caution",
+        "blockers": [
+          {
+            "finding": "MAJOR: proposed normal def _schedule_background_reindex contains async with, which cannot compile. Making it async requires awaiting it from _execute_search, contrary to stated synchronous non-blocking call shape.",
+            "contract_ids": [
+              "AC1",
+              "AC2",
+              "C2"
+            ],
+            "scope": "in_scope",
+            "in_scope_remediation": "Use a normal synchronous registry-only scheduler: check _bg_reindex_tasks, create_task(_auto_index_project_single_flight(...)), store immediately, attach done callback. Retain _auto_index_project_single_flight as sole _lock/_indexing_events owner; its lifecycle.py:389-405 converts races into harmless followers.",
+            "source": {
+              "label": "Async lock evidence",
+              "locator": "design.md Core change §2; src/lgrep/server/lifecycle.py:107-108",
+              "summary": "_lock is asyncio.Lock; async with requires an async function body."
+            }
+          },
+          {
+            "finding": "MAJOR: cancellation without awaiting the cancelled background tasks before runtime shutdown does not ensure run_blocking sees cancellation, signals index_all's cancel_event, or reaches terminal job state.",
+            "contract_ids": [
+              "C3",
+              "AC4"
+            ],
+            "scope": "in_scope",
+            "in_scope_remediation": "In _shutdown snapshot task values, cancel unfinished tasks, await asyncio.gather(*tasks, return_exceptions=True), clear registry, then call ctx.runtime.shutdown(cancel_futures=True). Test a started index_all task: cancel_event set and RuntimeJob transitions to terminal history.",
+            "source": {
+              "label": "Shutdown/cancellation evidence",
+              "locator": "src/lgrep/server/lifecycle.py:137-159; src/lgrep/server/runtime.py:158-170,184-196",
+              "summary": "runtime.shutdown uses wait=False and has no task-level cancel_event reference."
+            }
+          }
+        ],
+        "notes": "No conflict with default stale serving. The two changes are required for an implementable, cancellation-safe design."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "medium",
+        "tradeoffs": [
+          "First search after real drift deliberately serves stale data; bounded single-flight exchange avoids proxy timeout.",
+          "Awaiting cancelled tasks during shutdown slightly lengthens teardown but is necessary for cooperative cancellation and terminal job observability.",
+          "Tracking tasks adds small state and tests, but matches asyncio's documented strong-reference pattern."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Environment flag plus watcher",
+            "disposition": "rejected",
+            "rationale": "Contradicts approved default behavior and makes correctness depend on configuration."
+          },
+          {
+            "option": "Await a synchronous-fresh reindex",
+            "disposition": "rejected",
+            "rationale": "Current _execute_search awaits the full reindex at tools_semantic.py:197-212, the direct timeout cause."
+          },
+          {
+            "option": "Background raw index_all execution",
+            "disposition": "rejected",
+            "rationale": "Would bypass structured bounded RuntimeSupervisor required by rq-daemon-jobs01 and rq-daemon-executor01; existing single-flight routes through runtime.run_blocking at lifecycle.py:423-431."
+          },
+          {
+            "option": "Background existing single-flight through create_task",
+            "disposition": "preferred",
+            "rationale": "Preserves lock/event ownership and bounded runtime jobs; CPython documents strong task retention plus done-callback cleanup."
+          }
+        ],
+        "recommendation": "Revise design with a synchronous registry-only scheduler and awaited cancellation drain in _shutdown, then implement stated tests plus a terminal RuntimeJob assertion."
+      },
+      "recommendation": "APPROVE_WITH_CHANGES. Keep background single-flight design. Amend scheduler ownership and shutdown sequencing before planning.",
+      "follow_ups": [
+        "Done callback must branch on task.cancelled() before calling result()/exception(); retrieve exceptions in try/except so asyncio emits no unretrieved-exception warning. A returned {'error': ...} must be logged as a failed refresh.",
+        "Existing stale tests at tests/test_server.py:1547-1621 assert synchronous invocation counts; adjust them to await the registered background task deterministically before asserting counts.",
+        "Re-fire suppression holds after scheduler correction: _indexing_events lasts until _auto_index_project_single_flight finally calls _finish_single_flight_indexing at lifecycle.py:493-494, while timestamp refresh occurs at 432-439. A race can only create a follower, not a duplicate index_all."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "addSkipStalenessReindexFlag",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+      "task_id": "tk-3bdaac324d11",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-3bdaac324d11"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_server.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "part1-red-001",
+          "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex -v --tb=short",
+          "exit_code": 1,
+          "summary": "RED: ImportError for _schedule_background_reindex (expected)"
+        },
+        {
+          "test_run_id": "part1-green-001",
+          "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex -v --tb=short",
+          "exit_code": 0,
+          "summary": "GREEN: test_background_reindex_dedupes_concurrent_stale_searches, test_background_reindex_failure_leaves_index_stale_and_serves pass"
+        },
+        {
+          "test_run_id": "full-suite-662",
+          "command": "uv run --extra dev pytest tests/ --tb=short",
+          "exit_code": 0,
+          "summary": "662 passed, 16 warnings in 18.88s"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Implemented _on_bg_reindex_done to log {'error': ...} return values from _auto_index_project_single_flight as bg_reindex_failed",
+          "why": "The existing single-flight helper swallows index_all failures and returns an error dict; without this, background failures would be silently logged as success."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "None",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Part 1 complete: LgrepContext._bg_reindex_tasks registry, _schedule_background_reindex, and _on_bg_reindex_done implemented. Part 2 and Part 3 implemented in same session.",
+        "suggested_next_action": "Review Part 1 diff and proceed to Part 2 (tk-a484560f4ff4) and Part 3 (tk-4e5d4ad5db2e) reports."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part1-red-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part1-green-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "addSkipStalenessReindexFlag",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+      "task_id": "tk-a484560f4ff4",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-a484560f4ff4"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "src/lgrep/server/tools_semantic.py",
+        "tests/test_server.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "part2-red-001",
+          "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex::test_stale_search_does_not_await_reindex tests/test_server.py::TestBackgroundReindex::test_background_reindex_refreshes_next_search -v --tb=short",
+          "exit_code": 1,
+          "summary": "RED: assertions failed because _execute_search still awaited _auto_index_project_single_flight (expected)"
+        },
+        {
+          "test_run_id": "part2-green-001",
+          "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex::test_stale_search_does_not_await_reindex tests/test_server.py::TestBackgroundReindex::test_background_reindex_refreshes_next_search -v --tb=short",
+          "exit_code": 0,
+          "summary": "GREEN: test_stale_search_does_not_await_reindex, test_background_reindex_refreshes_next_search pass"
+        },
+        {
+          "test_run_id": "full-suite-662",
+          "command": "uv run --extra dev pytest tests/ --tb=short",
+          "exit_code": 0,
+          "summary": "662 passed, 16 warnings in 18.88s"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Updated existing TestStalenessPreflight tests to patch lifecycle._auto_index_project_single_flight and wait for _bg_reindex_tasks",
+          "why": "_execute_search now routes through _schedule_background_reindex in lifecycle.py, so the patch target and timing needed to change to keep the assertions meaningful."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "Updated two existing staleness pre-flight tests to remain valid under the new non-blocking search path; no other same-pattern issues found.",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Part 2 complete: _execute_search now calls _schedule_background_reindex and serves the current index immediately. Existing staleness pre-flight tests updated to match new routing.",
+        "suggested_next_action": "Review Part 2 diff and proceed to Part 3 (tk-4e5d4ad5db2e) report."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part2-red-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part2-green-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "addSkipStalenessReindexFlag",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/addSkipStalenessReindexFlag",
+      "task_id": "tk-4e5d4ad5db2e",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-4e5d4ad5db2e"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_runtime_cancellation.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "part3-red-001",
+          "command": "uv run --extra dev pytest tests/test_runtime_cancellation.py::test_background_reindex_cancelled_on_shutdown -v --tb=short",
+          "exit_code": 1,
+          "summary": "RED: _shutdown did not cancel/await background task (expected)"
+        },
+        {
+          "test_run_id": "part3-green-001",
+          "command": "uv run --extra dev pytest tests/test_runtime_cancellation.py::test_background_reindex_cancelled_on_shutdown -v --tb=short",
+          "exit_code": 0,
+          "summary": "GREEN: test_background_reindex_cancelled_on_shutdown passes"
+        },
+        {
+          "test_run_id": "full-suite-662",
+          "command": "uv run --extra dev pytest tests/ --tb=short",
+          "exit_code": 0,
+          "summary": "662 passed, 16 warnings in 18.88s"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Added a bounded active-job drain loop in _shutdown after gather returns",
+          "why": "asyncio.gather waits for the task coroutine to finish, but abandoned ThreadPoolExecutor futures update RuntimeJob terminal status via a done callback that may fire afterwards; polling active jobs ensures terminal state is observable before runtime.shutdown()."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "None",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Part 3 complete: _shutdown cancels and awaits outstanding background reindex tasks before runtime.shutdown(), with a bounded drain for terminal RuntimeJob status. Full suite (662 tests) passes.",
+        "suggested_next_action": "Review Part 3 diff; all code tasks complete. Next pending tasks are spec deltas (tk-b195233ff137) and README/docs (tk-7ac3aa0e2d76)."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part3-red-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: part3-green-001"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: full-suite-662"
+        }
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-3bdaac324d11": [
+      {
+        "runId": "tr_mrxpcex7_1b95cead",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_server.py tests/test_runtime_cancellation.py -q",
+        "durationMs": 13780.813308000099,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-23T16:04:46.773Z"
+      },
+      {
+        "runId": "tr_mrxpp790_40370dfe",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_server.py::TestBackgroundReindex tests/test_runtime_cancellation.py -q",
+        "durationMs": 6902.8150030002,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-23T16:14:43.285Z"
+      },
+      {
+        "runId": "tr_mrxpueun_365f3fc1",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest \"tests/test_server.py::TestBackgroundReindex::test_background_reindex_dedupes_concurrent_stale_searches\" \"tests/test_server.py::TestBackgroundReindex::test_background_reindex_failure_leaves_index_stale_and_serves\" -v",
+        "durationMs": 7921.624512000009,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-23T16:18:46.391Z"
+      }
+    ],
+    "tk-93db4c0f05d2": [
+      {
+        "runId": "tr_mrxpi0at_3248ef25",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/ -q",
+        "durationMs": 20101.089982999954,
+        "recordedAt": "2026-07-23T16:09:07.644Z"
+      },
+      {
+        "runId": "tr_mrxppv7x_f1434934",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/ -q",
+        "durationMs": 20167.225600000005,
+        "recordedAt": "2026-07-23T16:15:14.329Z"
+      }
+    ],
+    "tk-4e5d4ad5db2e": [
+      {
+        "runId": "tr_mrxpudx7_f7929411",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest \"tests/test_runtime_cancellation.py::test_background_reindex_cancelled_on_shutdown\" -v",
+        "durationMs": 6707.394660999998,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-23T16:18:45.236Z"
+      }
+    ],
+    "tk-a484560f4ff4": [
+      {
+        "runId": "tr_mrxpued1_a948e53b",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest \"tests/test_server.py::TestBackgroundReindex::test_stale_search_does_not_await_reindex\" \"tests/test_server.py::TestBackgroundReindex::test_background_reindex_refreshes_next_search\" -v",
+        "durationMs": 7280.920318000019,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-23T16:18:45.881Z"
+      }
+    ]
+  },
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-23T15:20:44.793Z",
+      "completed_by": "user",
+      "approval_evidence": "Proposal confirmed via command-as-approval: user invoked /adv-discover (next-gate command) at the proposal checkpoint. Clarify finding CLARIFY_UNCLEAR_SCOPE resolved (Scope section added); code anchors verified against source.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "b53e9e95b0dc3d51f323e8754fda67782462b038cf1e4d0c3e97b106e30660cd",
+        "non_whitespace_chars": 2678,
+        "checked_at": "2026-07-23T15:13:32.960Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-23T15:33:12.542Z",
+      "completed_by": "user",
+      "approval_evidence": "Agreement + AC approved at Phase 4.5.1 (user: 'approve'). Direction shifted from env-flag workaround to default background-refresh (search never blocks on full reindex). Contract minted: 18 items. Sole-entry claim verified; completeness checks PASS.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "non_whitespace_chars": 5573,
+        "checked_at": "2026-07-23T15:13:32.961Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-23T15:39:04.073Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design: decouple search from blocking reindex — _execute_search triggers background single-flight refresh (non-awaited) and serves current index. Independent adv-researcher validation: APPROVE_WITH_CHANGES, 2 MAJOR findings incorporated (scheduler as async def holding lock; shutdown cancel-and-await before runtime.shutdown). Direction was user-approved at discovery (background refresh, no flag). No CONFLICT, no new user-value tradeoff.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "2ee7767ef2c39b56ddca386bffa5bcf61986291f30fc9c62087010d76c94cf9c",
+        "non_whitespace_chars": 9015,
+        "checked_at": "2026-07-23T15:13:32.962Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-23T15:44:50.572Z",
+      "completed_by": "user",
+      "approval_evidence": "Task graph approved by user. 6 tasks, full AC1-5/SC1-2 coverage, no uncovered criteria. TDD on all code tasks; behavior change is default (intentional). Worktree materialized."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-23T16:09:23.126Z",
+      "completed_by": "agent",
+      "approval_evidence": "All 6 tasks done (2 commits: a247ae4 code, e6068ec docs). Full suite 662 passed incl. 5 new background-refresh tests + preserved guardrails; conflict markers clean. adv-engineer implemented scheduler+registry, search-path decouple, shutdown cancel-and-await; design validator APPROVE_WITH_CHANGES findings incorporated. Spec doc + README updated. Tooling gap surfaced: lgrepDaemonOperationalSafety .adv amend blocked by camelCase capability key (follow-up)."
+    },
+    "acceptance": {
+      "status": "done",
+      "started_at": "2026-07-23T16:18:54.850Z",
+      "completed_at": "2026-07-23T16:19:26.571Z",
+      "completed_by": "user",
+      "approval_evidence": "User accepted (reply: 'approve'). Per-task verification concerns disposed (fixed) with durable adv_run_test evidence for the 3 code tasks. Review matrix 18/0 failing; adv-reviewer READY with race fix applied + verified. Executive summary persisted.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "8d6a4e484a7c20b1de4b59fcd4c447a68bc66280bc9b73fd97c74cbfa2362e05",
+        "non_whitespace_chars": 2349,
+        "checked_at": "2026-07-23T15:13:32.963Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "reentry_history": [],
+  "cross_project_origin": {
+    "source_project": "vision",
+    "source_path": "/home/jon/dev/vision",
+    "linked_at": "2026-07-23T15:04:44.525Z"
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+      "approvedAt": "2026-07-23T15:20:44.996Z"
+    },
+    "items": [
+      {
+        "id": "SC1",
+        "kind": "success_criterion",
+        "text": "After fix + redeploy, `tools.lgrep.search_semantic(...)` returns results through the Vision proxy without `provider_timeout`, even against a stale index.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "SC2",
+        "kind": "success_criterion",
+        "text": "Search never blocks on a full `index_all` re-embed; a stale index is served immediately and freshness converges automatically.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "The search path (`_execute_search`, `src/lgrep/server/tools_semantic.py`) never awaits a full `index_all` re-embed; when staleness is detected, the current index is served immediately.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "Staleness detection triggers a background single-flight refresh (not awaited on the search path); the next search observes fresh results. No operator flag/watcher pairing required for correctness.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "No silent misconfiguration hazard exists where the index freezes and serves arbitrarily stale data indefinitely.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "Existing guardrails still pass: `test_warm_path_does_not_call_index_all`, the `LGREP_STALENESS_DEADLINE_S` deadline test, and the cancellation tests; warm path and `search_symbols` untouched.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "The shipped behavior is captured as a formal spec requirement (reframed `rq-skip-staleness-reindex` → \"search never blocks on full reindex; staleness triggers background refresh\") and `rq-daemon-shared-mode01.1` is amended if any operator-facing knob remains.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Current behavior is preserved when the feature is absent/disabled — no regression to the freshness path for callers who rely on it.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Reuse the existing single-flight coordinator (`_auto_index_project_single_flight`, `lifecycle.py:384`) and the bounded runtime supervisor; do not introduce unbounded background fanout (`rq-daemon-executor01`).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Background reindex work must remain cooperatively cancellable and bounded by `LGREP_INDEX_MAX_WALL_S` (existing invariant — `rq-daemon-cancel01`).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Warm path and `search_symbols` are untouched.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C5",
+        "kind": "constraint",
+        "text": "Storage is LanceDB; do not change the embedding model or index format.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "DONT1",
+        "kind": "avoidance",
+        "text": "Adding a manual env flag (`LGREP_SKIP_STALENESS_REINDEX`) as the primary mechanism — superseded by the agreed default background-refresh direction. An opt-in for synchronous-fresh MAY be evaluated in design, but is not the core approach.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT2",
+        "kind": "avoidance",
+        "text": "Requiring `LGREP_AUTO_WATCH` as a correctness dependency (it remains an incremental-freshness optimization only).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT3",
+        "kind": "avoidance",
+        "text": "Vision code changes (`request_timeout` already exists as per-server config; the minutes-long reindex blows past any reasonable timeout — the fix is server-side, not proxy-side).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT4",
+        "kind": "avoidance",
+        "text": "Raising Vision `request_timeout` (does not solve a minutes-long reindex).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT5",
+        "kind": "avoidance",
+        "text": "Bumping `LGREP_TOOL_TIMEOUT_S` further (not the bottleneck).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      },
+      {
+        "id": "DONT6",
+        "kind": "avoidance",
+        "text": "Making the warm path non-blocking (separate latent latency issue; not the timeout source — deferred).",
+        "sourceArtifact": "agreement",
+        "sourceHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+        "verificationRequired": true,
+        "evidencePolicy": "review",
+        "status": "approved"
+      }
+    ],
+    "amendments": [],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-23T16:12:00.000Z",
+      "rows": [
+        {
+          "contractId": "SC1",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Full suite 662 passed; test_stale_search_does_not_await_reindex asserts search returns current results without awaiting index_all. commits a247ae4, dfc42b7."
+        },
+        {
+          "contractId": "SC2",
+          "kind": "success_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_background_reindex_dedupes_concurrent_stale_searches + test_background_reindex_refreshes_next_search assert search never blocks on reindex and freshness converges."
+        },
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "_execute_search (tools_semantic.py:191) calls await _schedule_background_reindex and serves current index; no index_all awaited. Verified in code + test_stale_search_does_not_await_reindex."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "_schedule_background_reindex triggers non-awaited single-flight refresh; dedup via _indexing_events + _bg_reindex_tasks (race fixed dfc42b7). test_background_reindex_dedupes + refresh_next_search."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "No silent-freeze: staleness always triggers background refresh regardless of watcher config (rq-search-never-blocks-on-reindex.3); test_background_reindex_failure_leaves_index_stale_and_serves."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Full suite 662 passed; test_warm_path_does_not_call_index_all, test_check_staleness_deadline_returns_fresh, cancellation tests preserved; warm path + search_symbols untouched."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "review",
+          "evidence": "rq-search-never-blocks-on-reindex added to docs/specs/lgrepSemanticCacheLifecycle.md (v1.1.0); README behavior note rewritten. daemon .adv amend deferred (camelCase tooling gap) — substance captured in new requirement body + README.",
+          "notes": "Follow-up: lgrepDaemonOperationalSafety rq-daemon-shared-mode01.1 .adv amend blocked by camelCase capability-key tooling; requires capability-rename migration or delta-tool fix."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Warm path, search_symbols, and freshness mechanism unchanged; change is additive (background refresh replaces blocking await). No regression to existing callers."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Reuses _auto_index_project_single_flight + bounded RuntimeSupervisor (run_blocking); no unbounded fanout introduced."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Background index_all remains cancellable + bounded by LGREP_INDEX_MAX_WALL_S; test_background_reindex_cancelled_on_shutdown verifies terminal RuntimeJob state."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Warm path and search_symbols code paths untouched (diff confirms)."
+        },
+        {
+          "contractId": "C5",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "LanceDB storage unchanged; no embedding model or index format change."
+        },
+        {
+          "contractId": "DONT1",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No LGREP_SKIP_STALENESS_REINDEX (or any sync-fresh) flag shipped; env table unchanged."
+        },
+        {
+          "contractId": "DONT2",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "LGREP_AUTO_WATCH framed as optimization only; background refresh handles drift without watcher (AC2/AC3)."
+        },
+        {
+          "contractId": "DONT3",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "No vision repo code changes; fix is lgrep server-side only."
+        },
+        {
+          "contractId": "DONT4",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Vision request_timeout not modified."
+        },
+        {
+          "contractId": "DONT5",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "LGREP_TOOL_TIMEOUT_S unchanged."
+        },
+        {
+          "contractId": "DONT6",
+          "kind": "avoidance",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Warm path not made non-blocking; untouched (deferred separate issue)."
+        }
+      ]
+    }
+  },
+  "acceptanceCriteria": [
+    "The search path (`_execute_search`, `src/lgrep/server/tools_semantic.py`) never awaits a full `index_all` re-embed; when staleness is detected, the current index is served immediately.",
+    "Staleness detection triggers a background single-flight refresh (not awaited on the search path); the next search observes fresh results. No operator flag/watcher pairing required for correctness.",
+    "No silent misconfiguration hazard exists where the index freezes and serves arbitrarily stale data indefinitely.",
+    "Existing guardrails still pass: `test_warm_path_does_not_call_index_all`, the `LGREP_STALENESS_DEADLINE_S` deadline test, and the cancellation tests; warm path and `search_symbols` untouched.",
+    "The shipped behavior is captured as a formal spec requirement (reframed `rq-skip-staleness-reindex` → \"search never blocks on full reindex; staleness triggers background refresh\") and `rq-daemon-shared-mode01.1` is amended if any operator-facing knob remains."
+  ],
+  "documents": {
+    "proposal": "## Cross-Project Origin\n\nThis change was created as a follow-up from **vision**.\n\n| Field | Value |\n|-------|-------|\n| Source project | vision |\n| Source path | `/home/jon/dev/vision` |\n\n> **Note:** The originating project should be consulted for context on why this change is needed.\n\n\n## Summary\nAdd `LGREP_SKIP_STALENESS_REINDEX` env flag that short-circuits the staleness check on the `search_semantic` path, so queries return fast against the slightly-stale on-disk index instead of blocking on a full Voyage re-embed. Pair with enabling the background `FileWatcher` (`LGREP_AUTO_WATCH`) so the index stays fresh incrementally without ever blocking searches.\n\n## Root Cause Analysis\nSee problem-statement.md. Defect: search_semantic proxy timeout caused by staleness-triggered full Voyage re-embed on the search path (`_check_staleness` @ tools_semantic.py -> `_auto_index_project_single_flight` @ lifecycle.py -> `index_all` -> Voyage API, minutes-long). search_symbols unaffected (no staleness/Voyage path). Warm path does NOT reindex (guardrail test enforces).\n\n## Proposal\n1. **Code (lgrep):** Add `LGREP_SKIP_STALENESS_REINDEX` env (default off). When truthy, `_check_staleness` returns `(False, 0)` immediately — search proceeds against the current index, no `index_all`, no Voyage call. Mirrors the existing `LGREP_STALENESS_DEADLINE_S` deadline-timeout outcome (which also returns `(False, 0)`), so the skip path reuses a proven-safe branch.\n2. **Deployment (servers.yaml, user env — not repo code):** Enable `LGREP_AUTO_WATCH=true` on the lgrep server so `FileWatcher` incrementally re-indexes changed files in a background executor (`index_file` via `run_in_executor`), keeping the index fresh without blocking the search path.\n3. **Test:** Extend tests/test_server.py with a guardrail asserting that with `LGREP_SKIP_STALENESS_REINDEX` set, `_check_staleness` returns not-stale and `index_all` is never invoked on the search path. Preserve the existing `test_warm_path_does_not_call_index_all` guardrail.\n\n## Scope\n**Touched files / modules (code):**\n- `src/lgrep/server/tools_semantic.py` — `_check_staleness`: add env-flag early-return at function entry (def @ line 75; insert before the `LGREP_STALENESS_DEADLINE_S` read at line 102).\n- `tests/test_server.py` — new guardrail test `test_check_staleness_skip_by_env`; preserve existing `test_warm_path_does_not_call_index_all`.\n- `README.md` env-var table — document `LGREP_SKIP_STALENESS_REINDEX` (default off).\n\n**Deployment-only (no repo code):**\n- `~/.config/vision/servers.yaml` lgrep `env` block — set `LGREP_AUTO_WATCH=true`.\n\n**Untouched (by design):** `search_symbols`, embedding model/format, `LGREP_TOOL_TIMEOUT_S`, warm path, vision code.\n\n## Out of Scope\n- Vision code changes (`request_timeout` already exists as per-server config; no new field needed).\n- Changing the embedding model or index format.\n- `search_symbols` (works; do not touch).\n- Bumping `LGREP_TOOL_TIMEOUT_S` further (not the bottleneck).\n- Making warm non-blocking (separate latent latency issue; not the timeout source — deferred).\n\n## Discovery Findings\n\n### Discovery Checklist\n| # | Step | Result | Reason |\n|---|------|--------|--------|\n| 1 | Skill Discovery | SKIP | No skills match a local Python env-flag/staleness change; no pending-review skills relevant. |\n| 2 | Prior Research Extension | N/A | No `docs/*-prep.md` packs; this is a defect follow-up, not ecosystem research. |\n| 3 | Conflict & Related-Work Scan | PASS | 1 active (this), 3 archived (prune/symbol-store/README positioning) — no overlap. |\n| 4 | Edge Case Investigation | PASS | 2 edge cases per gap (below). |\n| 5 | Design Question Depth | PASS | Open questions annotated for agreement phase. |\n| 6 | Draft Spec Deltas | PASS | 2 delta candidates (rq-ids below). |\n| 7 | P25 Related-Pattern Scan | PASS | `LGREP_STALENESS_DEADLINE_S` is the exact analog (already cited). |\n| 8 | LBP Check | PASS | Local early-return reuses proven-safe branch; no external option viable (internal bug fix). |\n| 9 | Completeness Verification | PASS | Sole-entry claim verified; secondary surface classified. |\n\n### Conflict Scan\n- Active: `addSkipStalenessReindexFlag` (this).\n- Archived: `addPrunePolishBundle`, `addSymbolStorePrune` (prune/symbol-store surfaces), `updateReadmePositioning2` (positioning, not env table). **No conflicts.** No Epic membership.\n\n### Current State\n- `_check_staleness` (`tools_semantic.py:75`) is the sole staleness gate; called once in production at `tools_semantic.py:188` (search path), which conditionally calls `_auto_index_project_single_flight` (`:197`) → `indexer.index_all()` → Voyage.\n- Existing safety: `LGREP_STALENESS_DEADLINE_S` (default 4.0s) bounds the *check*; `LGREP_INDEX_MAX_WALL_S` (60s) bounds `index_all` cancellation. Neither prevents the search-path re-embed from blowing Vision's 30s `request_timeout` on a genuinely stale index.\n- Warm-path guardrail `test_warm_path_does_not_call_index_all` (test_server.py:94) enforces warm never reindexes.\n- Truthiness convention established: `LGREP_AUTO_WATCH` (`lifecycle.py:539`) uses `.lower() in (\"true\",\"1\",\"yes\")`.\n\n### Edge Cases\n1. **Skip on, watcher off** → index frozen at last-built state (serves last-known-good forever until unset/watcher enabled). Bounded but unbounded drift.\n2. **Skip on, empty/never-built index** → `_check_staleness` returns not-stale → search runs against zero chunks → returns empty results instead of building. Need to decide: skip should still surface \"no index\" distinctly, or rely on empty results.\n3. **Interaction with deadline** → skip takes precedence (both converge on `(False, 0)`); no double-gate hazard.\n4. **Concurrent first-search races** → single-flight coordinator still owns the background path (lifecycle.py:513); skip only affects the search-path precondition, not the background freshness path.\n\n### Open Design Questions (for agreement)\n- **OQ1 (user-facing):** Stale-results policy when skip is on but watcher is off — silent serve / one-time warning / refuse? Trust model: joint (operator config + code default). Blast radius: user may unknowingly serve very-stale data.\n- **OQ2 (user-facing):** Acceptance bar — \"no provider_timeout\" vs a concrete latency bound vs \"matches CLI result set\". Trust model: user (defines done).\n- **OQ3 (user-facing):** Contract durability — formal spec requirement for the flag vs README-only operator doc. Affects how much behavior is locked in.\n\n### Draft Spec Deltas\n- **NEW** `rq-skip-staleness-reindex` (proposed, capability `lgrepSemanticCacheLifecycle` or new): `LGREP_SKIP_STALENESS_REINDEX` (default off) → when truthy, `_check_staleness` returns `(False, 0)` without disk/stat/hash work; existing mtime→hash→stale behavior preserved exactly when unset. GWT: Given flag unset / When search runs / Then full staleness behavior unchanged. Given flag truthy / When `_check_staleness` invoked / Then returns not-stale, zero index_all calls on search path.\n- **AMEND** `rq-daemon-shared-mode01.1`: add `LGREP_SKIP_STALENESS_REINDEX` to the enumerated list of documented shared-deployment (Vision) operator knobs.\n\n### Related Pattern Scan (P25)\n- `LGREP_STALENESS_DEADLINE_S` is the exact same pattern (env-bounded early-return → `(False, 0)`). Already cited as proven-safe branch. No other search-path staleness gate to fix. Other env knobs (`LGREP_INDEX_MAX_WALL_S`, `LGREP_AUTO_WATCH`, `LGREP_AUTO_WARM_DISK`) function as designed — no related defect.\n\n### Completeness Verification\n- **Problem-completeness:** Full problem identified. Symptom (search_semantic timeout) traces to single verified root cause (staleness→full re-embed on search path). No hidden second source. Confidence: high.\n- **Solution-scope:** The flag at `_check_staleness` entry is the SOLE control surface for the search-path staleness gate (verified: one production caller, tools_semantic.py:188). Secondary surface `lifecycle.py:513 → _auto_index_project_single_flight` is the **background** reindex path (warm/watch) — intentionally out of scope (must keep running; it is the freshness mechanism paired via `LGREP_AUTO_WATCH`). Explicitly classified, not silently deferred.\n- **Sole-entry claim: VERIFIED.** No broad scan needed beyond the targeted call-graph check.\n\n### LBP Check\n- Direction matches long-term best practice: a local, opt-in, default-off precondition gate that reuses an outcome branch already proven safe in production. External-solution check: **skipped** — purely internal bug fix; no viable external alternative.\n\n### AMBIGUITY ANALYSIS\n- B1 LOW Boundaries — `Evidence: (no explicit Done-When section)` Reason: completion defined via test plan + verification, not a standalone signal. → Resolved at AC checkpoint.\n- Coverage: B:C F:C S:P M:C. No CRITICAL, no HIGH → clean, continue to agreement. (Prior `CLARIFY_UNCLEAR_SCOPE` resolved by Scope section.)\n\n### Lineage\n- Cross-project follow-up from **vision** (`/home/jon/dev/vision`). Origin valid (real path). No `source_change_id`; origin context is the search_semantic provider_timeout diagnosis. Confirm relevance at agreement.",
+    "problemStatement": "## Problem\n`lgrep.search_semantic` through the Vision MCP proxy fails with `provider_timeout (context deadline exceeded)`. `lgrep.search_symbols` works through the same proxy. CLI `lgrep search-semantic` works (58ms, correct results from a 4565-chunk LanceDB index).\n\n## Root Cause (verified from source 2026-07-23)\nOn the first `search_semantic` call after cold-start against a stale index, the search path triggers a FULL re-embed of all chunks via the Voyage API:\n\n```\nsearch_semantic\n  -> _ensure_search_project_state  (load LanceDB index, 5-10s, OK)\n  -> _check_staleness              (src/lgrep/server/tools_semantic.py:183)\n  -> STALE (source files changed since CLI-built index)\n  -> _auto_index_project_single_flight   (src/lgrep/server/lifecycle.py:427)\n  -> index_all -> Voyage API re-embed ALL chunks (MINUTES)\n  -> exceeds Vision request_timeout (30s default) -> provider_timeout\n```\n\n`search_symbols` survives because it has no staleness check and no Voyage embedding path. That is the discriminator.\n\n### Diagnosis corrections (original assumptions refuted)\n- The reindex is on the **SEARCH path**, NOT the warm path. `_warm_projects` only constructs ChunkStore+Indexer in memory; guardrail test `test_warm_path_does_not_call_index_all` (tests/test_server.py:94) enforces this. A `LGREP_WARM_LOAD_ONLY` flag would be a no-op.\n- Storage is **LanceDB**, not DuckDB.\n- Raising Vision timeouts is not a fix: a minutes-long reindex blows past any reasonable deadline. Vision `request_timeout` (default 30s, per-server config) already exists; no Vision code change is needed.\n- Warm blocking MCP `initialize` (lifecycle.py:166) is a latent latency issue but NOT the timeout source (it completes within request_timeout).\n\n## Goal\n`tools.lgrep.search_semantic({path, query, limit})` must return results through the Vision proxy without `provider_timeout`, by serving the current on-disk index immediately instead of blocking on a full re-embed. Index freshness is maintained incrementally in the background.",
+    "design": "## Architecture / LBP\n\nThe defect is a design smell, not a missing knob: the search path **awaits** a minutes-long full re-embed (`_execute_search` → `await _auto_index_project_single_flight`, `tools_semantic.py:197`). The codebase already concedes stale-serving is acceptable — the `OperationCancelled` path (`lifecycle.py:450-462`) returns state \"so the search proceeds with the slightly-stale index,\" but only *after* the tool has already timed out.\n\n**Fix: never await the reindex on the search path.** When staleness is detected, serve the current index immediately and trigger a background single-flight refresh. The *next* search observes fresh results. No flag, no watcher-pairing hazard, self-correcting. Reuses the existing `_auto_index_project_single_flight` leader/follower coordinator and the bounded `RuntimeSupervisor` — only the *await of the reindex* is removed from the search path.\n\n> Validated by independent adv-researcher (APPROVE_WITH_CHANGES); two MAJOR findings incorporated: (1) the scheduler must be `async def` so it can hold the lock; (2) shutdown must cancel-and-await tasks before `runtime.shutdown()`.\n\n## Core change\n\n### 1. `_execute_search` (src/lgrep/server/tools_semantic.py:191-212)\n\nReplace the synchronous reindex:\n\n```python\nif stale:\n    reindex_result = await _auto_index_project_single_flight(...)   # REMOVED\n    if isinstance(reindex_result, dict) and \"error\" in reindex_result:\n        return reindex_result\n    state.latest_indexed_at = await _run_blocking(...)\n```\n\nwith a non-blocking background trigger:\n\n```python\nif stale:\n    log.info(\"staleness_triggered_background_reindex\", project=project_path, suspect_count=suspect_count)\n    await _schedule_background_reindex(app_ctx, project_path, Path(project_path))\n    # Serve the current (possibly stale) index immediately. The reindex\n    # itself is NOT awaited — only the cheap scheduler (lock + create_task).\n```\n\nSearch then proceeds to embed the query and search against the current index (unchanged). No `index_all` is awaited on the search path.\n\n### 2. New helper `_schedule_background_reindex` (src/lgrep/server/lifecycle.py)\n\n`async def` (not `def`) so it can acquire `app_ctx._lock`. It does the minimum under the lock, then returns — it does **not** await the reindex:\n\n```python\nasync def _schedule_background_reindex(app_ctx, project_path, path_obj) -> None:\n    \"\"\"Trigger a non-blocking single-flight reindex; never raises.\n\n    Cheap: acquires the lock, checks for an in-flight reindex, creates the\n    background task, returns. The reindex itself runs detached.\n    Dedupes via app_ctx._indexing_events: if a reindex is already in-flight\n    for this project, no-op. The task is tracked in app_ctx._bg_reindex_tasks\n    to prevent GC and to allow shutdown cancellation.\n    \"\"\"\n    async with app_ctx._lock:\n        if project_path in app_ctx._indexing_events:\n            return  # already in flight\n        task = asyncio.create_task(\n            _auto_index_project_single_flight(app_ctx, project_path, path_obj),\n            name=f\"bg_reindex:{project_path}\",\n        )\n        app_ctx._bg_reindex_tasks[project_path] = task\n    task.add_done_callback(lambda t, p=project_path: _on_bg_reindex_done(app_ctx, p, t))\n```\n\n- `_on_bg_reindex_done(app_ctx, project_path, task)`:\n  - removes the task ref from `_bg_reindex_tasks` (guard: only if it's still THIS task);\n  - handles `task.cancelled()` explicitly (no exception retrieval);\n  - retrieves and logs `task.exception()` otherwise (swallowed — background reindex failure must never crash the loop; leaves index stale, next search re-triggers);\n  - logs outcome (`bg_reindex_success` / `bg_reindex_failed` / `bg_reindex_cancelled`).\n- The leader/follower single-flight inside `_auto_index_project_single_flight` remains the authoritative dedup; the wrapper only avoids spawning redundant *task objects* and prevents Python GC of un-awaited tasks.\n\n### 3. `LgrepContext` (src/lgrep/server/lifecycle.py:82-108)\n\nAdd a task registry:\n\n```python\n_bg_reindex_tasks: dict[str, asyncio.Task] = field(default_factory=dict)\n```\n\n### 4. Shutdown (src/lgrep/server/lifecycle.py:_shutdown)\n\nCancel **and await** outstanding background reindex tasks before `runtime.shutdown()`, so cooperative `cancel_event` propagation and terminal job state are guaranteed:\n\n```python\n# Cancel outstanding background reindexes; await terminal state.\ntasks = list(app_ctx._bg_reindex_tasks.values())\nfor t in tasks:\n    t.cancel()\nif tasks:\n    await asyncio.gather(*tasks, return_exceptions=True)\napp_ctx._bg_reindex_tasks.clear()\n# ...then existing watcher stop + runtime.shutdown()\n```\n\nEach cancelled task's `_auto_index_project_single_flight` already handles `OperationCancelled` → terminal, bounded-executor worker released (`lifecycle.py:450-462`). Awaiting `gather(return_exceptions=True)` ensures the cancellation is observed and the `RuntimeJob` reaches a terminal status before the runtime is torn down (`rq-daemon-cancel01`).\n\n## `latest_indexed_at` semantics\n\n`_auto_index_project_single_flight` refreshes `state.latest_indexed_at` on success (`lifecycle.py:434`) **before** `_finish_single_flight_indexing` clears the event (`lifecycle.py:381`). So during a background reindex, `latest_indexed_at` stays at the pre-reindex value → subsequent searches' staleness check reports stale → `_schedule_background_reindex` sees `project_path in _indexing_events` → no-op. Freshness converges exactly once per drift burst. No change to `ProjectState` semantics needed.\n\n## Re-fire suppression\n\nSingle-flight is the authoritative guard:\n- `app_ctx._indexing_events[project_path]` is set by the leader on entry (`lifecycle.py:394`) and cleared in `_finish_single_flight_indexing` (`lifecycle.py:381`).\n- While set, every staleness-detecting search calls `_schedule_background_reindex`, which no-ops.\n- One full `index_all` per drift burst, regardless of concurrent search count. (The watcher, if enabled, does cheaper incremental `index_file` in parallel.)\n\n## Bounded execution & observability\n\n- `_auto_index_project_single_flight` already routes `index_all` through `app_ctx.runtime.run_blocking(\"index_all\", ...)` → bounded `ThreadPoolExecutor`, `RuntimeJob` records, `LGREP_INDEX_MAX_WALL_S` wall-clock backstop (`rq-daemon-executor01`, `rq-daemon-jobs01`, `rq-daemon-cancel01`). The background path inherits all of this unchanged.\n- New `RuntimeJob` records for background reindexes are visible in diagnostics (no new observability surface needed).\n- Background task failure → logged `bg_reindex_failed`, index left stale, next search re-triggers. Never propagates to a search caller.\n\n## Opt-in synchronous-fresh (deferred — YAGNI)\n\nA `LGREP_SYNC_REINDEX_ON_STALE` flag for guaranteed-fresh-before-return is **not** included. The original failure mode (proxy timeout) makes blocking unacceptable; callers needing guaranteed freshness should run `lgrep index` / `index_semantic` explicitly. Revisit only if a concrete use case appears.\n\n## Test plan (TDD)\n\n- **RED 1** `test_stale_search_does_not_await_reindex` — staleness detected → search returns current results within a tight time budget; `_auto_index_project_single_flight` is scheduled as a background task in `app_ctx._bg_reindex_tasks` and NOT awaited (assert the search coroutine completed before the reindex finished).\n- **RED 2** `test_background_reindex_dedupes_concurrent_stale_searches` — N concurrent stale searches → exactly ONE `index_all` invocation (single-flight + task-registry suppression).\n- **RED 3** `test_background_reindex_failure_leaves_index_stale_and_serves` — background `index_all` raises → no exception propagates to a subsequent search; stale results returned; `_bg_reindex_tasks` cleared; `bg_reindex_failed` logged.\n- **RED 4** `test_background_reindex_refreshes_next_search` — after a background reindex completes, the next search's staleness check reports fresh (no second reindex); `latest_indexed_at` updated.\n- **RED 5** `test_background_reindex_cancelled_on_shutdown` — `_shutdown` cancels outstanding tasks, awaits them, and the cancelled `index_all` reaches a terminal `RuntimeJob` status in runtime history before `runtime.shutdown()` returns.\n- **PRESERVE** `test_warm_path_does_not_call_index_all`, `test_check_staleness_deadline_returns_fresh`, cancellation tests — unchanged.\n- **GREEN** implement the helper + `_execute_search` change + `_bg_reindex_tasks` + shutdown cancel-and-await.\n\n## Spec deltas\n\n- **NEW** `rq-search-never-blocks-on-reindex` (capability `lgrepSemanticCacheLifecycle`): the search path MUST NOT await a full `index_all`; staleness detection triggers a background single-flight refresh. Current index served immediately. GWT: Given a stale index / When `search_semantic` runs / Then it returns current results without awaiting reindex; a background refresh is scheduled. Given a reindex in flight / When another stale search runs / Then no redundant reindex is scheduled.\n- **AMEND** `rq-daemon-shared-mode01.1`: no operator knob is required for correctness (background refresh is default). Note in docs that the watcher (`LGREP_AUTO_WATCH`) remains an incremental-freshness optimization, not a correctness dependency.\n- (The earlier `rq-skip-staleness-reindex` flag delta is **dropped** — no flag ships.)\n\n## Risks / trade-offs\n\n- **First-after-drift search serves stale.** Acceptable for a code-search tool behind a 30s proxy; the `OperationCancelled` path already established this precedent. Freshness converges on the next search.\n- **Background Voyage load.** Single-flight bounds to one `index_all` per drift burst; watcher does the cheap incremental path when enabled. No new rate concern beyond the existing background index_file load.\n- **Task GC / orphan tasks.** Mitigated by `_bg_reindex_tasks` registry + done-callback cleanup + shutdown cancel-and-await.\n- **Behavior change is a default**, not opt-in. This is intentional (the blocking behavior is the bug). Callers relying on synchronous-freshness get an explicit `index_semantic` tool instead. Documented in spec + README.\n\n## Verification\n\nAfter fix + redeploy: `tools.lgrep.search_semantic({path: \"/home/jon/dev/advance/plugin/src\", query: \"backlog promotion\", limit: 5})` returns results through the Vision proxy without `provider_timeout` on first call against a stale index; a second call returns fresh results. CLI remains the baseline.",
+    "agreement": "# Agreement\n\n## Objectives\n\n1. `search_semantic` returns results through the Vision proxy without `provider_timeout`, by serving the on-disk index immediately instead of blocking on a full re-embed.\n2. Decouple search from blocking reindex: a stale index is served now; freshness converges automatically in the background.\n3. Remove the misconfiguration hazard — no operator flag/watcher pairing required for correctness.\n\n## Success Criteria\n\n1. After fix + redeploy, `tools.lgrep.search_semantic(...)` returns results through the Vision proxy without `provider_timeout`, even against a stale index.\n2. Search never blocks on a full `index_all` re-embed; a stale index is served immediately and freshness converges automatically.\n\n## Acceptance Criteria\n\n1. The search path (`_execute_search`, `src/lgrep/server/tools_semantic.py`) never awaits a full `index_all` re-embed; when staleness is detected, the current index is served immediately.\n2. Staleness detection triggers a background single-flight refresh (not awaited on the search path); the next search observes fresh results. No operator flag/watcher pairing required for correctness.\n3. No silent misconfiguration hazard exists where the index freezes and serves arbitrarily stale data indefinitely.\n4. Existing guardrails still pass: `test_warm_path_does_not_call_index_all`, the `LGREP_STALENESS_DEADLINE_S` deadline test, and the cancellation tests; warm path and `search_symbols` untouched.\n5. The shipped behavior is captured as a formal spec requirement (reframed `rq-skip-staleness-reindex` → \"search never blocks on full reindex; staleness triggers background refresh\") and `rq-daemon-shared-mode01.1` is amended if any operator-facing knob remains.\n\n## Constraints\n\n- Current behavior is preserved when the feature is absent/disabled — no regression to the freshness path for callers who rely on it.\n- Reuse the existing single-flight coordinator (`_auto_index_project_single_flight`, `lifecycle.py:384`) and the bounded runtime supervisor; do not introduce unbounded background fanout (`rq-daemon-executor01`).\n- Background reindex work must remain cooperatively cancellable and bounded by `LGREP_INDEX_MAX_WALL_S` (existing invariant — `rq-daemon-cancel01`).\n- Warm path and `search_symbols` are untouched.\n- Storage is LanceDB; do not change the embedding model or index format.\n\n## Avoidances\n\n- Adding a manual env flag (`LGREP_SKIP_STALENESS_REINDEX`) as the primary mechanism — superseded by the agreed default background-refresh direction. An opt-in for synchronous-fresh MAY be evaluated in design, but is not the core approach.\n- Requiring `LGREP_AUTO_WATCH` as a correctness dependency (it remains an incremental-freshness optimization only).\n- Vision code changes (`request_timeout` already exists as per-server config; the minutes-long reindex blows past any reasonable timeout — the fix is server-side, not proxy-side).\n- Raising Vision `request_timeout` (does not solve a minutes-long reindex).\n- Bumping `LGREP_TOOL_TIMEOUT_S` further (not the bottleneck).\n- Making the warm path non-blocking (separate latent latency issue; not the timeout source — deferred).\n\n## Preview Applicability\n\n- `visual_surface: false` — backend Python search-path behavior change; no frontend, browser-visible, or visual output affected.\n- `exact_route_required`: n/a\n- `data_state_expectation`: not_applicable\n- `viewport_expectation`: not_applicable\n- Rationale: pure server-side runtime behavior; nothing renders.\n\n## Decisions\n\n### User Decisions\n\n1. **Stale-search behavior (freshness vs latency):** Serve the current (slightly stale) index immediately AND trigger a background single-flight refresh; the next search is fresh. Default behavior, no flag. — *Why it matters:* this is the core user-value tradeoff (result freshness vs latency) and decides whether a flag exists at all. Removes the watcher-off misconfig hazard the original flag proposal carried.\n2. **Acceptance bar:** \"fixed\" = `search_semantic` returns a non-empty result set through Vision without `provider_timeout`. No hard latency ceiling. — *Why it matters:* matches the actual failure mode; avoids flaky CI latency assertions.\n3. **Contract durability:** formal spec requirement for the shipped behavior. — *Why it matters:* locks the search-never-blocks invariant against future drift; amends the shared-deployment docs spec.\n\n### Agent Decisions (LBP)\n\n1. **Direction shift (flag → background refresh):** The original proposal's `LGREP_SKIP_STALENESS_REINDEX` flag is a workaround for a design smell (search awaiting a minutes-long re-embed). The `_auto_index_project_single_flight` OperationCancelled path (lifecycle.py:450-462) already concedes stale-serving is acceptable — just only after a timeout. The cleaner fix is to never await the reindex on the search path. Verified viable: single-flight + runtime supervisor already exist; `asyncio.create_task` scheduling is the mechanism.\n2. **Watcher is optimization, not correctness:** `LGREP_AUTO_WATCH`/`FileWatcher` does cheap incremental `index_file` per change; the background full-reindex-on-drift handles cold/drift regardless. Single-flight dedupes concurrent drift-triggered reindexes.\n3. **Title drift acknowledged:** change ID `addSkipStalenessReindexFlag` is kept stable (no rename); the agreed direction is broader (\"decouple search from blocking reindex\"). Design phase owns the artifact rewrite.\n\n## Open Design Questions (carry to /adv-design — mechanism, agent-resolvable)\n\n- Background-task lifecycle/tracking: avoid orphan tasks; store the in-flight task ref; error handling; integrate with the runtime job records (`rq-daemon-jobs01`).\n- Staleness-suppression while a background reindex is in flight (don't re-fire per search).\n- `state.latest_indexed_at` semantics (do not refresh until background completes; subsequent searches see in-flight state).\n- Whether to retain an opt-in for synchronous-fresh (e.g. `LGREP_SYNC_REINDEX_ON_STALE`) for callers who want guaranteed-fresh and tolerate latency.\n- Spec delta reframe: `rq-skip-staleness-reindex` → \"search never blocks on full reindex; staleness triggers background refresh\"; amend `rq-daemon-shared-mode01.1` iff an operator knob remains.\n\n## Deferred Questions\n\n- None deferred by user.\n\n## Sign-Off\n\n- Proposal gate: approved (command-as-approval, 2026-07-23).\n- Discovery agreement + acceptance criteria: approved by user (2026-07-23).\n",
+    "executiveSummary": "# Executive Summary — addSkipStalenessReindexFlag\n\n## Outcome\n`lgrep.search_semantic` no longer times out when routed through the Vision MCP proxy. Previously, the first search against a stale index blocked on a minutes-long full Voyage re-embed, blowing past Vision's 30s `request_timeout` (`provider_timeout`). The search path now serves the current index immediately and refreshes freshness in the background, so every search returns fast and the next search after drift is fresh.\n\n## Why it matters\nThis was the root cause of `search_semantic` failing through the proxy while `search_symbols` worked — a daily-friction defect for agent-driven code search. The fix is a default behavior change (not an opt-in flag), so it resolves the failure mode for all deployments without operator configuration.\n\n## What changed\n- `_execute_search` (tools_semantic.py) no longer awaits a full `index_all`; it schedules a background single-flight refresh and serves the current index.\n- New `_schedule_background_reindex` + `_bg_reindex_tasks` registry + `_on_bg_reindex_done` callback (lifecycle.py) — reuses the existing bounded `RuntimeSupervisor` and `_auto_index_project_single_flight` leader/follower coordinator.\n- `_shutdown` cancels and awaits outstanding background reindex tasks before tearing down the runtime, guaranteeing terminal job state.\n- Spec: new `rq-search-never-blocks-on-reindex` (lgrepSemanticCacheLifecycle, 4 GWT scenarios). README behavior note rewritten.\n\n## Verification\n- Full test suite: **662 passed** (3 independent runs).\n- 5 new tests cover non-awaiting search, concurrent-search dedup, background-failure isolation, next-search freshness convergence, and shutdown cancellation reaching terminal `RuntimeJob` state.\n- Preserved guardrails: `test_warm_path_does_not_call_index_all`, `LGREP_STALENESS_DEADLINE_S` deadline test, cancellation tests. Warm path + `search_symbols` untouched.\n- Independent acceptance review (adv-reviewer): verdict READY; found and fixed a scheduler race (concurrent schedulers spawning untracked follower tasks) — fix verified.\n\n## Risks / follow-ups\n- **First-after-drift search serves slightly stale results** (by design; the `OperationCancelled` path already established this precedent). Freshness converges on the next search.\n- **Tooling gap (non-blocking):** the `lgrepDaemonOperationalSafety` `rq-daemon-shared-mode01.1` `.adv`-store amend could not be applied — `adv_delta_*` reject camelCase capability keys. Substance is captured in the new requirement body + README. Follow-up: camelCase→kebab capability migration or delta-tooling fix.\n- No env flag shipped; no Vision code change; no embedding model/index format change.",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-23T16:12:00.000Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| SC1 | success_criterion | After fix + redeploy, `tools.lgrep.search_semantic(...)` returns results through the Vision proxy without `provider_timeout`, even against a stale index. | pass | Full suite 662 passed; test_stale_search_does_not_await_reindex asserts search returns current results without awaiting index_all. commits a247ae4, dfc42b7. |\n| SC2 | success_criterion | Search never blocks on a full `index_all` re-embed; a stale index is served immediately and freshness converges automatically. | pass | test_background_reindex_dedupes_concurrent_stale_searches + test_background_reindex_refreshes_next_search assert search never blocks on reindex and freshness converges. |\n| AC1 | acceptance_criterion | The search path (`_execute_search`, `src/lgrep/server/tools_semantic.py`) never awaits a full `index_all` re-embed; when staleness is detected, the current index is served immediately. | pass | _execute_search (tools_semantic.py:191) calls await _schedule_background_reindex and serves current index; no index_all awaited. Verified in code + test_stale_search_does_not_await_reindex. |\n| AC2 | acceptance_criterion | Staleness detection triggers a background single-flight refresh (not awaited on the search path); the next search observes fresh results. No operator flag/watcher pairing required for correctness. | pass | _schedule_background_reindex triggers non-awaited single-flight refresh; dedup via _indexing_events + _bg_reindex_tasks (race fixed dfc42b7). test_background_reindex_dedupes + refresh_next_search. |\n| AC3 | acceptance_criterion | No silent misconfiguration hazard exists where the index freezes and serves arbitrarily stale data indefinitely. | pass | No silent-freeze: staleness always triggers background refresh regardless of watcher config (rq-search-never-blocks-on-reindex.3); test_background_reindex_failure_leaves_index_stale_and_serves. |\n| AC4 | acceptance_criterion | Existing guardrails still pass: `test_warm_path_does_not_call_index_all`, the `LGREP_STALENESS_DEADLINE_S` deadline test, and the cancellation tests; warm path and `search_symbols` untouched. | pass | Full suite 662 passed; test_warm_path_does_not_call_index_all, test_check_staleness_deadline_returns_fresh, cancellation tests preserved; warm path + search_symbols untouched. |\n| AC5 | acceptance_criterion | The shipped behavior is captured as a formal spec requirement (reframed `rq-skip-staleness-reindex` → \"search never blocks on full reindex; staleness triggers background refresh\") and `rq-daemon-shared-mode01.1` is amended if any operator-facing knob remains. | pass | rq-search-never-blocks-on-reindex added to docs/specs/lgrepSemanticCacheLifecycle.md (v1.1.0); README behavior note rewritten. daemon .adv amend deferred (camelCase tooling gap) — substance captured in new requirement body + README. |\n| C1 | constraint | Current behavior is preserved when the feature is absent/disabled — no regression to the freshness path for callers who rely on it. | respected | Warm path, search_symbols, and freshness mechanism unchanged; change is additive (background refresh replaces blocking await). No regression to existing callers. |\n| C2 | constraint | Reuse the existing single-flight coordinator (`_auto_index_project_single_flight`, `lifecycle.py:384`) and the bounded runtime supervisor; do not introduce unbounded background fanout (`rq-daemon-executor01`). | respected | Reuses _auto_index_project_single_flight + bounded RuntimeSupervisor (run_blocking); no unbounded fanout introduced. |\n| C3 | constraint | Background reindex work must remain cooperatively cancellable and bounded by `LGREP_INDEX_MAX_WALL_S` (existing invariant — `rq-daemon-cancel01`). | respected | Background index_all remains cancellable + bounded by LGREP_INDEX_MAX_WALL_S; test_background_reindex_cancelled_on_shutdown verifies terminal RuntimeJob state. |\n| C4 | constraint | Warm path and `search_symbols` are untouched. | respected | Warm path and search_symbols code paths untouched (diff confirms). |\n| C5 | constraint | Storage is LanceDB; do not change the embedding model or index format. | respected | LanceDB storage unchanged; no embedding model or index format change. |\n| DONT1 | avoidance | Adding a manual env flag (`LGREP_SKIP_STALENESS_REINDEX`) as the primary mechanism — superseded by the agreed default background-refresh direction. An opt-in for synchronous-fresh MAY be evaluated in design, but is not the core approach. | respected | No LGREP_SKIP_STALENESS_REINDEX (or any sync-fresh) flag shipped; env table unchanged. |\n| DONT2 | avoidance | Requiring `LGREP_AUTO_WATCH` as a correctness dependency (it remains an incremental-freshness optimization only). | respected | LGREP_AUTO_WATCH framed as optimization only; background refresh handles drift without watcher (AC2/AC3). |\n| DONT3 | avoidance | Vision code changes (`request_timeout` already exists as per-server config; the minutes-long reindex blows past any reasonable timeout — the fix is server-side, not proxy-side). | respected | No vision repo code changes; fix is lgrep server-side only. |\n| DONT4 | avoidance | Raising Vision `request_timeout` (does not solve a minutes-long reindex). | respected | Vision request_timeout not modified. |\n| DONT5 | avoidance | Bumping `LGREP_TOOL_TIMEOUT_S` further (not the bottleneck). | respected | LGREP_TOOL_TIMEOUT_S unchanged. |\n| DONT6 | avoidance | Making the warm path non-blocking (separate latent latency issue; not the timeout source — deferred). | respected | Warm path not made non-blocking; untouched (deferred separate issue). |\n\n"
+  },
+  "artifacts": {
+    "proposal": {
+      "updatedAt": "2026-07-23T15:22:22.730Z",
+      "contentHash": "33d63fed5017ed95a1643028feb3832a00035a3d4aec1366ddf1e6ba406cd156",
+      "source": "temporal",
+      "readable": false
+    },
+    "problemStatement": {
+      "updatedAt": "2026-07-23T15:04:47.374Z",
+      "contentHash": "757968b8993f24a7baee93143570b38b631e39d66e58a0aa31fda1d069c20670",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-23T15:38:52.649Z",
+      "contentHash": "2ee7767ef2c39b56ddca386bffa5bcf61986291f30fc9c62087010d76c94cf9c",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-23T15:32:53.681Z",
+      "contentHash": "bbdb602dfdc9e7cd2705f45c1a881701e44229608f65d57ce6b841053589eb5e",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-23T16:16:08.926Z",
+      "contentHash": "8d6a4e484a7c20b1de4b59fcd4c447a68bc66280bc9b73fd97c74cbfa2362e05",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "lastSignalAt": "2026-07-23T16:19:26.571Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "same_project_dependencies": [],
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_UNCLEAR_SCOPE",
+      "severity": "warning",
+      "message": "Proposal has no Scope section. What files and modules will be affected?",
+      "recorded_at": "2026-07-23T15:13:39.446Z",
+      "resolved": true,
+      "resolved_at": "2026-07-23T15:34:50.728Z"
+    }
+  ]
+}

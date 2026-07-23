@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-23T16:30:26.066Z",
+  "capabilities": [],
+  "change_hash": "a27aba44d1c5f63ed03804ec4d5a7b631eb5756081b2f47963f26e593ebd7b58",
+  "change_id": "addSkipStalenessReindexFlag",
+  "completed_tasks": 6,
+  "created_at": "2026-07-23T15:04:47.054Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-23T16:19:26.571Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "58ec9860ae6e32daa96c19e0a29d3d9c8514fa3b28c5967a0e1335b216be9d27",
+  "task_count": 6,
+  "title": "Add skip-staleness-reindex flag",
+  "version": "1"
+}
