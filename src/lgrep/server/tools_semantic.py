@@ -16,10 +16,10 @@ from lgrep.server import log, mcp, time_tool
 from lgrep.server.lifecycle import (
     LgrepContext,
     ProjectState,
-    _auto_index_project_single_flight,
     _ensure_project_initialized,
     _ensure_search_project_state,
     _get_project_stats,
+    _schedule_background_reindex,
     _stop_watcher,
 )
 from lgrep.server.responses import (
@@ -190,26 +190,13 @@ async def _execute_search(
         )
         if stale:
             log.info(
-                "staleness_check_triggered_reindex",
+                "staleness_triggered_background_reindex",
                 project=project_path,
                 suspect_count=suspect_count,
             )
-            reindex_result = await _auto_index_project_single_flight(
-                app_ctx, project_path, Path(project_path)
-            )
-            if isinstance(reindex_result, dict) and "error" in reindex_result:
-                # Re-index failed; surface the error rather than returning
-                # silently-stale results.
-                return reindex_result  # type: ignore[return-value]
-            # Refresh the cached timestamp so subsequent searches use the
-            # post-reindex value without another DB round trip.
-            state.latest_indexed_at = await _run_blocking(
-                app_ctx,
-                "db_latest_indexed_at",
-                "_execute_search",
-                project_path,
-                state.db.get_latest_indexed_at,
-            )
+            await _schedule_background_reindex(app_ctx, project_path, Path(project_path))
+            # Serve the current (possibly stale) index immediately. The reindex
+            # itself is NOT awaited — only the cheap scheduler (lock + create_task).
 
         query_vector = await app_ctx.embedder.embed_query_async(query)
         if hybrid:

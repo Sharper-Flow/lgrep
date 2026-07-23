@@ -413,3 +413,75 @@ def test_index_all_raises_on_wall_clock_budget(tmp_project, monkeypatch):
 
     with pytest.raises(OperationCancelled):
         indexer.index_all()  # no cancel_event — wall-clock backstop only
+
+
+# ---------------------------------------------------------------------------
+# AC11: background reindex tasks are cancelled and awaited during shutdown
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch):
+    """_shutdown must cancel outstanding background reindexes, await them, and
+    guarantee the underlying RuntimeJob reaches a terminal status before
+    runtime.shutdown() returns.
+    """
+    from lgrep.embeddings import EmbeddingResult
+    from lgrep.server import LgrepContext, ProjectState
+    from lgrep.server.lifecycle import _schedule_background_reindex, _shutdown
+
+    project_root, indexer = tmp_project
+    project_path = str(project_root.resolve())
+
+    app_ctx = LgrepContext(voyage_api_key="mock-key")
+
+    # Provide a fake embedder so index_all does not hit the network.
+    embedder = MagicMock()
+
+    def fake_embed(texts, **kwargs):
+        return EmbeddingResult(
+            embeddings=[[0.1] * 1024 for _ in texts],
+            token_usage=len(texts) * 10,
+            model="voyage-code-3",
+        )
+
+    embedder.embed_documents.side_effect = fake_embed
+    indexer.embedder = embedder
+
+    # Slow index_all that cooperatively exits once cancel_event is set.
+    def slow_index_all(cancel_event=None):
+        for _ in range(200):
+            if cancel_event is not None and cancel_event.is_set():
+                from lgrep.exceptions import OperationCancelled
+
+                raise OperationCancelled("cancelled by shutdown")
+            time.sleep(0.01)
+        return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+
+    indexer.index_all = slow_index_all
+
+    state = ProjectState(db=indexer.storage, indexer=indexer)
+    app_ctx.projects[project_path] = state
+
+    # Schedule a background reindex.
+    await _schedule_background_reindex(app_ctx, project_path, project_root)
+
+    # Wait until the runtime job has actually been submitted.
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline and not app_ctx.runtime.snapshot_active_jobs():
+        await asyncio.sleep(0.01)
+    assert app_ctx.runtime.snapshot_active_jobs(), "background job was never submitted"
+
+    # Shutdown must cancel and await the background task.
+    await _shutdown(app_ctx)
+
+    assert not app_ctx._bg_reindex_tasks
+    recent = app_ctx.runtime.snapshot_recent_jobs()
+    terminal_statuses = {
+        "finished",
+        "failed",
+        "cancelled",
+        "finished_after_abandon",
+        "failed_after_abandon",
+    }
+    assert any(j["status"] in terminal_statuses for j in recent), recent

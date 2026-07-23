@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,6 +107,7 @@ class LgrepContext:
     runtime: RuntimeSupervisor = field(default_factory=RuntimeSupervisor)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
+    _bg_reindex_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +144,22 @@ async def _shutdown(ctx: LgrepContext) -> None:
     double-stopping the same watcher via aliased paths.
     """
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
+
+    # Cancel outstanding background reindexes; await terminal state so
+    # cooperative cancellation propagates through run_blocking and the bounded
+    # executor's worker thread reaches a terminal status before we tear down.
+    tasks = list(ctx._bg_reindex_tasks.values())
+    for t in tasks:
+        t.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Abandoned-but-still-running futures update their RuntimeJob record
+        # asynchronously via a done callback; give them a bounded window to
+        # reach a terminal status before the executor is shut down.
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and ctx.runtime.snapshot_active_jobs():
+            await asyncio.sleep(0.01)
+    ctx._bg_reindex_tasks.clear()
 
     # Iterate canonical states (deduped) to stop each watcher exactly once.
     # Fall back to projects when _canonical_to_state is empty (legacy / pre-dedup).
@@ -379,6 +397,52 @@ async def _finish_single_flight_indexing(
         if app_ctx._indexing_events.get(project_path) is event:
             app_ctx._indexing_events.pop(project_path, None)
     event.set()
+
+
+async def _schedule_background_reindex(
+    app_ctx: LgrepContext, project_path: str, path_obj: Path
+) -> None:
+    """Trigger a non-blocking single-flight reindex; never raises.
+
+    Cheap: acquires the lock, checks for an in-flight reindex, creates the
+    background task, returns. The reindex itself runs detached.
+    Dedupes via ``app_ctx._indexing_events``: if a reindex is already in
+    flight for this project, no-op. The task is tracked in
+    ``app_ctx._bg_reindex_tasks`` to prevent GC and to allow shutdown
+    cancellation.
+    """
+    async with app_ctx._lock:
+        if project_path in app_ctx._indexing_events:
+            return  # already in flight
+        task = asyncio.create_task(
+            _auto_index_project_single_flight(app_ctx, project_path, path_obj),
+            name=f"bg_reindex:{project_path}",
+        )
+        app_ctx._bg_reindex_tasks[project_path] = task
+    task.add_done_callback(lambda t, p=project_path: _on_bg_reindex_done(app_ctx, p, t))
+
+
+def _on_bg_reindex_done(app_ctx: LgrepContext, project_path: str, task: asyncio.Task) -> None:
+    """Remove a finished background reindex task from the registry and log.
+
+    Never raises. Only removes the registry entry if it still points to the
+    same task object, so a superseded task cannot wipe a newer one.
+    """
+    if app_ctx._bg_reindex_tasks.get(project_path) is not task:
+        return
+    if task.cancelled():
+        log.info("bg_reindex_cancelled", project=project_path)
+    else:
+        exc = task.exception()
+        if exc is not None:
+            log.error("bg_reindex_failed", project=project_path, error=str(exc))
+        else:
+            result = task.result()
+            if isinstance(result, dict) and "error" in result:
+                log.error("bg_reindex_failed", project=project_path, error=result.get("error"))
+            else:
+                log.info("bg_reindex_success", project=project_path)
+    app_ctx._bg_reindex_tasks.pop(project_path, None)
 
 
 async def _auto_index_project_single_flight(

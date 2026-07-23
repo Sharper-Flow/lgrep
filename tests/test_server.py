@@ -1549,7 +1549,7 @@ class TestStalenessPreflight:
         project, state, embedder = self._make_fresh_state(tmp_path)
         (project / "a.py").unlink()
 
-        from lgrep.server import tools_semantic as _ts
+        from lgrep.server import lifecycle as _lc
 
         call_count = {"n": 0}
 
@@ -1568,8 +1568,12 @@ class TestStalenessPreflight:
 
         embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
 
-        with patch.object(_ts, "_auto_index_project_single_flight", fake_single_flight):
+        with patch.object(_lc, "_auto_index_project_single_flight", fake_single_flight):
             response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
+
+        # Wait for the background reindex task spawned by _schedule_background_reindex.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
 
         assert "error" not in response, response
         assert call_count["n"] == 1
@@ -1594,9 +1598,9 @@ class TestStalenessPreflight:
 
         # Patch _auto_index_project_single_flight to count invocations without
         # paying the embedding cost.
-        from lgrep.server import tools_semantic as _ts
+        from lgrep.server import lifecycle as _lc
 
-        original = _ts._auto_index_project_single_flight
+        original = _lc._auto_index_project_single_flight
         call_count = {"n": 0}
 
         async def fake_single_flight(app_ctx_, project_path_, path_obj_):
@@ -1614,11 +1618,234 @@ class TestStalenessPreflight:
 
         embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
 
-        with patch.object(_ts, "_auto_index_project_single_flight", fake_single_flight):
+        with patch.object(_lc, "_auto_index_project_single_flight", fake_single_flight):
             response = await lgrep_search(query="anything", path=str(project), ctx=mock_ctx)
+
+        # Wait for the background reindex task spawned by _schedule_background_reindex.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
 
         assert "error" not in response, response
         assert call_count["n"] == 1, "Re-index must run exactly once on stale path"
 
         # Sanity: restoring the original keeps no side-effects.
-        assert _ts._auto_index_project_single_flight is original
+        assert _lc._auto_index_project_single_flight is original
+
+
+class TestBackgroundReindex:
+    """Background single-flight reindex scheduler and task registry."""
+
+    def _make_fresh_state(self, tmp_path):
+        """Build a ProjectState whose stored index reflects current disk."""
+        import hashlib
+        import time as _time
+
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore, CodeChunk, get_project_db_path
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        f = project / "a.py"
+        f.write_text("def a():\n    return 1\n")
+
+        db_path = get_project_db_path(str(project.resolve()))
+        db = ChunkStore(db_path, project_path=str(project.resolve()))
+        embedder = MagicMock()
+        indexer = Indexer(project_path=project, storage=db, embedder=embedder)
+
+        content = f.read_bytes()
+        file_hash = hashlib.sha256(content).hexdigest()
+        future = _time.time() + 1_000_000
+        chunk = CodeChunk(
+            id="c1",
+            file_path="a.py",
+            chunk_index=0,
+            start_line=1,
+            end_line=2,
+            content="def a():\n    return 1\n",
+            vector=[0.1] * 1024,
+            file_hash=file_hash,
+            indexed_at=future,
+        )
+        db.add_chunks([chunk])
+
+        state = ProjectState(db=db, indexer=indexer, watching=False)
+        state.latest_indexed_at = future
+        return project, state, embedder
+
+    def _make_stale(self, project, state):
+        """Mutate the on-disk file so the pre-flight reports stale."""
+        import os as _os
+        import time as _time
+
+        f = project / "a.py"
+        f.write_text("def a():\n    return 99\n")
+        # Backdate the cached timestamp so the new mtime is newer than the index.
+        past = _time.time() - 60.0
+        _os.utime(f, (past + 30, past + 30))
+        state.latest_indexed_at = past
+
+    @pytest.mark.asyncio
+    async def test_background_reindex_dedupes_concurrent_stale_searches(self, tmp_path):
+        """Concurrent stale searches schedule only one background index_all."""
+        from lgrep.server.lifecycle import _schedule_background_reindex
+
+        project, state, _embedder = self._make_fresh_state(tmp_path)
+        self._make_stale(project, state)
+
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.projects[str(project.resolve())] = state
+
+        call_count = {"n": 0}
+
+        def slow_index_all(**_kwargs):
+            call_count["n"] += 1
+            import time
+
+            time.sleep(0.2)
+            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+
+        state.indexer.index_all = MagicMock(side_effect=slow_index_all)
+
+        project_path = str(project.resolve())
+        await asyncio.gather(
+            *[_schedule_background_reindex(app_ctx, project_path, project) for _ in range(5)]
+        )
+
+        # Wait for all spawned background tasks to finish.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
+
+        assert call_count["n"] == 1, f"Expected one index_all, got {call_count['n']}"
+
+    @pytest.mark.asyncio
+    async def test_background_reindex_failure_leaves_index_stale_and_serves(self, tmp_path):
+        """Background index_all failure is swallowed, logged, and registry cleared.
+
+        The failed task must not leave a stale entry in ``_bg_reindex_tasks`` and
+        must not crash the next scheduling attempt.
+        """
+        import lgrep.server.lifecycle as lifecycle_mod
+        from lgrep.server.lifecycle import _schedule_background_reindex
+
+        project, state, _embedder = self._make_fresh_state(tmp_path)
+        self._make_stale(project, state)
+
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.projects[str(project.resolve())] = state
+
+        state.indexer.index_all = MagicMock(side_effect=RuntimeError("embedding API down"))
+
+        captured_error = []
+        captured_info = []
+        original_error = lifecycle_mod.log.error
+        original_info = lifecycle_mod.log.info
+        lifecycle_mod.log.error = lambda event, **kw: captured_error.append((event, kw))
+        lifecycle_mod.log.info = lambda event, **kw: captured_info.append((event, kw))
+
+        project_path = str(project.resolve())
+        await _schedule_background_reindex(app_ctx, project_path, project)
+
+        # Wait for the background task to finish and clean itself up.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
+
+        lifecycle_mod.log.error = original_error
+        lifecycle_mod.log.info = original_info
+
+        assert project_path not in app_ctx._bg_reindex_tasks
+        assert any("bg_reindex_failed" in e for e, _ in captured_error), captured_error
+
+    @pytest.mark.asyncio
+    async def test_stale_search_does_not_await_reindex(self, tmp_path):
+        """Staleness triggers a background reindex; search returns current results fast."""
+        import threading
+        import time as _time
+
+        project, state, embedder = self._make_fresh_state(tmp_path)
+        self._make_stale(project, state)
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        index_started = threading.Event()
+
+        def slow_index_all(**_kwargs):
+            index_started.set()
+            import time
+
+            time.sleep(0.5)
+            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+
+        state.indexer.index_all = MagicMock(side_effect=slow_index_all)
+
+        project_path = str(project.resolve())
+        start = _time.monotonic()
+        response = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
+        elapsed = _time.monotonic() - start
+
+        assert "error" not in response, response
+        assert elapsed < 0.3, f"Search took {elapsed:.2f}s; should not await reindex"
+        assert index_started.is_set(), "index_all should have started in background"
+        assert project_path in app_ctx._bg_reindex_tasks
+
+        # Wait for background to finish.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
+
+        assert state.indexer.index_all.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_background_reindex_refreshes_next_search(self, tmp_path):
+        """After background reindex completes, the next search observes fresh results."""
+        import time as _time
+
+        project, state, embedder = self._make_fresh_state(tmp_path)
+        self._make_stale(project, state)
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext(voyage_api_key="mock-key")
+        app_ctx.embedder = embedder
+        app_ctx.projects[str(project.resolve())] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        async def fake_embed(q):
+            return [0.1] * 1024
+
+        embedder.embed_query_async = AsyncMock(side_effect=fake_embed)
+
+        new_time = _time.time() + 2_000_000
+
+        # Simulate the DB timestamp being refreshed by a successful index_all.
+        state.db.get_latest_indexed_at = MagicMock(return_value=new_time)
+
+        state.indexer.index_all = MagicMock(
+            return_value=MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+        )
+
+        project_path = str(project.resolve())
+
+        # First search triggers background reindex and serves current results.
+        response1 = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
+        assert "error" not in response1, response1
+
+        # Wait for background reindex to finish.
+        while app_ctx._bg_reindex_tasks:
+            await asyncio.sleep(0.01)
+
+        # The state should now reflect the refreshed timestamp.
+        assert state.latest_indexed_at == new_time
+
+        # Second search should be fresh and not trigger another index_all.
+        state.indexer.index_all.reset_mock()
+        response2 = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
+        assert "error" not in response2, response2
+        state.indexer.index_all.assert_not_called()
