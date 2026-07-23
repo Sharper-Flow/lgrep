@@ -552,11 +552,15 @@ Run `lgrep_index_symbols_folder(path=...)` first.
 
 **Stale semantic results**
 
-`lgrep_search_semantic` now runs an auto-staleness check before every search.
-If file mtimes have moved past the index timestamp and content hashes have
-drifted, it re-indexes automatically. Manual `lgrep_index_semantic(...)` is
-only needed for first-time setup or to force a refresh; `lgrep_watch_start_semantic(...)`
-remains available for proactive background re-indexing on long-running setups.
+`lgrep_search_semantic` runs an auto-staleness check before every search. When
+file mtimes have moved past the index timestamp and content hashes have drifted,
+the search **serves the current (possibly slightly stale) index immediately** and
+triggers a background single-flight refresh — it never blocks on a full re-embed.
+The next search observes fresh results; freshness converges automatically with no
+operator configuration. `lgrep_watch_start_semantic(...)` (`LGREP_AUTO_WATCH`) is an
+incremental-freshness **optimization** (per-file background re-index on edit), not a
+correctness dependency. `lgrep_index_semantic(...)` is only needed for first-time
+setup or to force a guaranteed-fresh refresh before a specific query.
 
 **Native dependency build issues**
 

@@ -1,7 +1,7 @@
 # LgrepSemanticCacheLifecycle
 
-> **Version:** 1.0.0
-> **Updated:** 2026-04-20
+> **Version:** 1.1.0
+> **Updated:** 2026-07-23
 
 ## Purpose
 
@@ -317,3 +317,62 @@ The MCP `prune_orphans` tool MUST return a structured dict matching the `PruneOr
 **Then:**
 - The response is a dict (not a JSON string)
 - The keys {dry_run, dirs_examined, orphans, skipped_active, deleted_dirs, reclaimed_bytes, failures, _meta} are all present
+
+---
+
+### Search path never blocks on a full re-embed
+
+**ID:** `rq-search-never-blocks-on-reindex` | **Priority:** **[MUST]**
+
+The `search_semantic` path MUST NOT await a full `index_all` re-embed. When the staleness pre-flight (`_check_staleness`) detects drift, the search MUST serve the current on-disk index immediately and trigger a background single-flight refresh (scheduled, not awaited); the next search observes fresh results. This removes the proxy-timeout failure mode where a minutes-long re-embed blocks the search path. Freshness converges automatically; no operator flag or watcher pairing is required for correctness. The background refresh reuses the existing `_auto_index_project_single_flight` leader/follower coordinator and the bounded runtime supervisor (`run_blocking`), so it remains cooperatively cancellable, bounded by `LGREP_INDEX_MAX_WALL_S`, and observable as a `RuntimeJob`. A reindex already in flight for a project MUST NOT trigger a redundant `index_all` (single-flight dedup). Background reindex failure MUST leave the index stale (serve last-known-good) and MUST NOT propagate to a search caller; the next search re-triggers.
+
+**Tags:** `search`, `staleness`, `reindex`, `performance`, `background`
+
+#### Scenarios
+
+**Stale search serves immediately and schedules background refresh** (`rq-search-never-blocks-on-reindex.1`)
+
+**Given:**
+- An indexed project whose on-disk file set has drifted from the stored index (staleness detected)
+- A search_semantic request arrives
+
+**When:** The search runs
+
+**Then:**
+- The search returns current (possibly stale) results without awaiting an index_all re-embed
+- A background single-flight refresh is scheduled (not awaited on the search path)
+- No provider_timeout / tool timeout is caused by re-embed latency on the search path
+
+**Concurrent stale searches do not trigger redundant reindexes** (`rq-search-never-blocks-on-reindex.2`)
+
+**Given:**
+- A background reindex is already in flight for a project (single-flight event set)
+
+**When:** Another stale search for the same project runs
+
+**Then:**
+- No redundant index_all is scheduled
+- The search serves the current index immediately
+
+**Background reindex failure never blocks or crashes search** (`rq-search-never-blocks-on-reindex.3`)
+
+**Given:**
+- A background reindex's index_all raises an error
+
+**When:** A subsequent search runs
+
+**Then:**
+- No exception propagates to any search caller
+- The index remains at its pre-reindex state (last-known-good)
+- The next search observes stale and re-triggers a background refresh
+
+**Background reindex refreshes freshness for the next search** (`rq-search-never-blocks-on-reindex.4`)
+
+**Given:**
+- A background reindex completes successfully
+
+**When:** The next search runs
+
+**Then:**
+- latest_indexed_at is refreshed by the background task
+- The next search's staleness pre-flight reports fresh (no second reindex)
