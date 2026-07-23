@@ -14,6 +14,10 @@
 
 Closes issue #5 (multi-agent hosts accumulate stale symbol indexes forever).
 
+### Changed
+
+- **`search_semantic` no longer blocks on a full re-embed** — when the staleness pre-flight detects drift, the search now serves the current index immediately and triggers a background single-flight refresh; the next search observes fresh results. Removes the `provider_timeout` failure mode where a minutes-long Voyage re-embed blocked the search path behind the Vision proxy. Default behavior, no operator flag; freshness converges automatically. Spec: `rq-search-never-blocks-on-reindex`.
+
 ## 2026-07-04 (v3.1.8)\n\n### Changed\n- checkpoint main before archiving updateReadmePositioning2\n- checkpoint tk-92fc0bbcf001\n- checkpoint tk-afcb776da4f0
 
 ## 2026-06-25 (v3.1.7)\n\n### Changed\n- checkpoint tk-87be31396184
