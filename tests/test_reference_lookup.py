@@ -217,6 +217,20 @@ class TestSearchReferences:
         assert len(result["results"]) == 1
         assert result["total_matches"] > 1
 
+    def test_limit_is_capped_to_bound_response_work(self, tmp_path, store_dir):
+        from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_references import MAX_REFERENCE_RESULTS, search_references
+
+        source = tmp_path / "many_uses.py"
+        source.write_text("\n".join("helper()" for _ in range(MAX_REFERENCE_RESULTS + 1)))
+
+        index_folder(str(tmp_path), storage_dir=store_dir)
+        result = search_references("helper", str(tmp_path), storage_dir=store_dir, limit=10_000)
+
+        assert "error" not in result
+        assert result["total_matches"] == MAX_REFERENCE_RESULTS + 1
+        assert len(result["results"]) == MAX_REFERENCE_RESULTS
+
     def test_empty_query_error(self, store_dir):
         from lgrep.tools.search_references import search_references
 

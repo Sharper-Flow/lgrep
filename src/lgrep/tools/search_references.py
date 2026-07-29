@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 _USAGE_FILTERS = frozenset({"production_first", "include_tests", "tests_only"})
 _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
+MAX_REFERENCE_RESULTS = 100
 
 _DISCLAIMER = (
     "Candidate occurrences only; results are not compiler-accurate or exhaustive."
@@ -40,7 +41,8 @@ def search_references(
         query: Symbol name to look up (e.g. "authenticate").
         repo_path: Absolute path to the indexed repository root.
         storage_dir: Optional override for the symbol index storage directory.
-        limit: Maximum number of occurrence results to return (default: 20).
+        limit: Maximum number of occurrence results to return (default: 20,
+            capped at 100).
         usage_filter: One of "production_first", "include_tests", "tests_only".
         kind: Optional occurrence kind filter ("call", "attribute", "import",
             "reference").
@@ -70,6 +72,7 @@ def search_references(
 
     if limit < 1:
         limit = 1
+    limit = min(limit, MAX_REFERENCE_RESULTS)
 
     store = IndexStore(storage_dir=storage_dir)
     repo_key = normalize_repo_key(repo_path)
