@@ -1,7 +1,8 @@
 """Symbol extractor using tree-sitter AST parsing.
 
 Walks the AST of a source file and extracts Symbol objects for each
-function, class, method, and interface definition.
+function, class, method, and interface definition. For Python, it also
+collects candidate identifier Occurrence objects for local reference lookup.
 
 Uses tree-sitter-language-pack for pre-built parsers (165+ languages).
 """
@@ -13,9 +14,11 @@ from pathlib import Path
 import structlog
 
 from lgrep.parser.languages import LanguageSpec, get_language_spec
-from lgrep.parser.symbols import Symbol, make_symbol_id
+from lgrep.parser.symbols import Occurrence, Symbol, make_occurrence_id, make_symbol_id
 
 log = structlog.get_logger()
+
+_OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
 
 
 def _get_node_name(node, source: bytes) -> str | None:
@@ -126,16 +129,66 @@ def _get_enclosing_class_name(node, source: bytes) -> str | None:
     return None
 
 
-def _extract_symbols_from_tree(
+def _is_definition_name(node, parent, spec: LanguageSpec) -> bool:
+    """Return True if this identifier node is the name of a tracked definition."""
+    if parent is None:
+        return False
+    if parent.type in (*spec.function_kinds, *spec.class_kinds):
+        for child in parent.children:
+            if child.type in ("identifier", "name", "type_identifier"):
+                return child.id == node.id
+    return False
+
+
+def _occurrence_kind(node, parent) -> str:
+    """Classify a candidate identifier occurrence by its AST context."""
+    if parent is None:
+        return "reference"
+
+    # Imports: identifier may be nested under dotted_name / aliased_import.
+    current = parent
+    while current is not None:
+        if current.type in ("import_statement", "import_from_statement", "aliased_import"):
+            return "import"
+        current = current.parent
+
+    parent_type = parent.type
+
+    # Attribute access: attribute name is the third child (obj, dot, attr)
+    if parent_type == "attribute" and len(parent.children) >= 3:
+        if parent.children[2].id == node.id:
+            return "attribute"
+        return "reference"
+
+    # Function call target when identifier is the called expression
+    if parent_type == "call" and parent.children and parent.children[0].id == node.id:
+        return "call"
+
+    return "reference"
+
+
+def _extract_symbols_and_occurrences_from_tree(
     root_node,
     source: bytes,
     file_path: str,
     spec: LanguageSpec,
-) -> list[Symbol]:
-    """Walk the AST and extract all symbols matching the language spec."""
+) -> tuple[list[Symbol], list[Occurrence]]:
+    """Walk the AST and extract symbols plus Python candidate occurrences."""
     symbols: list[Symbol] = []
+    occurrences: list[Occurrence] = []
+    lines_decoded: list[str] | None = None
 
-    def walk(node, depth: int = 0) -> None:
+    def _enclosing_id(stack: list[tuple]) -> str | None:
+        for _, sym_id in reversed(stack):
+            if sym_id is not None:
+                return sym_id
+        return None
+
+    def walk(node, depth: int = 0, enclosing_stack: list[tuple] | None = None) -> None:
+        nonlocal lines_decoded
+        if enclosing_stack is None:
+            enclosing_stack = []
+
         node_type = node.type
 
         # Determine if this node is a symbol we care about
@@ -144,10 +197,11 @@ def _extract_symbols_from_tree(
         is_method = node_type in spec.method_kinds
         is_interface = node_type in spec.interface_kinds
 
+        sym_id_for_children: str | None = None
+
         if is_function or is_class or is_method or is_interface:
             name = _get_node_name(node, source)
             if name:
-                # Determine kind
                 if is_class:
                     kind = "class"
                 elif is_interface and not is_class:
@@ -160,7 +214,7 @@ def _extract_symbols_from_tree(
                     kind = "symbol"
 
                 parent_name = _get_enclosing_class_name(node, source) if kind == "method" else None
-                sym_id = make_symbol_id(file_path, kind, name, parent=parent_name)
+                sym_id_for_children = make_symbol_id(file_path, kind, name, parent=parent_name)
 
                 # Extract docstring (Python only for now)
                 docstring = None
@@ -177,7 +231,7 @@ def _extract_symbols_from_tree(
 
                 symbols.append(
                     Symbol(
-                        id=sym_id,
+                        id=sym_id_for_children,
                         name=name,
                         kind=kind,
                         file_path=file_path,
@@ -189,11 +243,56 @@ def _extract_symbols_from_tree(
                     )
                 )
 
+        # Python candidate occurrence extraction
+        if spec.name == "python" and node_type == "identifier":
+            parent = node.parent
+            if not _is_definition_name(node, parent, spec):
+                kind = _occurrence_kind(node, parent)
+                if kind in _OCCURRENCE_KINDS:
+                    line_number = node.start_point[0] + 1
+                    if lines_decoded is None:
+                        lines_decoded = source.decode("utf-8", errors="replace").splitlines()
+                    line_text = (
+                        lines_decoded[line_number - 1] if line_number <= len(lines_decoded) else ""
+                    )
+                    occ_name = source[node.start_byte : node.end_byte].decode(
+                        "utf-8", errors="replace"
+                    )
+                    occurrences.append(
+                        Occurrence(
+                            id=make_occurrence_id(file_path, occ_name, node.start_byte),
+                            name=occ_name,
+                            file_path=file_path,
+                            start_byte=node.start_byte,
+                            end_byte=node.end_byte,
+                            line_number=line_number,
+                            line_text=line_text,
+                            kind=kind,
+                            enclosing_symbol_id=_enclosing_id(enclosing_stack),
+                        )
+                    )
+
+        # Push the current symbol onto the enclosing stack before recursing
+        child_stack = enclosing_stack
+        if sym_id_for_children is not None:
+            child_stack = [*enclosing_stack, (node, sym_id_for_children)]
+
         # Recurse into children
         for child in node.children:
-            walk(child, depth + 1)
+            walk(child, depth + 1, child_stack)
 
     walk(root_node)
+    return symbols, occurrences
+
+
+def _extract_symbols_from_tree(
+    root_node,
+    source: bytes,
+    file_path: str,
+    spec: LanguageSpec,
+) -> list[Symbol]:
+    """Walk the AST and extract all symbols matching the language spec."""
+    symbols, _ = _extract_symbols_and_occurrences_from_tree(root_node, source, file_path, spec)
     return symbols
 
 
@@ -220,13 +319,43 @@ class SymbolExtractor:
             List of Symbol objects. Empty list if the language is unsupported
             or the file cannot be parsed.
         """
+        result = self._parse(file_path, repo_root)
+        if result is None:
+            return []
+        root_node, source, id_path, spec = result
+        return _extract_symbols_from_tree(root_node, source, id_path, spec)
+
+    def extract_full(
+        self, file_path: Path, repo_root: Path | None = None
+    ) -> tuple[list[Symbol], list[Occurrence]]:
+        """Extract symbols and candidate occurrences from a source file.
+
+        Args:
+            file_path: Path to the source file
+            repo_root: Optional repo root for computing relative paths in IDs.
+                       If None, uses the absolute file path.
+
+        Returns:
+            Tuple of (symbols, occurrences). Occurrences are currently
+            collected for Python only; other languages return an empty list.
+            Empty lists are returned if the language is unsupported or the
+            file cannot be parsed.
+        """
+        result = self._parse(file_path, repo_root)
+        if result is None:
+            return [], []
+        root_node, source, id_path, spec = result
+        return _extract_symbols_and_occurrences_from_tree(root_node, source, id_path, spec)
+
+    def _parse(self, file_path: Path, repo_root: Path | None = None) -> tuple | None:
+        """Parse a source file and return tree-sitter metadata."""
         file_path = Path(file_path)
         extension = file_path.suffix.lower()
 
         spec = get_language_spec(extension)
         if spec is None:
             log.debug("unsupported_language", file=str(file_path), extension=extension)
-            return []
+            return None
 
         # Compute the path string to use in symbol IDs
         if repo_root is not None:
@@ -241,7 +370,7 @@ class SymbolExtractor:
             source = file_path.read_bytes()
         except OSError as e:
             log.warning("extractor_read_failed", file=str(file_path), error=str(e))
-            return []
+            return None
 
         try:
             from tree_sitter_language_pack import get_parser
@@ -250,6 +379,6 @@ class SymbolExtractor:
             tree = parser.parse(source)
         except Exception as e:
             log.warning("extractor_parse_failed", file=str(file_path), lang=spec.name, error=str(e))
-            return []
+            return None
 
-        return _extract_symbols_from_tree(tree.root_node, source, id_path, spec)
+        return tree.root_node, source, id_path, spec

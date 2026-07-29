@@ -16,7 +16,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
@@ -37,12 +37,14 @@ class CodeIndex:
         repo_path: Absolute path to the repository root
         files: Dict mapping relative file paths to their content hashes
         symbols: Dict mapping symbol IDs to symbol metadata dicts
+        occurrences: Dict mapping identifier names to lists of occurrence dicts
         version: Index format version (for future compatibility)
     """
 
     repo_path: str
     files: dict[str, str]  # relative_path → hash
     symbols: dict[str, dict]  # symbol_id → symbol metadata
+    occurrences: dict[str, list[dict]] = field(default_factory=dict)  # name → occurrences
     version: str = "2.0"
 
 
@@ -60,6 +62,14 @@ def normalize_repo_key(repo_path: str) -> str:
 def _repo_key(repo_path: str) -> str:
     """Generate a stable filename key for a repo path."""
     return hashlib.sha256(repo_path.encode()).hexdigest()[:16]
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    """Parse an index version string into a comparable tuple of integers."""
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return (0,)
 
 
 class IndexStore:
@@ -112,13 +122,19 @@ class IndexStore:
                 "repo_path": normalized_repo,
                 "files": index.files,
                 "symbols": index.symbols,
+                "occurrences": index.occurrences,
                 "version": index.version,
             }
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.rename(target)
             stat = target.stat()
             self._cache[target] = (stat.st_mtime_ns, stat.st_size, index)
-            log.debug("index_saved", repo=normalized_repo, symbols=len(index.symbols))
+            log.debug(
+                "index_saved",
+                repo=normalized_repo,
+                symbols=len(index.symbols),
+                occurrences=sum(len(v) for v in index.occurrences.values()),
+            )
         except OSError as e:
             log.error("index_save_failed", repo=normalized_repo, error=str(e))
             # Clean up temp file if it exists
@@ -153,6 +169,7 @@ class IndexStore:
                 repo_path=data["repo_path"],
                 files=data.get("files", {}),
                 symbols=data.get("symbols", {}),
+                occurrences=data.get("occurrences", {}),
                 version=data.get("version", "2.0"),
             )
             self._cache[index_file] = (stat.st_mtime_ns, stat.st_size, index)
