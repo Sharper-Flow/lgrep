@@ -22,6 +22,7 @@ the question:
 | File structure overview | `lgrep_get_file_outline` | "what's in auth.py?" |
 | Repo structure overview | `lgrep_get_repo_outline` | "what's in this codebase?" |
 | Exact text/regex lookup | `lgrep_search_text` or `grep` | "find all references to verifyToken" |
+| Candidate usage/reference lookup | `lgrep_search_references` | "find candidate usages of helper" |
 | Known file inspection | `read` | "open src/auth.ts and explain line 42" |
 
 ### When to Use Built-in grep/glob Instead
@@ -57,13 +58,14 @@ like "glob first" or "grep first".
 Instruction policy is necessary but not sufficient. The active agent or
 sub-agent must also expose the `lgrep_*` tool definitions in its tool manifest.
 
-- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`, or
-  related `lgrep_*` tools, the model cannot follow this policy and will fall
-  back to `glob`/`grep`/`read`.
+- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`,
+  `lgrep_search_references`, or related `lgrep_*` tools, the model cannot
+  follow this routing policy and will fall back to `glob`/`grep`/`read`.
 - In agent frontmatter, explicitly allow the lgrep tools you expect the agent to
   use (for example `lgrep_search_semantic: true`,
-  `lgrep_search_symbols: true`, `lgrep_get_file_outline: true`,
-  `lgrep_search_text: true`).
+  `lgrep_search_symbols: true`, `lgrep_search_references: true`,
+  `lgrep_get_file_outline: true`, `lgrep_search_text: true`).
+
 - Do not assume that having `mcp.lgrep` configured in `opencode.json` is enough
   for every agent profile; agent-level tool allowlists can still hide the tools.
 - If a search times out, an MCP-tool-level `vision_restart lgrep` recovers the

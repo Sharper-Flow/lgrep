@@ -55,9 +55,36 @@ def time_tool(func):
                     "error": message,
                 }
 
+            if tool_name == "search_references":
+                return {
+                    "query": kwargs.get("query", ""),
+                    "usage_filter": kwargs.get("usage_filter", "production_first"),
+                    "total_matches": 0,
+                    "results": [],
+                    "candidate_names": [],
+                    "disclaimer": "",
+                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "error": message,
+                }
+
             from lgrep.server.responses import error_response as _err
 
             return _err(message)
+        except asyncio.CancelledError:
+            duration = round((time.perf_counter() - start) * 1000, 2)
+            log.warning(f"{tool_name}_cancelled", duration_ms=duration)
+            if tool_name == "search_references":
+                return {
+                    "query": kwargs.get("query", ""),
+                    "usage_filter": kwargs.get("usage_filter", "production_first"),
+                    "total_matches": 0,
+                    "results": [],
+                    "candidate_names": [],
+                    "disclaimer": "",
+                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "error": "Operation was cancelled.",
+                }
+            raise
         except Exception as e:
             duration = round((time.perf_counter() - start) * 1000, 2)
             log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))
@@ -122,6 +149,7 @@ from lgrep.server.tools_symbols import (  # noqa: E402
     index_symbols_repo,
     invalidate_cache,
     list_repos,
+    search_references,
     search_symbols,
     search_text,
 )
@@ -207,6 +235,7 @@ __all__ = [
     "get_repo_outline",
     "search_symbols",
     "search_text",
+    "search_references",
     "get_symbol",
     "get_symbols",
     "invalidate_cache",

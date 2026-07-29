@@ -56,6 +56,10 @@ def test_search_text_importable():
     from lgrep.tools.search_text import search_text  # noqa: F401
 
 
+def test_search_references_importable():
+    from lgrep.tools.search_references import search_references  # noqa: F401
+
+
 def test_get_symbol_importable():
     from lgrep.tools.get_symbol import get_symbol  # noqa: F401
 

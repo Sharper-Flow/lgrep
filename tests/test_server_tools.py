@@ -1,7 +1,7 @@
-"""MCP contract tests for all 20 registered tools.
+"""MCP contract tests for all 21 registered tools.
 
 Verifies:
-- All 20 tools are registered in the MCP server (5 semantic + 14 symbol/admin + 1 diagnostics)
+- All 21 tools are registered in the MCP server (5 semantic + 15 symbol/admin + 1 diagnostics)
 - Renamed semantic tools preserve response shape
 - New symbol/admin tools return valid JSON with _meta envelope
 - Unknown tool returns structured error (via tool dispatch)
@@ -35,6 +35,7 @@ EXPECTED_SYMBOL_TOOLS = {
     "get_repo_outline",
     "search_symbols",
     "search_text",
+    "search_references",
     "get_symbol",
     "get_symbols",
     "invalidate_cache",
@@ -56,7 +57,7 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    def test_all_19_tools_registered(self):
+    def test_all_21_tools_registered(self):
         registered = _get_registered_tool_names()
         assert registered == ALL_EXPECTED_TOOLS, (
             f"Missing: {ALL_EXPECTED_TOOLS - registered}\nExtra: {registered - ALL_EXPECTED_TOOLS}"
@@ -220,6 +221,38 @@ class TestSymbolToolResponses:
         assert result["results"] == []
         assert result["max_results"] == 7
         assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_search_references_missing_index_returns_error(self, tmp_path):
+        fn = self._get_tool_fn("search_references")
+        result = await fn(query="greet", path=str(tmp_path))
+        data = result
+        assert "error" in data
+
+    @pytest.mark.asyncio
+    async def test_search_references_uses_runtime_supervisor_when_context_available(self, tmp_path):
+        fn = self._get_tool_fn("search_references")
+        calls = []
+
+        class RuntimeStub:
+            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+                calls.append({"kind": kind, "caller": caller, "project": project})
+                return fn_to_run(*args, **kwargs)
+
+        ctx = SimpleNamespace(
+            request_context=SimpleNamespace(lifespan_context=SimpleNamespace(runtime=RuntimeStub()))
+        )
+
+        result = await fn(query="greet", path=str(tmp_path), ctx=ctx)
+
+        assert "error" in result  # repo not indexed is fine for this contract test
+        assert calls == [
+            {
+                "kind": "search_references",
+                "caller": "search_references",
+                "project": str(tmp_path.resolve()),
+            }
+        ]
 
     @pytest.mark.asyncio
     async def test_get_symbol_missing_index_returns_error(self, tmp_path):

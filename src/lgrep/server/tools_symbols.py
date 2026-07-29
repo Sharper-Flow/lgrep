@@ -21,6 +21,7 @@ from lgrep.server.responses import (
     IndexSymbolsRepoResult,
     InvalidateCacheResult,
     ListReposResult,
+    SearchReferencesResult,
     SearchSymbolsResult,
     SearchTextResult,
     ToolError,
@@ -35,11 +36,12 @@ from lgrep.tools.index_folder import index_folder as _index_folder
 from lgrep.tools.index_repo import index_repo as _index_repo
 from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
+from lgrep.tools.search_references import search_references as _search_references
 from lgrep.tools.search_symbols import search_symbols as _search_symbols
 from lgrep.tools.search_text import search_text as _search_text
 
 # ---------------------------------------------------------------------------
-# MCP Tools (11 symbol tools)
+# MCP Tools (12 symbol tools)
 # ---------------------------------------------------------------------------
 
 
@@ -470,6 +472,96 @@ async def get_symbols(
     return GetSymbolsResult(
         symbols=result["symbols"],
         _meta={"duration_ms": 0.0, "tool": "get_symbols"},
+    )
+
+
+@mcp.tool(
+    description=(
+        "Search for candidate references/usages of a symbol name in an indexed Python repository. "
+        "Results are bounded and explicitly labeled as candidate occurrences, not compiler-accurate "
+        "or exhaustive references. Supports production-first, include-tests, or tests-only filtering. "
+        "Requires prior indexing with lgrep_index_symbols_folder. MCP tool call only; do not invoke via shell."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
+@time_tool
+async def search_references(
+    query: Annotated[
+        str,
+        Field(description="Symbol name to look up (e.g. 'authenticate')."),
+    ],
+    path: Annotated[
+        str,
+        Field(description="Absolute path to the indexed repository root."),
+    ],
+    limit: Annotated[
+        int,
+        Field(description="Maximum number of candidate occurrence results to return."),
+    ] = 20,
+    usage_filter: Annotated[
+        str,
+        Field(
+            description=(
+                "Result set filter: 'production_first' (default), 'include_tests', or 'tests_only'."
+            ),
+        ),
+    ] = "production_first",
+    kind: Annotated[
+        str | None,
+        Field(
+            description="Optional occurrence kind filter: 'call', 'attribute', 'import', or 'reference'."
+        ),
+    ] = None,
+    ctx: Context | None = None,
+) -> SearchReferencesResult | ToolError:
+    """Search for candidate usages of a symbol name in an indexed repository.
+
+    Args:
+        query: Symbol name to look up
+        path: Absolute path to the indexed repository
+        limit: Maximum number of results to return (default: 20)
+        usage_filter: production_first, include_tests, or tests_only (default: production_first)
+        kind: Optional occurrence kind filter
+        ctx: Optional MCP context for RuntimeSupervisor routing
+
+    Returns:
+        Candidate occurrences, candidate names, disclaimer, and meta envelope.
+    """
+    resolved_path = str(Path(path).resolve())
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+        result = await app_ctx.runtime.run_blocking(
+            "search_references",
+            "search_references",
+            resolved_path,
+            _search_references,
+            query,
+            path,
+            limit=limit,
+            usage_filter=usage_filter,
+            kind=kind,
+        )
+    else:
+        result = await asyncio.to_thread(
+            _search_references,
+            query,
+            path,
+            limit=limit,
+            usage_filter=usage_filter,
+            kind=kind,
+        )
+
+    if "error" in result:
+        return error_response(result["error"])
+
+    return SearchReferencesResult(
+        query=result["query"],
+        usage_filter=result["usage_filter"],
+        total_matches=result["total_matches"],
+        results=result["results"],
+        candidate_names=result["candidate_names"],
+        disclaimer=result["disclaimer"],
+        _meta={"duration_ms": 0.0, "tool": "search_references"},
     )
 
 

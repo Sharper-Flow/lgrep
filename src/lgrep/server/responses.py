@@ -246,6 +246,41 @@ class SearchTextMatch(TypedDict):
     line: str
 
 
+class ReferenceCandidate(TypedDict):
+    """A single candidate occurrence in a reference lookup result."""
+
+    id: str
+    name: str
+    file_path: str
+    line_number: int
+    line_text: str
+    kind: str
+    enclosing_symbol_id: str | None
+    is_test_file: bool
+
+
+class _SearchReferencesResultRequired(TypedDict):
+    """Required response fields for search_references."""
+
+    query: str
+    usage_filter: str
+    total_matches: int
+    results: list[ReferenceCandidate]
+    candidate_names: list[str]
+    disclaimer: str
+    _meta: _Meta
+
+
+class SearchReferencesResult(_SearchReferencesResultRequired, total=False):
+    """Response for search_references.
+
+    ``error`` is present only on timeout or other structured failures so the
+    response shape stays stable even when the operation cannot complete.
+    """
+
+    error: str
+
+
 class GetSymbolResult(TypedDict):
     """Response for get_symbol."""
 
@@ -443,6 +478,20 @@ def time_tool(func: F) -> F:
                 duration_ms=duration,
                 timeout_s=TOOL_TIMEOUT_S,
             )
+            if tool_name == "search_references":
+                return {
+                    "query": kwargs.get("query", ""),
+                    "usage_filter": kwargs.get("usage_filter", "production_first"),
+                    "total_matches": 0,
+                    "results": [],
+                    "candidate_names": [],
+                    "disclaimer": "",
+                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "error": (
+                        f"Operation timed out after {TOOL_TIMEOUT_S}s. "
+                        "The project may need re-indexing. Try again or use a non-semantic search tool."
+                    ),
+                }
             return error_response(
                 f"Operation timed out after {TOOL_TIMEOUT_S}s. "
                 "The project may need re-indexing or the Voyage API may be slow. "

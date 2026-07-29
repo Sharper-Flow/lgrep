@@ -19,6 +19,7 @@ Use this first-action policy:
 
 - For intent-based discovery, **call `lgrep_search_semantic` first**.
 - For exact symbol lookup by name, **call `lgrep_search_symbols`** (after indexing).
+- For candidate usage/reference lookup for a symbol name, **call `lgrep_search_references`** (after indexing).
 - For file structure overview, **call `lgrep_get_file_outline`** (no index needed).
 - For exact identifier/regex lookups, use built-in `Grep` first.
 - For known-file inspection, read the file directly.
@@ -29,6 +30,7 @@ Use this first-action policy:
 |---|---|---|
 | **Intent search** ("how is auth handled?") | `lgrep_search_semantic` | Semantic retrieval finds meaning |
 | **Find function by name** ("find authenticate") | `lgrep_search_symbols` | Exact symbol lookup, fast |
+| **Find candidate usages** ("where is helper used?") | `lgrep_search_references` | Candidate occurrences, not exhaustive |
 | **File structure** ("what's in auth.py?") | `lgrep_get_file_outline` | No index needed |
 | **Repo structure** ("what's in this codebase?") | `lgrep_get_repo_outline` | Full symbol map |
 | **Exact text/identifier** ("find verifyToken") | `lgrep_search_text` or `Grep` | Literal matching |
@@ -39,6 +41,7 @@ Use this first-action policy:
 
 - **Use `lgrep_search_semantic` first:** "where is auth enforced between API and service layer?"
 - **Use `lgrep_search_symbols` first:** "find the `authenticate` function"
+- **Use `lgrep_search_references` first:** "find candidate usages of `authenticate`"
 - **Use `lgrep_get_file_outline` first:** "what functions are in `src/auth.py`?"
 - **Use `Grep` first:** "find all references to `verifyToken`"
 - **Use file read first:** "open `src/auth/jwt.ts` and explain line 42"
@@ -48,12 +51,14 @@ Use this first-action policy:
 Instruction text alone is not enough. The active agent or sub-agent also needs
 the `lgrep_*` tool definitions in its tool manifest.
 
-- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`, or
-  related `lgrep_*` tools, the model cannot follow this routing policy and will
-  fall back to `glob`/`grep`/`read`.
-- In agent frontmatter, explicitly allow the tools you expect to use (for
+- If the manifest omits `lgrep_search_semantic`, `lgrep_search_symbols`,
+  `lgrep_search_references`, or related `lgrep_*` tools, the model cannot
+  follow this routing policy and will fall back to `glob`/`grep`/`read`.
+- In agent frontmatter, explicitly allow the tools you expect the agent to use (for
   example `lgrep_search_semantic: true`, `lgrep_search_symbols: true`,
-  `lgrep_get_file_outline: true`, `lgrep_search_text: true`).
+  `lgrep_search_references: true`, `lgrep_get_file_outline: true`,
+  `lgrep_search_text: true`).
+
 - Do not assume `mcp.lgrep` in `opencode.json` is enough for every agent
   profile; agent-level tool allowlists can still hide the tools.
 
@@ -286,6 +291,23 @@ Literal text search across all source files.
 - `max_results` (int): Maximum results (default: 50).
 - `case_sensitive` (bool): Case-sensitive matching (default: false).
 
+### lgrep_search_references
+
+Search for candidate references/usages of a symbol name in an indexed Python repository.
+
+- `query` (string, **required**): Symbol name to look up (e.g. `helper`).
+- `path` (string, **required**): Absolute path to the indexed repository.
+- `limit` (int): Maximum results (default: 20).
+- `usage_filter` (string): One of `production_first` (default), `include_tests`, or `tests_only`.
+- `kind` (string, optional): Occurrence kind filter (`call`, `attribute`, `import`, `reference`).
+
+Results are **candidate occurrences only** — they are not compiler-accurate or exhaustive. Each result includes the file path, line number, line text, occurrence kind, and the nearest enclosing symbol. Use `lgrep_get_file_outline` or `lgrep_get_symbol` to inspect the surrounding code in more detail.
+
+**Example usage:**
+```python
+lgrep_search_references(query="helper", path="/home/user/dev/project", usage_filter="production_first")
+```
+
 ### lgrep_get_symbol
 
 Get full metadata and source code for a single symbol by ID.
@@ -310,7 +332,7 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 
 1. **Ignore large or generated files (`.lgrepignore`)**: `lgrep` respects `.gitignore` automatically. For additional exclusions, create a `.lgrepignore` file in the project root (e.g. `src/generated/`, `*.test.data`) to speed up indexing and avoid clutter.
 2. **Semantic search — be specific**: Instead of "auth", use "JWT authentication flow and session management".
-3. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols` or `lgrep_get_symbol`.
+3. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols`, `lgrep_search_references`, or `lgrep_get_symbol`.
 4. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
 5. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
 6. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.
