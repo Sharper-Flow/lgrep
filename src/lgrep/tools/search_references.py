@@ -27,9 +27,7 @@ MAX_REFERENCE_RESULTS = 100
 # has rows left; a corpus smaller than the cap simply returns fewer rows.
 TEST_RESERVE_RATIO = 0.2
 
-_DISCLAIMER = (
-    "Candidate occurrences only; results are not compiler-accurate or exhaustive."
-)
+_DISCLAIMER = "Candidate occurrences only; results are not compiler-accurate or exhaustive."
 
 
 def _annotate_staleness(
@@ -143,9 +141,7 @@ def search_references(
         )
 
     query_lower = query.lower()
-    candidate_names = sorted(
-        name for name in index.occurrences if name.lower() == query_lower
-    )
+    candidate_names = sorted(name for name in index.occurrences if name.lower() == query_lower)
 
     if not candidate_names:
         return {
@@ -194,9 +190,7 @@ def search_references(
             chosen_tests += extra_tests
             spare -= len(extra_tests)
         if spare > 0:
-            chosen_production += production[
-                len(chosen_production) : len(chosen_production) + spare
-            ]
+            chosen_production += production[len(chosen_production) : len(chosen_production) + spare]
 
         results = chosen_production + chosen_tests
     else:

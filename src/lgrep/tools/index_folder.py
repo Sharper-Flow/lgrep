@@ -97,9 +97,7 @@ def index_folder(
     existing_index = store.load(resolved_root) if incremental else None
     existing_files = existing_index.files if existing_index else {}
     existing_symbols = dict(existing_index.symbols) if existing_index else {}
-    existing_occurrences = (
-        dict(existing_index.occurrences) if existing_index else {}
-    )
+    existing_occurrences = dict(existing_index.occurrences) if existing_index else {}
 
     # Safe refresh migration: old indexes without occurrence data must be
     # fully re-parsed before callers can trust occurrence results. This is
@@ -163,11 +161,7 @@ def index_folder(
                 if sdata.get("file_path") != rel_path
             }
             occurrences_dict = {
-                name: [
-                    occ
-                    for occ in occs
-                    if occ.get("file_path") != rel_path
-                ]
+                name: [occ for occ in occs if occ.get("file_path") != rel_path]
                 for name, occs in occurrences_dict.items()
             }
             # Drop empty occurrence buckets

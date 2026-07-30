@@ -395,10 +395,7 @@ def test_logging_refused_symlink_at_delete_time(tmp_path, monkeypatch):
     with capture_logs() as cap:
         prune_orphans(cache_dir=cache_root, dry_run=False)
 
-    matching = [
-        e for e in cap
-        if e["event"] == "prune_refused_symlink" and e["store"] == "orphans"
-    ]
+    matching = [e for e in cap if e["event"] == "prune_refused_symlink" and e["store"] == "orphans"]
     assert len(matching) == 1
     assert matching[0]["path"] == str(link)
 
@@ -430,8 +427,7 @@ def test_logging_refused_outside_cache_root(tmp_path, monkeypatch):
         prune_orphans(cache_dir=cache_root, dry_run=False)
 
     matching = [
-        e for e in cap
-        if e["event"] == "prune_refused_outside_root" and e["store"] == "orphans"
+        e for e in cap if e["event"] == "prune_refused_outside_root" and e["store"] == "orphans"
     ]
     assert len(matching) == 1
 
@@ -457,7 +453,8 @@ def test_logging_rmtree_failed(tmp_path, monkeypatch):
         prune_orphans(cache_dir=tmp_path, dry_run=False)
 
     matching = [
-        e for e in cap
+        e
+        for e in cap
         if e["event"] == "prune_unlink_failed"
         and e["store"] == "orphans"
         and e["path"] == str(orphan_dir)

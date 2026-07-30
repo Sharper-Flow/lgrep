@@ -98,8 +98,7 @@ def test_find_stale_detects_repo_path_enoent(tmp_path):
     results = find_stale_indexes(storage_dir=tmp_path)
 
     assert any(
-        entry["reason"] == "repo_path_enoent"
-        and entry["repo_path"] == str(missing_repo)
+        entry["reason"] == "repo_path_enoent" and entry["repo_path"] == str(missing_repo)
         for entry in results
     )
 
@@ -122,9 +121,7 @@ def test_find_stale_detects_missing_repo_path_field(tmp_path):
 
     results = find_stale_indexes(storage_dir=tmp_path)
 
-    assert any(
-        entry["reason"] == "missing_repo_path_field" for entry in results
-    )
+    assert any(entry["reason"] == "missing_repo_path_field" for entry in results)
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +158,9 @@ def test_find_stale_preserves_live_repo(tmp_path):
     assert results == []
 
 
-def test_find_stale_preserves_existing_index_for_live_path_with_unreadable_json(tmp_path, monkeypatch):
+def test_find_stale_preserves_existing_index_for_live_path_with_unreadable_json(
+    tmp_path, monkeypatch
+):
     # If the repo_path on disk is fine but the JSON is corrupt, stale reason
     # is still unreadable_index_json (grace may apply separately). This pins
     # the classification path: repo_path existence check only fires after
@@ -208,7 +207,9 @@ def test_find_stale_skips_symlinked_index(tmp_path):
     # A real index file outside the storage root, then symlinked in.
     outside = tmp_path / "outside.json"
     outside.write_text(
-        json.dumps({"repo_path": str(tmp_path / "missing"), "files": {}, "symbols": {}, "version": "2.0"}),
+        json.dumps(
+            {"repo_path": str(tmp_path / "missing"), "files": {}, "symbols": {}, "version": "2.0"}
+        ),
         encoding="utf-8",
     )
     link = tmp_path / "index_deadbeefdeadbeef.json"
@@ -341,9 +342,7 @@ def test_prune_execute_deletes_only_stale_and_matches_dry_run_bytes(tmp_path):
     assert not stale_file.exists()
     assert live_file.exists()
     assert execute["deleted_files"] == len(dry_run["stale_indexes"])
-    assert execute["reclaimed_bytes"] == sum(
-        entry["bytes"] for entry in dry_run["stale_indexes"]
-    )
+    assert execute["reclaimed_bytes"] == sum(entry["bytes"] for entry in dry_run["stale_indexes"])
 
 
 def test_prune_execute_continues_on_unlink_failure(tmp_path, monkeypatch):
@@ -547,10 +546,7 @@ def test_logging_refused_symlink_at_delete_time(tmp_path, monkeypatch):
     with capture_logs() as cap:
         prune_symbols(storage_dir=storage, dry_run=False)
 
-    matching = [
-        e for e in cap
-        if e["event"] == "prune_refused_symlink" and e["store"] == "symbols"
-    ]
+    matching = [e for e in cap if e["event"] == "prune_refused_symlink" and e["store"] == "symbols"]
     assert len(matching) == 1
     assert matching[0]["path"] == str(link)
 
@@ -582,8 +578,7 @@ def test_logging_refused_outside_root(tmp_path, monkeypatch):
         prune_symbols(storage_dir=storage, dry_run=False)
 
     matching = [
-        e for e in cap
-        if e["event"] == "prune_refused_outside_root" and e["store"] == "symbols"
+        e for e in cap if e["event"] == "prune_refused_outside_root" and e["store"] == "symbols"
     ]
     assert len(matching) == 1
 
@@ -608,7 +603,8 @@ def test_logging_unlink_failed(tmp_path, monkeypatch):
         prune_symbols(storage_dir=tmp_path, dry_run=False)
 
     matching = [
-        e for e in cap
+        e
+        for e in cap
         if e["event"] == "prune_unlink_failed"
         and e["store"] == "symbols"
         and e["path"] == str(stale)

@@ -236,12 +236,11 @@ class TestDiskCacheAutoLoad:
         assert active_cache.exists()
 
     @pytest.mark.asyncio
-    async def test_mcp_prune_orphans_forces_dry_run_on_non_stdio_transport(
-        self, tmp_path, monkeypatch
-    ):
-        # Review SEC-4: lgrep MCP has no per-client auth, so destructive
-        # prune on shared HTTP transports is refused. The handler must
-        # coerce dry_run=True and report it in the result.
+    async def test_mcp_prune_orphans_forces_dry_run_without_grant(self, tmp_path, monkeypatch):
+        # lgrep MCP has no per-client auth, so destructive prune is refused
+        # unless the server carries an explicit LGREP_ALLOW_DESTRUCTIVE_MCP
+        # grant. The transport here is incidental: the same request is refused
+        # on stdio too (see tests/test_maintenance_grant.py).
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext(transport="streamable-http")
         mock_ctx.request_context.lifespan_context = app_ctx

@@ -6,7 +6,7 @@
 
 ### Fixed
 
-- **`include_tests` actually includes tests.** The `production_first` and `include_tests` branches applied identical sort keys, so the filter was a dead branch: production occurrences filled the 100-result cap and test occurrences were unreachable. `include_tests` now reserves a minority share of the cap for test rows, handing unused reserve back to production so the cap stays full. `production_first` ordering and `tests_only` are unchanged.
+- **`include_tests` actually includes tests.** The `production_first` and `include_tests` branches applied identical sort keys, so the filter was a dead branch: production occurrences filled the 100-result cap and test occurrences were unreachable. `include_tests` now reserves a minority share of the cap for test rows, handing unused reserve back to the other group so capacity is never wasted while either group still has rows left. `production_first` ordering and `tests_only` are unchanged.
 
 - **Stale results now say they are stale.** Occurrences from a file edited since indexing were returned with their old line numbers and text and nothing to distinguish them from current ones. Each result now carries `is_stale`, computed by comparing the backing file against the per-file SHA-256 the index already stores, and responses report `stale_file_count`. A deleted backing file is reported stale rather than raising. Lookup reports freshness without re-indexing, does not write verdicts back into the cached index, confines the freshness read to the repository root, and is bounded by the returned rows rather than repository size.
 

@@ -40,9 +40,11 @@ Context snapshot:
   - **Recommendation:** Emit an env-file based systemd pattern (`EnvironmentFile=%h/.config/lgrep/env`) with `chmod 600` instructions; keep inline env only as quick manual example.
   - **Follow-up:** `/adv-task` or `/adv-proposal Harden service secret handling`
 
-- **POSITIVE — destructive MCP prune is transport-safe**
-  - **Evidence:** `src/lgrep/server/tools_maintenance.py:31-55` treats unknown/non-stdio transports as non-local; `src/lgrep/server/tools_maintenance.py:58-102` coerces `dry_run=True` for shared transports.
-  - **Impact:** Shared HTTP deployments cannot delete cache directories through MCP accidentally.
+- **~~POSITIVE — destructive MCP prune is transport-safe~~ — WRONG, superseded in v3.2.2**
+  - **Original evidence (2026-05-27):** `src/lgrep/server/tools_maintenance.py:31-55` treats unknown/non-stdio transports as non-local; `src/lgrep/server/tools_maintenance.py:58-102` coerces `dry_run=True` for shared transports.
+  - **Why it was wrong:** the scan checked that the coercion existed, not that transport was a sound proxy for caller identity. It is not. Vision runs lgrep as a stdio subprocess and republishes it on a shared unauthenticated port; the subprocess still reports `stdio`, so the guard passed traffic it was meant to stop — in exactly the deployment that most needed protection. The finding read as reassurance and delayed discovery.
+  - **Current state:** authority is an explicit `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, defaulting to off; transport no longer participates. See `rq-destructiveGrant01`.
+  - **Lesson for future scans:** a control that is *present* is not a control that is *sound*. Verify what a guard actually discriminates on, not that it exists.
 
 ### Reliability
 

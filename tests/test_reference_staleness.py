@@ -95,9 +95,7 @@ def test_lookup_does_not_reindex_as_a_side_effect(indexed_repo):
 
     _run(indexed_repo)
 
-    assert _run(indexed_repo)["stale_file_count"] == 1, (
-        "lookup must not silently refresh the index"
-    )
+    assert _run(indexed_repo)["stale_file_count"] == 1, "lookup must not silently refresh the index"
 
 
 def test_lookup_does_not_write_verdicts_into_the_index(indexed_repo):

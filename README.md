@@ -265,7 +265,7 @@ lgrep prune-orphans --execute --cache-dir /path/to/cache
 
 **Grace window.** Recently modified cache dirs are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). The `missing_meta` and `project_path_enoent` reasons bypass the grace check because they are unambiguous.
 
-**Transport-aware MCP safety.** When lgrep is reached over a shared transport (for example `streamable-http`), the MCP tool coerces `dry_run=True` regardless of the caller's request. Destructive prunes on shared deployments must go through the CLI (`lgrep prune-orphans --execute`) so the operator is explicit.
+**MCP deletion requires an explicit grant.** The MCP tool coerces `dry_run=True` regardless of the caller's request unless `LGREP_ALLOW_DESTRUCTIVE_MCP` is set in the server's environment, and the refused response carries a `refused_reason` naming the grant. Transport kind is not consulted: a proxy can front a local stdio pipe with a shared network port, so `stdio` proves nothing about who is calling. Leave the grant unset on any shared deployment and use the CLI (`lgrep prune-orphans --execute`) so the operator is explicit.
 
 ### Troubleshooting `prune-orphans --execute`
 
@@ -284,7 +284,7 @@ lgrep prune-symbols --execute --storage-dir /path/to/storage
 
 **Grace window.** Recently modified index files are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). Only the `unreadable_index_json` reason is grace-eligible; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass the grace check because they are unambiguous.
 
-**Transport-aware MCP safety.** When lgrep is reached over a shared transport (for example `streamable-http`), the MCP tool coerces `dry_run=True` regardless of the caller's request. Destructive symbol-store prunes on shared deployments must go through the CLI (`lgrep prune-symbols --execute`) so the operator is explicit.
+**MCP deletion requires an explicit grant.** The MCP tool coerces `dry_run=True` regardless of the caller's request unless `LGREP_ALLOW_DESTRUCTIVE_MCP` is set in the server's environment, and the refused response carries a `refused_reason` naming the grant. Transport kind is not consulted — see the note under `prune-orphans` above. Leave the grant unset on any shared deployment and use the CLI (`lgrep prune-symbols --execute`) so the operator is explicit.
 
 ### Troubleshooting `prune-symbols --execute`
 

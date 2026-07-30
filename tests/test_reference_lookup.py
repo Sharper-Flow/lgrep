@@ -209,9 +209,7 @@ class TestSearchReferences:
         from lgrep.tools.search_references import search_references
 
         index_folder(str(reference_repo), storage_dir=store_dir)
-        result = search_references(
-            "helper", str(reference_repo), storage_dir=store_dir, limit=1
-        )
+        result = search_references("helper", str(reference_repo), storage_dir=store_dir, limit=1)
 
         assert "error" not in result
         assert len(result["results"]) == 1
