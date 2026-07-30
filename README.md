@@ -446,7 +446,8 @@ Security notes:
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
-| `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Tools use this to apply transport-aware safety. Do not set manually. |
+| `LGREP_ALLOW_DESTRUCTIVE_MCP` | No | unset | Allows `prune_orphans` / `prune_symbols` to actually delete when called over MCP. Unset, those tools return a preview and say why. Leave unset on any server reachable by more than one client — including a Vision-proxied server, where the subprocess transport still reports `stdio`. The CLI (`--execute`) is unaffected. |
+| `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Informational only; it does not grant destructive rights. Do not set manually. |
 
 ### Vision / OpenCode tuning
 
