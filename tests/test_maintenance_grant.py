@@ -9,7 +9,10 @@ proxied client inherited full destructive rights.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -17,8 +20,41 @@ from lgrep.server import mcp
 from lgrep.storage import get_project_db_path, write_project_meta
 from lgrep.tools.index_folder import index_folder
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 GRANT_ENV = "LGREP_ALLOW_DESTRUCTIVE_MCP"
 DESTRUCTIVE_TOOLS = ("prune_orphans", "prune_symbols")
+
+
+def _hash_name(label: str) -> str:
+    """Produce a 12-hex cache-dir name deterministically from a label."""
+    return hashlib.sha256(label.encode()).hexdigest()[:12]
+
+
+def _make_orphan_cache(cache_root: Path, label: str) -> Path:
+    """Create a cache directory that ``prune_orphans`` will classify as an orphan."""
+    cache_dir = cache_root / _hash_name(label)
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "chunks.lance").mkdir()
+    return cache_dir
+
+
+def _key(label: str) -> str:
+    """Produce a 16-hex index-file suffix deterministically from a label."""
+    return hashlib.sha256(label.encode()).hexdigest()[:16]
+
+
+def _make_stale_symbol_index(storage_root: Path, label: str) -> Path:
+    """Create a symbol index whose ``repo_path`` no longer exists."""
+    storage_root.mkdir(parents=True, exist_ok=True)
+    index_file = storage_root / f"index_{_key(label)}.json"
+    missing_repo = storage_root.parent / f"gone-repo-{label}"
+    index_file.write_text(
+        json.dumps({"files": {}, "symbols": {}, "version": "2.0", "repo_path": str(missing_repo)}),
+        encoding="utf-8",
+    )
+    return index_file
 
 
 def _tool_fn(name: str):
@@ -72,8 +108,18 @@ async def test_destructive_refused_without_grant_even_on_stdio(tool_name, monkey
 
 @pytest.mark.parametrize("tool_name", DESTRUCTIVE_TOOLS)
 @pytest.mark.asyncio
-async def test_destructive_allowed_with_grant(tool_name, monkeypatch):
+async def test_destructive_allowed_with_grant_deletes_fixtures(tool_name, monkeypatch, tmp_path):
     monkeypatch.setenv(GRANT_ENV, "1")
+    monkeypatch.setenv("LGREP_PRUNE_MIN_AGE_S", "0")
+
+    if tool_name == "prune_orphans":
+        cache_root = tmp_path / "cache"
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(cache_root))
+        fixture = _make_orphan_cache(cache_root, "orphan-mcp-granted")
+    else:
+        symbols_root = tmp_path / "symbols"
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(symbols_root))
+        fixture = _make_stale_symbol_index(symbols_root, "stale-mcp-granted")
 
     result = await _tool_fn(tool_name)(dry_run=False, ctx=_stdio_ctx())
 
@@ -81,6 +127,13 @@ async def test_destructive_allowed_with_grant(tool_name, monkeypatch):
         f"{tool_name} must honour the caller's destructive request once {GRANT_ENV} is set"
     )
     assert result.get("refused_reason") is None
+
+    if tool_name == "prune_orphans":
+        assert result["deleted_dirs"] >= 1
+        assert not fixture.exists()
+    else:
+        assert result["deleted_files"] >= 1
+        assert not fixture.exists()
 
 
 @pytest.mark.parametrize("tool_name", DESTRUCTIVE_TOOLS)
@@ -103,6 +156,95 @@ def test_transport_no_longer_decides_authority():
         "transport-based trust inference must be removed; a proxy can front a "
         "local stdio pipe with a shared network surface"
     )
+
+
+class TestStructuralDestructiveGrantCoverage:
+    """Registry-wide grant behaviour without cross-tool wording assertions.
+
+    Each destructive MCP tool is covered structurally: refusal names the grant
+    and, where applicable, the CLI equivalent; the grant removes refusal and
+    allows the destructive operation. The exact response shape is
+    tool-specific, so assertions are not shared across tools with different
+    contracts.
+    """
+
+    def _tool_fn(self, name: str):
+        for tool in mcp._tool_manager.list_tools():
+            if tool.name == name:
+                return tool.fn
+        raise KeyError(f"Tool not found: {name}")
+
+    def _ctx(self):
+        return SimpleNamespace(
+            request_context=SimpleNamespace(
+                lifespan_context=SimpleNamespace(
+                    projects={}, runtime=_InlineRuntime(), transport="stdio"
+                )
+            )
+        )
+
+    def test_all_destructive_tools_are_registry_pinned(self):
+        destructive = {
+            t.name
+            for t in mcp._tool_manager.list_tools()
+            if t.annotations is not None and t.annotations.destructiveHint is True
+        }
+        assert destructive == {
+            "prune_orphans",
+            "prune_symbols",
+            "invalidate_cache",
+            "invalidate_worktree_cache",
+        }, (
+            f"Destructive registry population changed: {destructive}. "
+            "Update pinned tools and grant coverage."
+        )
+
+    @pytest.mark.parametrize("tool_name", ["prune_orphans", "prune_symbols"])
+    @pytest.mark.asyncio
+    async def test_prune_tools_refusal_names_grant_and_cli(self, tool_name, monkeypatch, tmp_path):
+        monkeypatch.delenv(GRANT_ENV, raising=False)
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path / "symbols"))
+
+        result = await self._tool_fn(tool_name)(dry_run=False, ctx=self._ctx())
+
+        assert result.get("refused_reason")
+        assert GRANT_ENV in result["refused_reason"]
+        assert tool_name.replace("_", "-") in result["refused_reason"]
+        assert "--execute" in result["refused_reason"]
+
+    @pytest.mark.asyncio
+    async def test_invalidate_cache_refusal_names_grant_and_no_cli(self, monkeypatch, tmp_path):
+        monkeypatch.delenv(GRANT_ENV, raising=False)
+        monkeypatch.setattr("lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
+        (tmp_path / "repo").mkdir()
+
+        result = await self._tool_fn("invalidate_cache")(path=str(tmp_path / "repo"))
+
+        assert result.get("refused_reason")
+        assert GRANT_ENV in result["refused_reason"]
+        assert "no cli equivalent" in result["refused_reason"].lower()
+        assert "--execute" not in result["refused_reason"]
+
+    @pytest.mark.asyncio
+    async def test_invalidate_worktree_cache_refusal_names_grant_and_no_cli(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.delenv(GRANT_ENV, raising=False)
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path)
+
+        result = await self._tool_fn("invalidate_worktree_cache")(
+            paths=[str(project)], ctx=self._ctx()
+        )
+
+        assert result.get("refused_reason")
+        assert GRANT_ENV in result["refused_reason"]
+        assert "no cli equivalent" in result["refused_reason"].lower()
+        assert "--execute" not in result["refused_reason"]
 
 
 class TestRemainingDestructiveGrants:

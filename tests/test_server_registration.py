@@ -38,3 +38,23 @@ def test_all_expected_tools_present():
     assert registered == expected, (
         f"Missing: {expected - registered}\nExtra: {registered - expected}"
     )
+
+
+EXPECTED_DESTRUCTIVE_TOOLS = frozenset(
+    {"prune_orphans", "prune_symbols", "invalidate_cache", "invalidate_worktree_cache"}
+)
+
+
+def test_destructive_tools_match_registry():
+    """Registry-derived destructive population: fail visibly when the set drifts."""
+    from lgrep.server import mcp
+
+    destructive = {
+        t.name
+        for t in mcp._tool_manager.list_tools()
+        if t.annotations is not None and t.annotations.destructiveHint is True
+    }
+    assert destructive == EXPECTED_DESTRUCTIVE_TOOLS, (
+        f"Destructive tool set changed. Expected {EXPECTED_DESTRUCTIVE_TOOLS}, got {destructive}. "
+        "If a destructive tool was added, extend grant coverage; if one was removed, update pins."
+    )

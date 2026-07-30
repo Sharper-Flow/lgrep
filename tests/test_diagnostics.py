@@ -97,6 +97,24 @@ class TestDiagnosticsResponseShape:
         assert str(tmp_path.resolve()) in paths
 
     @pytest.mark.asyncio
+    async def test_diagnostics_with_context_reports_transport(self):
+        app_ctx = LgrepContext(voyage_api_key="mock-key", transport="streamable-http")
+
+        mock_ctx = MagicMock(spec=Context)
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        fn = self._get_tool_fn("lgrep_diagnostics")
+        result = await fn(ctx=mock_ctx)
+
+        assert result["transport"] == "streamable-http"
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_without_context_transport_is_none(self):
+        fn = self._get_tool_fn("lgrep_diagnostics")
+        result = await fn()
+        assert result["transport"] is None
+
+    @pytest.mark.asyncio
     async def test_diagnostics_reflects_runtime_supervisor_jobs(self):
         supervisor = RuntimeSupervisor(max_workers=1, history_limit=10)
         app_ctx = LgrepContext(runtime=supervisor)

@@ -446,8 +446,7 @@ Security notes:
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
-| `LGREP_ALLOW_DESTRUCTIVE_MCP` | No | unset | Allows `prune_orphans` / `prune_symbols` to actually delete when called over MCP. Unset, those tools return a preview and say why. Leave unset on any server reachable by more than one client — including a Vision-proxied server, where the subprocess transport still reports `stdio`. The CLI (`--execute`) is unaffected. |
-| `LGREP_TRANSPORT` | No (auto-set) | unset | Transport kind (`stdio`/`streamable-http`) populated by `lgrep run_server`. Informational only; it does not grant destructive rights. Do not set manually. |
+| `LGREP_ALLOW_DESTRUCTIVE_MCP` | No | unset | Allows `prune_orphans`, `prune_symbols`, `invalidate_cache` and `invalidate_worktree_cache` to actually delete when called over MCP. Unset, those tools return a preview/refusal and say why. Leave unset on any server reachable by more than one client — including a Vision-proxied server, where the subprocess transport still reports `stdio`. The CLI (`--execute`) is unaffected for the tools that have one; the invalidation tools have no CLI equivalent. |
 
 ### Vision / OpenCode tuning
 
@@ -474,7 +473,7 @@ lgrep:
 - Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent agents cannot create unbounded blocking work.
 - Use `lgrep_diagnostics` when investigating high CPU/thread count. It reports PID, uptime, loaded projects, worker limit, active jobs, recent abandoned/finished jobs, and full local project paths without exposing API keys or environment values.
 - `lgrep_status_semantic(path="")` is intentionally cheap and memory-only. Pass a specific `path` when you need deep file/chunk counts.
-- Destructive cache cleanup over shared HTTP is forced to dry-run; run `lgrep prune-orphans --execute` (or `lgrep prune-symbols --execute` for symbol indexes) from a local shell when an operator intentionally wants deletion.
+- Destructive cache cleanup over MCP requires the explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; without it the MCP tools return a preview/refusal. Run `lgrep prune-orphans --execute` (or `lgrep prune-symbols --execute` for symbol indexes) from a local shell when an operator intentionally wants deletion. The `invalidate_cache` and `invalidate_worktree_cache` tools have no CLI equivalent.
 
 Agent fallback rule: if a default hybrid `lgrep_search_semantic` call times out
 or hits a deadline, retry once with `hybrid:false` and a small limit such as
