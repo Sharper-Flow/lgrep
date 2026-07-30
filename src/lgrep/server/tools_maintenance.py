@@ -10,6 +10,7 @@ organisation in ``@mcp.tool`` metadata.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import Annotated
 
@@ -54,39 +55,40 @@ async def _run_blocking(
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
-def _transport_is_local(ctx: Context | None) -> bool:
-    """Return True when the MCP transport is the local stdio pipe.
+_DESTRUCTIVE_GRANT_ENV = "LGREP_ALLOW_DESTRUCTIVE_MCP"
 
-    The stdio transport is single-user and inherently access-controlled
-    (the caller is the same process tree as the server). Shared HTTP
-    transports are not, so we apply a defensive ``dry_run=True`` on
-    destructive tools when the transport is unknown or non-stdio.
 
-    FastMCP does not currently expose the transport kind through the
-    lifespan context, so this helper treats "unknown" the same as
-    "not stdio" and errs on the side of refusing the destructive call.
+def _destructive_grant_present() -> bool:
+    """Return True when the operator has explicitly granted destructive MCP rights.
+
+    Authority is an explicit, out-of-band environment grant rather than an
+    inference from the transport. A transport reported as ``stdio`` says
+    nothing about the caller once a proxy fronts the pipe: Vision runs lgrep
+    as a stdio subprocess and republishes it on a shared, unauthenticated
+    HTTP port, so every proxied client would otherwise inherit destructive
+    rights. Defaulting to off keeps the shared deployment fail-closed.
+
+    The CLI does not consult this grant; that caller already holds local
+    shell authority.
     """
-    if ctx is None:
-        # No context means a direct test-path call (unit tests).
-        # Trust the caller — tests pass explicit dry_run.
-        return True
-    app_ctx = getattr(ctx.request_context, "lifespan_context", None)
-    if app_ctx is None:
-        return False
-    transport = getattr(app_ctx, "transport", None)
-    if transport is None:
-        transport = getattr(app_ctx, "transport_kind", None)
-    if isinstance(transport, str):
-        return transport.lower() in {"stdio", "local", "inline"}
-    return False
+    return os.environ.get(_DESTRUCTIVE_GRANT_ENV, "").lower() in ("true", "1", "yes")
+
+
+def _refusal_reason(cli_command: str) -> str:
+    return (
+        f"Destructive run refused: {_DESTRUCTIVE_GRANT_ENV} is not set. "
+        f"Returned a preview instead. Set {_DESTRUCTIVE_GRANT_ENV}=1 on the server "
+        f"to allow destructive MCP calls, or run `{cli_command}` locally."
+    )
 
 
 @mcp.tool(
     description=(
         "Prune orphaned semantic cache directories. Dry-run by default; set "
         "dry_run=false to delete. Skips active in-memory projects and the "
-        "symbols/ cache subtree. Destructive on HTTP transports is refused for "
-        "safety — run the CLI (`lgrep prune-orphans --execute`) instead. "
+        "symbols/ cache subtree. Deletion over MCP requires the server to set "
+        "LGREP_ALLOW_DESTRUCTIVE_MCP=1; otherwise the call returns a preview and "
+        "says so — run the CLI (`lgrep prune-orphans --execute`) instead. "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(
@@ -106,11 +108,9 @@ async def prune_orphans(
 ) -> PruneOrphansResult:
     """Inspect or delete orphan semantic cache directories.
 
-    Applies a transport-aware safety: if the MCP transport is not stdio
-    (i.e. a shared HTTP/SSE deployment) the handler coerces
-    ``dry_run=True`` regardless of the caller's request. Operators that
-    need destructive prunes on shared servers should run the CLI
-    (``lgrep prune-orphans --execute``) out-of-band.
+    Destructive runs require the ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant on the
+    server. Without it the handler coerces ``dry_run=True`` and reports why.
+    Operators can always run the CLI (``lgrep prune-orphans --execute``).
     """
     active_set: list[str] = []
     if ctx is not None:
@@ -118,10 +118,12 @@ async def prune_orphans(
         active_set = list(app_ctx.projects.keys())
 
     effective_dry_run = dry_run
-    if not dry_run and not _transport_is_local(ctx):
+    refused_reason: str | None = None
+    if not dry_run and not _destructive_grant_present():
         effective_dry_run = True
+        refused_reason = _refusal_reason("lgrep prune-orphans --execute")
 
-    return await _run_blocking(
+    result = await _run_blocking(
         ctx,
         "prune_orphans",
         None,
@@ -129,13 +131,17 @@ async def prune_orphans(
         dry_run=effective_dry_run,
         active_set=active_set,
     )
+    if refused_reason is not None:
+        result["refused_reason"] = refused_reason
+    return result
 
 
 @mcp.tool(
     description=(
         "Prune stale symbol-store index files. Dry-run by default; set "
         "dry_run=false to delete. Skips active in-memory projects. "
-        "Destructive on HTTP transports is refused for safety — run the "
+        "Deletion over MCP requires the server to set LGREP_ALLOW_DESTRUCTIVE_MCP=1; "
+        "otherwise the call returns a preview and says so — run the "
         "CLI (`lgrep prune-symbols --execute`) instead. "
         "MCP tool call only; do not invoke via shell."
     ),
@@ -156,11 +162,9 @@ async def prune_symbols(
 ) -> PruneSymbolsResult:
     """Inspect or delete stale symbol-store index files.
 
-    Applies a transport-aware safety: if the MCP transport is not stdio
-    (i.e. a shared HTTP/SSE deployment) the handler coerces
-    ``dry_run=True`` regardless of the caller's request. Operators that
-    need destructive prunes on shared servers should run the CLI
-    (``lgrep prune-symbols --execute``) out-of-band.
+    Destructive runs require the ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant on the
+    server. Without it the handler coerces ``dry_run=True`` and reports why.
+    Operators can always run the CLI (``lgrep prune-symbols --execute``).
     """
     active_set: list[str] = []
     if ctx is not None:
@@ -168,10 +172,12 @@ async def prune_symbols(
         active_set = list(app_ctx.projects.keys())
 
     effective_dry_run = dry_run
-    if not dry_run and not _transport_is_local(ctx):
+    refused_reason: str | None = None
+    if not dry_run and not _destructive_grant_present():
         effective_dry_run = True
+        refused_reason = _refusal_reason("lgrep prune-symbols --execute")
 
-    return await _run_blocking(
+    result = await _run_blocking(
         ctx,
         "prune_symbols",
         None,
@@ -179,6 +185,9 @@ async def prune_symbols(
         dry_run=effective_dry_run,
         active_set=active_set,
     )
+    if refused_reason is not None:
+        result["refused_reason"] = refused_reason
+    return result
 
 
 @mcp.tool(

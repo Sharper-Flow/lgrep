@@ -18,7 +18,7 @@ Response convention:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -318,6 +318,8 @@ class PruneOrphansResult(TypedDict):
     deleted_dirs: int
     reclaimed_bytes: int
     failures: list[PruneFailureEntry]
+    # Present only when a destructive request was downgraded to a preview.
+    refused_reason: NotRequired[str]
     _meta: _Meta
 
 
@@ -351,6 +353,8 @@ class PruneSymbolsResult(TypedDict):
     deleted_files: int
     reclaimed_bytes: int
     failures: list[PruneSymbolsFailureEntry]
+    # Present only when a destructive request was downgraded to a preview.
+    refused_reason: NotRequired[str]
     _meta: _Meta
 
 

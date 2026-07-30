@@ -371,9 +371,25 @@ class TestPruneSymbolsTool:
         assert result["dry_run"] is True
 
     @pytest.mark.asyncio
-    async def test_mcp_prune_symbols_stdio_honors_dry_run_false(self, tmp_path, monkeypatch):
-        """Stdio transport is single-user; caller may opt into destructive run."""
+    async def test_mcp_prune_symbols_stdio_alone_does_not_authorize(self, tmp_path, monkeypatch):
+        """Stdio is not evidence of a single local caller once a proxy fronts it.
+
+        Vision runs lgrep as a stdio subprocess behind a shared, unauthenticated
+        HTTP port, so the destructive run needs the explicit server-side grant.
+        """
         monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        monkeypatch.delenv("LGREP_ALLOW_DESTRUCTIVE_MCP", raising=False)
+        fn = self._get_tool_fn("prune_symbols")
+        ctx = self._make_context("stdio")
+        result = await fn(dry_run=False, ctx=ctx)
+        assert result["dry_run"] is True
+        assert "LGREP_ALLOW_DESTRUCTIVE_MCP" in result["refused_reason"]
+
+    @pytest.mark.asyncio
+    async def test_mcp_prune_symbols_honors_dry_run_false_with_grant(self, tmp_path, monkeypatch):
+        """With the explicit grant, the caller's destructive request is honoured."""
+        monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        monkeypatch.setenv("LGREP_ALLOW_DESTRUCTIVE_MCP", "1")
         fn = self._get_tool_fn("prune_symbols")
         ctx = self._make_context("stdio")
         result = await fn(dry_run=False, ctx=ctx)
@@ -383,6 +399,7 @@ class TestPruneSymbolsTool:
     async def test_mcp_prune_symbols_non_stdio_coerces_dry_run_true(self, tmp_path, monkeypatch):
         """HTTP transports are shared; destructive prune must be coerced to dry-run."""
         monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
+        monkeypatch.delenv("LGREP_ALLOW_DESTRUCTIVE_MCP", raising=False)
         fn = self._get_tool_fn("prune_symbols")
         ctx = self._make_context("streamable-http")
         result = await fn(dry_run=False, ctx=ctx)
