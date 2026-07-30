@@ -204,13 +204,18 @@ class TestMedianBudgetSemantics:
         latencies = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 100.0]
         assert statistics.median(latencies) == pytest.approx(5.5)
 
-    def test_median_strict_budget_boundary(self):
-        """Median exactly at the 50ms budget fails; just below passes."""
-        assert statistics.median([50.0] * 10) == 50.0
+    @pytest.mark.parametrize(
+        "budget",
+        [SEMANTIC_SEARCH_MEDIAN_BUDGET_MS, SYMBOL_SEARCH_MEDIAN_BUDGET_MS],
+    )
+    def test_median_strict_budget_boundary(self, budget):
+        """Median exactly at either budget fails; just below passes."""
+        assert statistics.median([budget] * 10) == budget
         with pytest.raises(AssertionError):
-            assert statistics.median([50.0] * 10) < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
-        assert statistics.median([49.999] * 10) == 49.999
-        assert statistics.median([49.999] * 10) < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
+            assert statistics.median([budget] * 10) < budget
+        just_below_budget = budget - 0.001
+        assert statistics.median([just_below_budget] * 10) == just_below_budget
+        assert statistics.median([just_below_budget] * 10) < budget
 
     def test_per_sample_hang_guard_boundary(self):
         """A single 999.9ms sample passes the hang guard; 1000.0ms fails."""
