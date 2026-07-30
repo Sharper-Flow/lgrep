@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "change_id": "fixFlakyLatencyBenchmarks",
+  "title": "Fix flaky latency benchmarks",
+  "release_notes": {
+    "audience": "internal",
+    "category": "fixed",
+    "headline_internal": "Latency benchmarks now use median regression checks instead of a mislabeled maximum, preventing shared-runner scheduling stalls from failing trunk",
+    "highlights": [
+      "Both semantic and symbol latency benchmarks retain their existing strict 100ms and 50ms regression budgets across ten calls.",
+      "A single scheduling outlier no longer decides CI; uniform slowdowns still fail the same budgets.",
+      "A separate strict 1000ms per-sample hang guard catches pathological blocking without claiming a tail-latency SLA."
+    ],
+    "area": "CI reliability",
+    "user_action_required": false
+  }
+}

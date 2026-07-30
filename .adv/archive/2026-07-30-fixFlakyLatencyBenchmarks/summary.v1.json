@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-30T20:34:22.579Z",
+  "capabilities": [],
+  "change_hash": "80f933a61778c6d67f0f798d6f77b5396fa1cbe0e443a60888feb126f14d15b2",
+  "change_id": "fixFlakyLatencyBenchmarks",
+  "completed_tasks": 2,
+  "created_at": "2026-07-30T05:42:09.134Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-30T20:28:28.358Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "f8fdd37d6e96c9d5fc0005339a3558d88082fe0c1565058d6aea8631bebc4cc0",
+  "task_count": 2,
+  "title": "Fix flaky latency benchmarks",
+  "version": "1"
+}

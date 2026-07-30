@@ -1,0 +1,1693 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/change.schema.json",
+  "id": "fixFlakyLatencyBenchmarks",
+  "title": "Fix flaky latency benchmarks",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-30T05:42:09.134Z",
+  "tasks": [
+    {
+      "id": "tk-b439c00f4e14",
+      "title": "Replace pseudo-p95 latency assertions with robust median aggregation",
+      "type": "code",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-30T18:41:43.422Z",
+      "started_at": "2026-07-30T18:53:41.181Z",
+      "completed_at": "2026-07-30T19:13:09.183Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED evidence recorded by worker before implementation; GREEN tr_ms7w53jf_9e7bf4d9: 8 benchmark tests pass, ruff check clean, ruff format clean. Reviewed diff: test-only, uses stdlib statistics.median, keeps 10 samples and strict 100/50ms budgets plus 1000ms hang guard.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "checkpointSha": "32b384c436695d3cba1a77a1fc1cb8d199f3c24e",
+      "completedAt": "2026-07-30T19:13:09.183Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "OOS1",
+          "OOS2",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "touched_files": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixFlakyLatencyBenchmarks",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+          "task_id": "tk-b439c00f4e14",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-b439c00f4e14"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "tests/test_benchmark_latency.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "tr_ms7vmhay_8da6ddd1",
+              "command": "uv run pytest tests/test_benchmark_latency.py -v",
+              "exit_code": 1,
+              "summary": "Red phase: 8 tests collected, failures driven by NotImplementedError in the unimplemented _median helper; pure tests and benchmark median assertions failed as expected."
+            },
+            {
+              "test_run_id": "tr_ms7vmzgs_3b635702",
+              "command": "uv run pytest tests/test_benchmark_latency.py -v",
+              "exit_code": 0,
+              "summary": "Green phase: all 8 tests pass (2 runtime benchmarks + 5 pure median/budget tests + index_folder benchmark)."
+            },
+            {
+              "test_run_id": "tr_ms7vno8j_1af96cda",
+              "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+              "exit_code": 0,
+              "summary": "Ruff lint and format checks pass on changed file."
+            },
+            {
+              "test_run_id": "tr_ms7vnz6r_b1a4deea",
+              "command": "uv run pytest tests/test_benchmark_latency.py -v",
+              "exit_code": 0,
+              "summary": "Verify phase: all 8 tests still pass after lint-fix edits."
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Implemented a private _median helper instead of importing statistics.median",
+              "why": "Keeps the test file self-contained with no new runtime or test dependencies; matches contract wording 'private statistics.median helper'."
+            },
+            {
+              "what": "Replaced percentile indexing with sorted median average of middle two values",
+              "why": "A true median is robust to a single outlier and removes the flaky pseudo-p95 calculation that indexed past the 95th percentile on only 10 samples."
+            },
+            {
+              "what": "Added a per-sample PER_SAMPLE_HANG_GUARD_MS = 1000.0 assertion inside each measured loop",
+              "why": "Honest hang/deadlock guard that fails fast on any individual catastrophic sample without confusing it with the median budget."
+            },
+            {
+              "what": "Retained strict <100ms semantic and <50ms symbol budgets and kept exactly 10 measured calls per benchmark",
+              "why": "Contract forbids budget increases or test count changes; only the aggregation method changes."
+            },
+            {
+              "what": "Used pytest.approx only where the median is a floating-point average",
+              "why": "Avoids fragile exact float comparisons for the (0 + 0.75)/2 and (5 + 6)/2 cases while still asserting exact values for integer medians."
+            },
+            {
+              "what": "Reordered hang-guard assertions to satisfy SIM300 Yoda-condition lint",
+              "why": "Preserved the boundary-test semantics (guard > sample) while keeping ruff clean without noqa suppression."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "none",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "tests/test_benchmark_latency.py now uses a private _median helper, strict per-sample 1000ms hang guard, and median-based assertions with retained 100ms/50ms budgets. Added 5 pure tests covering outlier robustness, identical values, sequence with large outlier, strict budget boundary, and hang-guard boundary. All 8 tests pass and ruff is clean. No production code, skips, budget increases, or new dependencies were introduced.",
+            "suggested_next_action": "Review the diff in tests/test_benchmark_latency.py, then proceed to checkpoint/acceptance gates as planned."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7vmhay_8da6ddd1"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7vmzgs_3b635702"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7vno8j_1af96cda"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7vnz6r_b1a4deea"
+            }
+          ]
+        },
+        {
+          "schema_version": "1.0",
+          "change_id": "fixFlakyLatencyBenchmarks",
+          "attempt": 2,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+          "task_id": "tk-b439c00f4e14",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-b439c00f4e14"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "tests/test_benchmark_latency.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "tr_ms7w3qff_30432a32",
+              "command": "uv run pytest tests/test_benchmark_latency.py -v",
+              "exit_code": 0,
+              "summary": "All 8 tests pass: 2 runtime median benchmarks + index_folder benchmark + 5 pure statistics.median/budget tests."
+            },
+            {
+              "test_run_id": "tr_ms7w3ilz_8eea1eab",
+              "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+              "exit_code": 0,
+              "summary": "Ruff lint and format checks pass on changed file."
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Imported and used statistics.median instead of a custom helper",
+              "why": "Contract explicitly requires stdlib statistics.median to structurally eliminate hand-rolled index-arithmetic defects."
+            },
+            {
+              "what": "Removed the private _median helper entirely",
+              "why": "The helper was the source of the contract violation; runtime benchmarks and pure tests now call statistics.median directly."
+            },
+            {
+              "what": "Updated pure tests to call statistics.median directly",
+              "why": "Ensures pure tests exercise the exact same stdlib behavior used by the runtime benchmarks, without reimplementing median logic."
+            },
+            {
+              "what": "Fixed typo 'roust' to 'robust' in test name and docstring",
+              "why": "Spelling correctness requested by review."
+            },
+            {
+              "what": "Retained all other contract elements (budgets, hang guard, 10 calls, no skips/deps)",
+              "why": "Only the median implementation mechanism changed; everything else stayed within the approved design."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "none",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Remediation complete: tests/test_benchmark_latency.py now imports and uses Python stdlib statistics.median directly in both runtime benchmarks. Removed the hand-rolled _median helper. Pure tests exercise statistics.median through the same code path. Fixed typo 'roust' -> 'robust'. All 8 tests pass and ruff is clean. No production code, skips, budget increases, or new dependencies.",
+            "suggested_next_action": "Review the updated diff in tests/test_benchmark_latency.py and proceed to checkpoint/acceptance gates."
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7w3qff_30432a32"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7w3ilz_8eea1eab"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tk-0edb2ec14795",
+      "title": "Prove benchmark fix restores reliable verification",
+      "type": "verification",
+      "status": "done",
+      "priority": 1,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-b439c00f4e14"
+        }
+      ],
+      "created_at": "2026-07-30T18:42:03.680Z",
+      "started_at": "2026-07-30T19:14:02.147Z",
+      "completed_at": "2026-07-30T19:47:20.288Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "Acceptance reviewer added the missing pure strict-boundary proof for both semantic 100ms and symbol 50ms budgets. tr_ms7xd4dm_1ffb7331: 9 focused tests pass, ruff check/format clean; reviewer independently ran full suite 724 passed.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "checkpointSha": "c913a8dfafec90728d330d373df4b36a282f04f6",
+      "completedAt": "2026-07-30T19:47:20.288Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "OOS1",
+          "OOS2",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "touched_files": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "fixFlakyLatencyBenchmarks",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+          "task_id": "tk-0edb2ec14795",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-0edb2ec14795"
+          },
+          "agent": "adv-reviewer",
+          "phase": "review",
+          "verdict": "READY",
+          "blocking_findings": [],
+          "nonblocking_findings": [],
+          "changes_made": [
+            {
+              "file": "tests/test_benchmark_latency.py",
+              "summary": "Expanded the pure strict-median-boundary test to exercise equality and just-below behavior for both the 100ms semantic and 50ms symbol budgets.",
+              "verification": "uv run pytest tests/test_benchmark_latency.py: 9 passed; git diff --check passed."
+            }
+          ],
+          "wisdom_candidates": [],
+          "verification": {
+            "tests_run": [
+              "uv run pytest tests/test_benchmark_latency.py",
+              "git diff --check origin/main...HEAD",
+              "git diff --check"
+            ],
+            "results": "pass",
+            "evidence": "Focused benchmark suite collected 9 tests and passed in 4.31s. Both diff whitespace checks passed. `bin/oc-test` is absent; direct `python -m pytest` lacks pytest, so the repository's uv environment was used."
+          },
+          "scope_drift": null,
+          "risks": [],
+          "required_main_agent_actions": [
+            "Create the required task checkpoint for the in-scope reviewer test change before marking the task complete."
+          ],
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run pytest tests/test_benchmark_latency.py"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check origin/main...HEAD"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "fixFlakyLatencyBenchmarks",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:benchmark-statistics-design"
+      },
+      "agent": "adv-researcher",
+      "topic": "Test-only design for fixing CI-flaky latency benchmarks (aggregation semantics)",
+      "sources": [
+        {
+          "label": "CPython statistics.median source + docs",
+          "locator": "https://github.com/python/cpython/blob/main/Lib/statistics.py (median) and Doc/library/statistics.rst",
+          "summary": "median(data) sorts and returns middle value; for even count returns mean of the two middle values (n//2-1, n//2). Robust central location; less affected by outliers. No NaN handling. Raises StatisticsError on empty."
+        },
+        {
+          "label": "CPython statistics.quantiles docs",
+          "locator": "https://github.com/python/cpython/blob/main/Doc/library/statistics.rst",
+          "summary": "quantiles(data, n=100, method='inclusive'|'exclusive'). inclusive: i-th sorted point maps to quantile (i-1)/(m-1); exclusive: i/(m+1), both linear-interpolate. Docs warn 'For meaningful results, number of data points should exceed n' — with n=100 and only 10 samples, p95 is ill-defined/coarse."
+        },
+        {
+          "label": "lgrep pyproject.toml",
+          "locator": "/home/jon/dev/lgrep/pyproject.toml",
+          "summary": "requires-python = '>=3.11'. statistics.quantiles (added 3.8) and median are guaranteed available. No statistics.trimmed_mean exists in stdlib (confirmed via docs inventory: mean/fmean/median/median_low/median_high/harmonic_mean/mode/quantiles/stdev/variance — no trimmed mean)."
+        },
+        {
+          "label": "Current test file",
+          "locator": "/home/jon/dev/lgrep/tests/test_benchmark_latency.py",
+          "summary": "Lines 96-97 and 162-163: p95 = latencies[int(len(latencies)*0.95)] on 10 sorted samples = latencies[9] = the MAX, mislabeled as p95. Budgets: SEMANTIC_SEARCH_P95_BUDGET_MS=100.0, SYMBOL_SEARCH_P95_BUDGET_MS=50.0, INDEX_FOLDER_BUDGET_MS=5000.0. n=10 queries each."
+        },
+        {
+          "label": "Verified aggregation math (JS mirror of Python semantics)",
+          "locator": "inline verification, this turn",
+          "summary": "CI scenario [0.3,0.4,0.25,0.5,0.35,0.45,0.3,0.4,0.35,159.0]: median=0.375, inclusive_p95=87.675, exclusive_p95=159.0 (extrapolates to outlier), old_idx_'p95'=159.0(=max). Uniform regression [30]*10: median=30.05. Healthy sample median=0.29."
+        }
+      ],
+      "architecture_assessment": "The aggregation is fundamentally wrong: latencies[int(len(latencies)*0.95)] on 10 samples is index 9 = the max, so the test asserts 'max < budget' while calling it p95. Max has a 0% breakdown point — any single scheduler stall fails it (exactly the two CI failures). No percentile computed from 10 samples is robust: inclusive p95 still interpolates toward the max (verified 87.7ms > 50ms budget for the CI scenario), and exclusive p95 extrapolates BEYOND the max to the outlier value (159ms). The math-only correction (compute a real p95) does NOT fix flakiness — confirming the task's proven fact. The structurally correct fix is to aggregate central tendency with the maximum breakdown point: statistics.median. Median of 10 = mean of 5th and 6th sorted values, so a single outlier (top half) has zero effect; it requires 6+ of 10 samples to move (50% breakdown point). A uniform code regression moves every sample, so the median moves with it and trips the budget. This separates '1/10 slow' (scheduler noise, ignore) from '10/10 slow' (real regression, catch). median is a single stdlib call with no index arithmetic, eliminating the off-by-one class that caused the original bug.",
+      "validation": {
+        "status": "pass",
+        "blockers": [],
+        "notes": "Recommended design (statistics.median, keep n=10, keep budgets, optional high hang-ceiling) is test-only, deterministic, retains regression coverage, and is backed by stdlib docs + verified numeric evidence. No blockers."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Median ignores the entire top half: a regression affecting <=5 of 10 samples is masked. For a uniform code-path regression (affects 100% of queries) this never occurs, so coverage of the intended regression class is preserved.",
+          "Lower statistical efficiency than mean in clean data — irrelevant here given ~100-200x budget margin (median ~0.3ms vs 50/100ms budgets).",
+          "Switching max->median changes the asserted statistic; any future tail-latency SLA would need dedicated profiling, not this CI unit test.",
+          "A per-sample ceiling at the regression budget (current behavior) remains flaky; only a much higher hang-ceiling (e.g. 1000ms) is non-flaky and must be framed as a deadlock guard, not a latency guard."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "trimmed mean (drop min+max, average middle 8): statistics.mean(sorted(latencies)[1:-1])",
+            "disposition": "rejected",
+            "rationale": "Works numerically (verified 0.381ms on CI scenario) but (a) stdlib has no trimmed_mean so it requires manual slicing, reintroducing the exact index-arithmetic/off-by-one class that caused the original bug; (b) lower breakdown point (~10-20%, tolerates only 1 outlier in 10) vs median's 50%. Median is strictly more robust AND simpler."
+          },
+          {
+            "option": "real statistics.quantiles(data, n=100, method='inclusive')[94]",
+            "disposition": "rejected",
+            "rationale": "Docs warn 'data points should exceed n' for meaningful results; with 10 samples p95 is ill-defined and dominated by the max. Verified inclusive p95 of the CI scenario = 87.7ms, still > 50ms budget — does not fix flakiness. Exclusive method extrapolates to the outlier (159ms), worse. Percentiles need ~40+ samples (4x test cost) to be robust; over-engineering here."
+          },
+          {
+            "option": "keep max-as-'p95', just raise budgets",
+            "disposition": "rejected",
+            "rationale": "Explicitly disallowed by task. Also ineffective: scheduler stalls are unbounded; any budget that survives a 159ms stall is meaningless as a latency guard."
+          },
+          {
+            "option": "increase sample count to 40+ to make p95 meaningful",
+            "disposition": "rejected",
+            "rationale": "Would 4x test cost for no benefit over median. Median at n=10 already achieves 50% breakdown point with the existing cost. Violates simplicity."
+          }
+        ],
+        "recommendation": "Adopt statistics.median as the aggregator; keep n=10 and existing budgets; add optional 1000ms hang-ceiling as a separate deadlock guard. Add parametrized pure unit tests of the aggregator proving (1) one 159ms outlier ignored, (2) uniform above-budget regression caught, (3) healthy passes, (4) even-count mean-of-middle-two interpolation, (5) boundary strictness (< vs <=)."
+      },
+      "recommendation": "RECOMMENDATION FOR ORCHESTRATOR: 1) Replace latencies[int(len(latencies)*0.95)] with statistics.median(latencies) in BOTH test methods (lines ~97 and ~163); add `import statistics`. 2) Keep n=10 queries (no cost change; median needs no more samples). 3) Keep budgets 100.0/50.0/5000.0 ms (they give ~100-200x margin over steady-state median ~0.3ms, which is what makes the assertion stable). 4) RENAME the asserted variable/labels from 'p95' to 'median' in messages, budget constant names, and docstrings to stop the mislabeling (the budget names say P95 — update to MEDIAN to match the statistic). 5) Optionally add `assert max(latencies) < 1000.0` as a separate 'hang/deadlock guard' (NOT at the 50/100ms regression budget — that reintroduces flakiness). 6) Add a parametrized unit test for the aggregation helper covering the 5 cases in the test plan. ACCEPTANCE CRITERIA: semantic median < 100.0ms; symbol median < 50.0ms; (optional) every sample < 1000ms hang guard. Regression-coverage preserved: a uniform regression pushing all samples above budget still fails (median moves with the distribution).",
+      "follow_ups": [
+        "When budget constant names are renamed from P95 to MEDIAN, also update the module docstring lines 10-11 ('asserts p95 latency') to match, or reviewers will re-flag the mislabel.",
+        "If a real tail-latency (p95/p99) SLA becomes a product requirement later, add a dedicated profiling benchmark with n>=40 — do not retrofit percentiles onto this 10-sample CI unit test.",
+        "The optional 1000ms hang-ceiling should be tuned against future CI if any stall is observed near it; 159ms observed gives ~6x margin but is based on only 2 data points."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixFlakyLatencyBenchmarks",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:design-validator-benchmark"
+      },
+      "agent": "adv-researcher",
+      "topic": "Design validation - flaky latency benchmark median fix",
+      "sources": [
+        {
+          "label": "Repo: actual flaky test file",
+          "locator": "tests/test_benchmark_latency.py (lines 96-97, 162-163: p95 = latencies[int(len(latencies)*0.95)] == latencies[9] == max)",
+          "summary": "Current 'p95' is int(9.5)=9 -> the max of 10 sorted samples. One scheduler stall (outlier) decides CI. This is the confirmed flakiness root cause."
+        },
+        {
+          "label": "Repo: Python version requirements",
+          "locator": "pyproject.toml (requires-python >=3.11; classifiers 3.11/3.12/3.13; tool.ruff target-version py311; asyncio_mode auto)",
+          "summary": "Project requires Python 3.11+; statistics.median (stdlib since 3.4) is guaranteed available on all CI matrix versions. Constraint C4 satisfied. Pure tests use stdlib only."
+        },
+        {
+          "label": "Python stdlib docs: statistics.median",
+          "locator": "https://docs.python.org/3/library/statistics.html#statistics.median",
+          "summary": "median sorts then averages the two middle order statistics for even n. No percentile-index arithmetic to get wrong. Correct robust estimator for n=10."
+        },
+        {
+          "label": "Repo: related-scan grep for sibling defects",
+          "locator": "grep across tests/ for 'len(latencies)*0.95|p95|percentile|int(len' -> only test_benchmark_latency.py",
+          "summary": "No sibling tests use the broken truncated-index pattern. Design scope (single file) is complete; no related-scan follow-up required."
+        },
+        {
+          "label": "IEEE-754 / CPython float behavior",
+          "locator": "https://docs.python.org/3/tutorial/floatingpoint.html",
+          "summary": "AC2 inputs 0.35/0.4 are not exactly representable; CPython statistics.median computes (data[i-1]+data[i])/2. Exact-equality assertion on the 0.375 result is fragile; tolerance (pytest.approx) is the robust assertion style."
+        }
+      ],
+      "architecture_assessment": "The design correctly replaces a hand-rolled pseudo-percentile that is actually the max (int(len*0.95)==latencies[9] for n=10) with statistics.median, a stdlib robust estimator with a 50% breakdown point. The defect root cause is confirmed against the real code: a single shared-runner scheduler stall becomes the max and fails CI, exactly the reported flakiness. Median over n=10 ignores up to 4 high outliers (the 5th breaks it = 50% breakdown), so one stall cannot decide the result, while a uniform regression shifts every sample and still trips the existing 50ms/100ms budgets (AC3). The separate 1000ms-per-sample hang guard is a thoughtful compensating control: switching from max to median loses single-outlier detection, and the guard restores catastrophic/hang detection without re-flagging ordinary outliers. Constraints are respected: test-only (C1), 10 calls retained (C2), budgets unchanged 100/50 with no skip/inflate (C3), stdlib median on 3.11+ (C4). All six ACs are addressable by the planned test set and the arithmetic is verified. Deviation vs the by-the-book robust-statistics approach: NONE. The honest scoping (tail-latency SLA is out of scope, OOS1) is appropriate for a shared-runner unit test.",
+      "validation": {
+        "status": "pass",
+        "blockers": [],
+        "notes": "Design is sound and minimal (P19). Three implementer-level cautions do not block the design gate: (1) AC2's 0.375 derives from non-exactly-representable inputs 0.35/0.4 - implementer MUST assert via pytest.approx/tolerance, not exact ==, to avoid reintroducing equality fragility; (2) the AC5 1000ms hang guard is a runtime inline assertion with no pure boundary test (recommend adding 999.x passes / 1000.0 fails strict); (3) design prose 'withstands five outliers at n=10' is imprecise - median withstands 4, breaks at the 5th (50% breakdown point); one-word doc fix. Conscious tradeoff accepted: single-sample regressions in [budget,1000ms) now pass undetected (documented as OOS1)."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "medium",
+        "tradeoffs": [
+          "Median robustness vs single-sample tail sensitivity: a partial regression affecting <50% of calls in [budget,1000ms) is no longer caught (consciously accepted, OOS1; hang guard preserves catastrophic detection).",
+          "Float-equality assertion style: AC2 expected value must use pytest.approx; exact == risks a NEW equality-flakiness class that ironically defeats the fix's purpose.",
+          "Detection gap between budget (50/100ms) and hang guard (1000ms): the old max-based test incidentally caught any single outlier above budget; the new design deliberately does not for non-hang outliers."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Real percentile/p95 at n=10",
+            "disposition": "rejected",
+            "rationale": "Not statistically meaningful at n=10; even inclusive p95 still tracks the isolated outlier and reproduces the flakiness. Design rejection is correct."
+          },
+          {
+            "option": "Arithmetic mean",
+            "disposition": "rejected",
+            "rationale": "Mean has 0 breakdown point - one outlier dominates. Would not fix the flakiness; median is strictly better for this signal. (Evaluated here; not in design's list.)"
+          },
+          {
+            "option": "Trimmed mean",
+            "disposition": "rejected",
+            "rationale": "Hand-rolled slice arithmetic reopens the same defect class (off-by-one index selection). Median avoids the arithmetic entirely."
+          },
+          {
+            "option": "More samples (>10)",
+            "disposition": "rejected",
+            "rationale": "Median is already robust at n=10; increasing samples violates C2 (suite-runtime increase) for no robustness gain."
+          },
+          {
+            "option": "Raise budget / skip the test",
+            "disposition": "rejected",
+            "rationale": "Violates C3 and masks the problem, weakening regression coverage. Budgets must stay at existing 100/50."
+          }
+        ],
+        "recommendation": "Proceed with the design as written. Engineering execution must: (1) use pytest.approx/tolerance for the AC2 0.375 median-value assertion; (2) add a pure boundary test for the AC5 hang guard (e.g. 999.9ms passes, 1000.0ms fails strict <); (3) correct the 'withstands five outliers' prose to 'withstands four, breaks at five (50% breakdown point)'. No design-gate blocker."
+      },
+      "recommendation": "PASS. The design correctly fixes the confirmed root cause (broken pseudo-p95 == max) with stdlib statistics.median, honors all constraints C1-C4, and all six ACs are covered by the planned pure + runtime tests with verified arithmetic. Proceed to planning/execution with the three implementer cautions above (float tolerance on AC2; pure hang-guard boundary test; breakdown-point prose fix).",
+      "follow_ups": [
+        "WARNING: packet omitted explicit IN_SCOPE/OUT_OF_SCOPE/DONE_WHEN/STOP_WHEN/VERIFICATION anchors; scope was inferred from the prompt body. Continue using prompt scope.",
+        "Engineering: confirm AC2 0.375 assertion uses pytest.approx (could not execute Python in this read-only validation environment to confirm exact IEEE-754 rounding of (0.35+0.4)/2; tolerance is safe either way).",
+        "Engineering: note test_index_folder_latency (single-shot 5s, non-aggregating) is correctly out of scope - design/contract could state this explicitly to avoid confusion about 'two runtime benchmarks'.",
+        "Optional very-low-severity coverage asymmetry: no pure test asserts a uniform regression failing the 100ms semantic budget (AC3/AC2 exercise only the 50ms symbol budget); runtime semantic test covers the real path."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixFlakyLatencyBenchmarks",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+      "task_id": "tk-b439c00f4e14",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-b439c00f4e14"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "tr_ms7vmhay_8da6ddd1",
+          "command": "uv run pytest tests/test_benchmark_latency.py -v",
+          "exit_code": 1,
+          "summary": "Red phase: 8 tests collected, failures driven by NotImplementedError in the unimplemented _median helper; pure tests and benchmark median assertions failed as expected."
+        },
+        {
+          "test_run_id": "tr_ms7vmzgs_3b635702",
+          "command": "uv run pytest tests/test_benchmark_latency.py -v",
+          "exit_code": 0,
+          "summary": "Green phase: all 8 tests pass (2 runtime benchmarks + 5 pure median/budget tests + index_folder benchmark)."
+        },
+        {
+          "test_run_id": "tr_ms7vno8j_1af96cda",
+          "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+          "exit_code": 0,
+          "summary": "Ruff lint and format checks pass on changed file."
+        },
+        {
+          "test_run_id": "tr_ms7vnz6r_b1a4deea",
+          "command": "uv run pytest tests/test_benchmark_latency.py -v",
+          "exit_code": 0,
+          "summary": "Verify phase: all 8 tests still pass after lint-fix edits."
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Implemented a private _median helper instead of importing statistics.median",
+          "why": "Keeps the test file self-contained with no new runtime or test dependencies; matches contract wording 'private statistics.median helper'."
+        },
+        {
+          "what": "Replaced percentile indexing with sorted median average of middle two values",
+          "why": "A true median is robust to a single outlier and removes the flaky pseudo-p95 calculation that indexed past the 95th percentile on only 10 samples."
+        },
+        {
+          "what": "Added a per-sample PER_SAMPLE_HANG_GUARD_MS = 1000.0 assertion inside each measured loop",
+          "why": "Honest hang/deadlock guard that fails fast on any individual catastrophic sample without confusing it with the median budget."
+        },
+        {
+          "what": "Retained strict <100ms semantic and <50ms symbol budgets and kept exactly 10 measured calls per benchmark",
+          "why": "Contract forbids budget increases or test count changes; only the aggregation method changes."
+        },
+        {
+          "what": "Used pytest.approx only where the median is a floating-point average",
+          "why": "Avoids fragile exact float comparisons for the (0 + 0.75)/2 and (5 + 6)/2 cases while still asserting exact values for integer medians."
+        },
+        {
+          "what": "Reordered hang-guard assertions to satisfy SIM300 Yoda-condition lint",
+          "why": "Preserved the boundary-test semantics (guard > sample) while keeping ruff clean without noqa suppression."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "none",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "tests/test_benchmark_latency.py now uses a private _median helper, strict per-sample 1000ms hang guard, and median-based assertions with retained 100ms/50ms budgets. Added 5 pure tests covering outlier robustness, identical values, sequence with large outlier, strict budget boundary, and hang-guard boundary. All 8 tests pass and ruff is clean. No production code, skips, budget increases, or new dependencies were introduced.",
+        "suggested_next_action": "Review the diff in tests/test_benchmark_latency.py, then proceed to checkpoint/acceptance gates as planned."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7vmhay_8da6ddd1"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7vmzgs_3b635702"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7vno8j_1af96cda"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7vnz6r_b1a4deea"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixFlakyLatencyBenchmarks",
+      "attempt": 2,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+      "task_id": "tk-b439c00f4e14",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-b439c00f4e14"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "tests/test_benchmark_latency.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "tr_ms7w3qff_30432a32",
+          "command": "uv run pytest tests/test_benchmark_latency.py -v",
+          "exit_code": 0,
+          "summary": "All 8 tests pass: 2 runtime median benchmarks + index_folder benchmark + 5 pure statistics.median/budget tests."
+        },
+        {
+          "test_run_id": "tr_ms7w3ilz_8eea1eab",
+          "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+          "exit_code": 0,
+          "summary": "Ruff lint and format checks pass on changed file."
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Imported and used statistics.median instead of a custom helper",
+          "why": "Contract explicitly requires stdlib statistics.median to structurally eliminate hand-rolled index-arithmetic defects."
+        },
+        {
+          "what": "Removed the private _median helper entirely",
+          "why": "The helper was the source of the contract violation; runtime benchmarks and pure tests now call statistics.median directly."
+        },
+        {
+          "what": "Updated pure tests to call statistics.median directly",
+          "why": "Ensures pure tests exercise the exact same stdlib behavior used by the runtime benchmarks, without reimplementing median logic."
+        },
+        {
+          "what": "Fixed typo 'roust' to 'robust' in test name and docstring",
+          "why": "Spelling correctness requested by review."
+        },
+        {
+          "what": "Retained all other contract elements (budgets, hang guard, 10 calls, no skips/deps)",
+          "why": "Only the median implementation mechanism changed; everything else stayed within the approved design."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "none",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Remediation complete: tests/test_benchmark_latency.py now imports and uses Python stdlib statistics.median directly in both runtime benchmarks. Removed the hand-rolled _median helper. Pure tests exercise statistics.median through the same code path. Fixed typo 'roust' -> 'robust'. All 8 tests pass and ruff is clean. No production code, skips, budget increases, or new dependencies.",
+        "suggested_next_action": "Review the updated diff in tests/test_benchmark_latency.py and proceed to checkpoint/acceptance gates."
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7w3qff_30432a32"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7w3ilz_8eea1eab"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "fixFlakyLatencyBenchmarks",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixFlakyLatencyBenchmarks",
+      "task_id": "tk-0edb2ec14795",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-0edb2ec14795"
+      },
+      "agent": "adv-reviewer",
+      "phase": "review",
+      "verdict": "READY",
+      "blocking_findings": [],
+      "nonblocking_findings": [],
+      "changes_made": [
+        {
+          "file": "tests/test_benchmark_latency.py",
+          "summary": "Expanded the pure strict-median-boundary test to exercise equality and just-below behavior for both the 100ms semantic and 50ms symbol budgets.",
+          "verification": "uv run pytest tests/test_benchmark_latency.py: 9 passed; git diff --check passed."
+        }
+      ],
+      "wisdom_candidates": [],
+      "verification": {
+        "tests_run": [
+          "uv run pytest tests/test_benchmark_latency.py",
+          "git diff --check origin/main...HEAD",
+          "git diff --check"
+        ],
+        "results": "pass",
+        "evidence": "Focused benchmark suite collected 9 tests and passed in 4.31s. Both diff whitespace checks passed. `bin/oc-test` is absent; direct `python -m pytest` lacks pytest, so the repository's uv environment was used."
+      },
+      "scope_drift": null,
+      "risks": [],
+      "required_main_agent_actions": [
+        "Create the required task checkpoint for the in-scope reviewer test change before marking the task complete."
+      ],
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run pytest tests/test_benchmark_latency.py"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check origin/main...HEAD"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check"
+        }
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-b439c00f4e14": [
+      {
+        "runId": "tr_ms7vlfaw_8ab229b8",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "python -m pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 162.13873300049454,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:57:26.491Z"
+      },
+      {
+        "runId": "tr_ms7vlv85_90c40173",
+        "phase": "red",
+        "exitCode": 2,
+        "classification": "failed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 2276.881258999929,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:57:47.187Z"
+      },
+      {
+        "runId": "tr_ms7vmhay_8da6ddd1",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 15824.49392700009,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:58:15.793Z"
+      },
+      {
+        "runId": "tr_ms7vmzgs_3b635702",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 7669.959028000012,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:58:39.276Z"
+      },
+      {
+        "runId": "tr_ms7vn4fy_afd39b22",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 106.19877099990845,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:58:45.731Z"
+      },
+      {
+        "runId": "tr_ms7vno8j_1af96cda",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 252.23337100073695,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:59:11.363Z"
+      },
+      {
+        "runId": "tr_ms7vnz6r_b1a4deea",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 6284.383937000297,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T18:59:25.556Z"
+      },
+      {
+        "runId": "tr_ms7w2lql_61de63b1",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 142.53229400049895,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:10:48.039Z"
+      },
+      {
+        "runId": "tr_ms7w2qqh_2a579a6b",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 8652.453542000614,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:10:54.451Z"
+      },
+      {
+        "runId": "tr_ms7w3ilz_8eea1eab",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run ruff check tests/test_benchmark_latency.py && uv run ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 262.37156399991363,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:11:30.646Z"
+      },
+      {
+        "runId": "tr_ms7w3qff_30432a32",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_benchmark_latency.py -v",
+        "durationMs": 8734.18459300045,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:11:40.704Z"
+      },
+      {
+        "runId": "tr_ms7w53jf_9e7bf4d9",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_benchmark_latency.py -q && uv run --extra dev ruff check tests/test_benchmark_latency.py && uv run --extra dev ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 7388.002539999783,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:12:44.353Z"
+      }
+    ],
+    "tk-0edb2ec14795": [
+      {
+        "runId": "tr_ms7xd4dm_1ffb7331",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_benchmark_latency.py -q && uv run --extra dev ruff check tests/test_benchmark_latency.py && uv run --extra dev ruff format --check tests/test_benchmark_latency.py",
+        "durationMs": 7484.337363999337,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:46:58.354Z"
+      }
+    ]
+  },
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-30T07:42:12.272Z",
+      "completed_by": "user",
+      "approval_evidence": "User directed: \"fix all, complete all so we have a working and healthy lgrep.\" This explicitly confirms the persisted defect proposal and Root Cause Analysis for the flaky latency benchmark: correct the statistic, make the sample set meaningful, retain real regression coverage, and restore green trunk.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "4e8f0bc8f81768cb130111596b7261e01c5af1bf440f93d5acd22fbc08f7d7f5",
+        "non_whitespace_chars": 4467,
+        "checked_at": "2026-07-30T05:42:09.203Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-30T17:21:39.341Z",
+      "completed_by": "user",
+      "approval_evidence": "User approved the agreement; typed 13-item contract minted. Discovery research validated statistics.median as the stdlib robust estimator: one scheduler stall ignored, uniform regression caught; no valid percentile estimate exists at n=10.",
+      "started_at": "2026-07-30T17:21:18.085Z",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "non_whitespace_chars": 1508,
+        "checked_at": "2026-07-30T05:42:09.204Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-30T18:41:05.399Z",
+      "completed_by": "agent",
+      "approval_evidence": "Independent design validator: PASS, high confidence, no conflicts. Design uses statistics.median over the existing ten samples, strict existing 100/50ms regression budgets, and a 1000ms hang guard. Validator cautions incorporated: pytest.approx for 0.375 float test, explicit hang boundary test, and accurate four-outlier breakdown wording. Related scan confirmed the broken p95/max pattern exists only in tests/test_benchmark_latency.py.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "2954b7289222bca4387a33f4bff7a917edeb47659552615f29a540d5b3450145",
+        "non_whitespace_chars": 1832,
+        "checked_at": "2026-07-30T05:42:09.205Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-30T18:52:59.518Z",
+      "completed_by": "user",
+      "approval_evidence": "User replied \"approve\" to the two-task graph. Contract coverage is complete: task 1 implements AC1–AC5; task 2 verifies AC1–AC6. User explicitly approved strict budgets, fixed ten-sample count, median aggregation, hang guard, and no runtime-code change."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-30T20:28:20.193Z",
+      "completed_by": "agent",
+      "approval_evidence": "Workflow recovery re-completion: no code/task/evidence changed. Existing checkpointed tasks remain done (32b384c, c913a8d). Focused 9 passed tr_ms7xd4dm_1ffb7331; independent full suite 724 passed; ruff clean. Re-enter reset execution/acceptance/release to force fresh acceptance readiness evaluation."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-30T20:28:28.358Z",
+      "completed_by": "user",
+      "approval_evidence": "Acceptance recovered after stale snapshot re-entry. User acceptance approval: \"accept\" at combined review; user separately approved state recovery. Restored review matrix 13/13 pass. Durable verification evidence dispositions remain fixed: tr_ms7w53jf_9e7bf4d9 and tr_ms7xd4dm_1ffb7331. Reviewer remediation checkpoint c913a8d.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "1e55995b49500218eae740f0e97b16c4127b84a10f74427c9762681db0a08b6a",
+        "non_whitespace_chars": 1298,
+        "checked_at": "2026-07-30T05:42:09.207Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+      "approvedAt": "2026-07-30T17:21:24.547Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "**AC1 — Honest aggregation:** both latency benchmarks use `statistics.median` over exactly 10 measured calls. No truncated index selection, percentile claim, or max-based variable/message remains.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "**AC2 — One outlier does not decide CI:** a pure aggregation test over `[0.25, 0.3, 0.3, 0.35, 0.35, 0.4, 0.4, 0.45, 0.5, 159.0]` returns median `0.375`ms and satisfies the 50ms symbol-search budget.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "**AC3 — Uniform regression still fails:** a pure aggregation test over ten `60.0`ms samples returns median `60.0`ms and fails the 50ms symbol-search budget.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "**AC4 — Both paths covered:** semantic search keeps a strict median budget under 100ms; symbol search keeps a strict median budget under 50ms. The two existing runtime benchmarks each use the same aggregation helper.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "**AC5 — Hang guard:** every individual measured call remains below 1000ms. This is explicitly a hang/deadlock guard, not tail-latency coverage.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "**AC6 — CI recovery:** the full test suite, ruff check, and ruff format check pass locally; after merge the GitHub CI matrix passes on Python 3.11, 3.12, and 3.13.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Test-only change: do not modify `src/lgrep/` behavior.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Keep 10 measured calls per benchmark; no suite-runtime increase for a larger sample set.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Do not delete, skip, or budget-inflate either benchmark.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Use Python standard library only; project requires Python 3.11+.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "A tail-latency SLA. That needs dedicated profiling/load tooling, not a shared-runner unit test.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "Changing CI runners or job topology.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "Altering the measured search implementations.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-30T20:28:00.359Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Both runtime benchmarks use Python stdlib statistics.median; focused 9 passed tr_ms7xd4dm_1ffb7331."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "One 159ms outlier among nine low samples yields median 0.375 via pytest.approx and passes strict 50ms budget."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Ten 60ms samples yield 60ms and fail strict 50ms budget."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Ten calls retained on each path; semantic <100ms and symbol <50ms median boundaries pure-tested."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Per-sample 1000ms hang guard has strict 999.9/1000 boundary proof."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Focused 9 passed tr_ms7xd4dm_1ffb7331; independent full suite 724 passed; ruff clean; post-merge CI remains release proof."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Only tests/test_benchmark_latency.py changed."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Exactly ten calls remain per runtime benchmark."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Existing strict 100/50 budgets retained; no skipped/deleted benchmark."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Python stdlib statistics only; project is Python 3.11+."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No tail-SLA claim; hang guard is deadlock only."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "CI topology unchanged."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No source implementation change."
+        }
+      ]
+    },
+    "amendments": []
+  },
+  "acceptanceCriteria": [
+    "**AC1 — Honest aggregation:** both latency benchmarks use `statistics.median` over exactly 10 measured calls. No truncated index selection, percentile claim, or max-based variable/message remains.",
+    "**AC2 — One outlier does not decide CI:** a pure aggregation test over `[0.25, 0.3, 0.3, 0.35, 0.35, 0.4, 0.4, 0.45, 0.5, 159.0]` returns median `0.375`ms and satisfies the 50ms symbol-search budget.",
+    "**AC3 — Uniform regression still fails:** a pure aggregation test over ten `60.0`ms samples returns median `60.0`ms and fails the 50ms symbol-search budget.",
+    "**AC4 — Both paths covered:** semantic search keeps a strict median budget under 100ms; symbol search keeps a strict median budget under 50ms. The two existing runtime benchmarks each use the same aggregation helper.",
+    "**AC5 — Hang guard:** every individual measured call remains below 1000ms. This is explicitly a hang/deadlock guard, not tail-latency coverage.",
+    "**AC6 — CI recovery:** the full test suite, ruff check, and ruff format check pass locally; after merge the GitHub CI matrix passes on Python 3.11, 3.12, and 3.13."
+  ],
+  "documents": {
+    "proposal": "# Fix flaky latency benchmarks\n\n## Why\n\nBoth latency benchmarks assert on the maximum of ten samples while calling it p95. A single scheduling stall on a shared CI runner fails them. This has taken trunk red twice within one hour — PR #6 job 90779400278, then main run 30517051431 — and will keep doing so intermittently.\n\n## Root Cause Analysis\n\n**Symptom.** `tests/test_benchmark_latency.py::TestSymbolSearchLatency::test_search_symbols_latency` fails on CI with `Symbol search p95 latency 109.2ms exceeds budget 50.0ms`, while nine of its ten samples were under 2ms.\n\n**Immediate cause.** Both benchmarks compute the percentile the same way, at `tests/test_benchmark_latency.py:97` and `:163`:\n\n```python\nlatencies.sort()\np95 = latencies[int(len(latencies) * 0.95)]\n```\n\nFor `len == 10`, `int(0.95 * 10)` is `int(9.5)` = `9`. `latencies[9]` is the last element of a sorted ten-element list — the maximum. The docstring at line 33, the variable name, and the assertion messages at lines 100 and 166 all claim p95. The assertion is on max.\n\n**Root cause.** Two independent faults compound, and fixing either alone leaves the test flaky.\n\n1. *The statistic is maximally outlier-sensitive.* Index selection by truncation collapses to the maximum at n=10. A percentile is chosen to be robust to tail outliers; taking the max is the opposite of that intent. Nothing in the test can distinguish a genuine regression from one unlucky sample.\n\n2. *The sample size cannot support a tail statistic.* Even with correct arithmetic, ten samples cannot estimate a 95th percentile robustly — the top one or two values dominate any method. Verified: a true inclusive p95 over the trunk failure's samples is 60.8ms, still above the 50ms budget. Over the PR #6 samples it is 139.1ms. So the percentile bug is real, but repairing it is insufficient.\n\nUnderneath both: the benchmark measures an operation of roughly 0.3ms against a 50ms wall-clock budget on a shared runner. Reproduced locally over twelve consecutive calls: 0.19ms to 0.55ms, no first-call penalty (`index_folder` warms the shared index cache in-process, so cold-start is not the explanation). The signal is three orders of magnitude smaller than the noise floor of a contended CI runner, so any single-sample-sensitive assertion is flaky by construction regardless of how generous the budget looks.\n\n**Why it was not caught.** The tests pass on an idle machine and on most CI runs, so the defect only surfaces under contention. Nothing asserts a property of the measurement method itself, so a statistic that cannot fail correctly still looks like passing coverage. The 150x apparent margin actively disguised the problem: a budget that generous reads as obviously safe.\n\n## What Changes\n\n1. Replace the truncated-index selection with a real percentile, and raise the sample count so a tail statistic is meaningful. At roughly 0.3ms per call, 100 samples remain well under a second.\n2. Alternatively or additionally, assert a robust central statistic (median or trimmed mean) as the regression signal, with a separate deliberately generous ceiling for pathological cases. A regression in the operation moves the median; a runner stall does not.\n3. Apply the same correction to the semantic-search benchmark at line 97, which carries the identical defect.\n4. Make the naming honest — whatever statistic is asserted should be what the variable, docstring, and failure message say.\n5. Keep a meaningful regression budget. Raising the threshold until it stops failing is explicitly rejected: it would preserve the mislabeled statistic and weaken the only latency coverage in the suite.\n\n## User Outcomes\n\n- [ ] Trunk CI stops failing intermittently on unrelated changes\n- [ ] A genuine latency regression is still caught\n- [ ] A single CI scheduling stall no longer fails the build\n- [ ] The reported statistic is the statistic actually asserted\n- [ ] Discovery will firm acceptance criteria and success criteria\n\n## Affected Code\n\n- `tests/test_benchmark_latency.py` — both `test_search_semantic_local_latency` (line 97) and `test_search_symbols_latency` (line 163); percentile computation, sample count, budget constants, docstrings, and assertion messages\n\n## Constraints\n\n- Test-only change; do not modify `src/lgrep/` behavior.\n- Keep total suite runtime increase negligible.\n- Do not delete or skip the benchmarks; regression coverage must survive.\n- Do not simply raise the budget to mask the flakiness.\n\n## Impact\n\nCI reliability only. No user-facing or runtime behavior changes.\n\n## Risks\n\n- A more robust statistic could mask a real regression that only affects tail latency. Mitigated by retaining a separate ceiling assertion so pathological outliers are still visible.\n- Raising the sample count slightly increases suite runtime; bounded by the sub-millisecond per-call cost.\n\n## Validation Plan\n\n- Reproduce the defect first: assert that the current selection returns the maximum for a synthetic ten-sample list, establishing the bug as a failing test.\n- Green: the corrected statistic ignores a single injected outlier while still failing on a uniformly slow distribution.\n- Confirm both benchmarks are covered.\n- Full suite plus `ruff check` and `ruff format --check`.\n- Confirm trunk CI green after merge, across all three Python matrix versions.",
+    "problemStatement": "Both latency benchmarks assert on the maximum of ten samples while calling it p95, which makes them fail whenever a shared CI runner stalls once. This has taken trunk red twice in one hour.\n\n`tests/test_benchmark_latency.py:97` and `:163` both compute:\n\n```python\nlatencies.sort()\np95 = latencies[int(len(latencies) * 0.95)]\n```\n\nWith ten samples, `int(0.95 * 10)` is `int(9.5)` = `9`, and `latencies[9]` is the largest element of a sorted ten-element list. The docstrings, the variable name, and the assertion messages all say p95; the value is the maximum.\n\nThe operation being measured takes roughly 0.3ms. Measured locally across twelve consecutive calls: 0.19ms to 0.55ms, with no first-call penalty, because `index_folder` already warms the shared index cache in-process. The budget is 50ms — a margin of over 150x.\n\nIt still fails, because a single scheduling stall on a shared runner is enough:\n\n| Run | Samples (ms) | Asserted value |\n|---|---|---|\n| main @216acba | 0.3, 0.3, 0.3, 0.5, 0.5, 0.6, 0.6, 0.9, 1.6, **109.2** | 109.2 |\n| PR #6 | 0.4, 0.5, 0.5, 1.1, 47.3, 48.7, 91.6, 93.8, 114.4, **159.3** | 159.3 |\n\nNine of ten samples in the trunk failure were under 2ms. One stall decided the result. Correcting only the percentile arithmetic does not fix this: a true inclusive p95 over those same ten samples is 60.8ms, still above the 50ms budget.",
+    "agreement": "# Agreement — Fix flaky latency benchmarks\n\n## Objective\n\nRestore stable green CI while preserving meaningful latency-regression coverage for local semantic and symbol search.\n\n## Acceptance criteria\n\n- **AC1 — Honest aggregation:** both latency benchmarks use `statistics.median` over exactly 10 measured calls. No truncated index selection, percentile claim, or max-based variable/message remains.\n- **AC2 — One outlier does not decide CI:** a pure aggregation test over `[0.25, 0.3, 0.3, 0.35, 0.35, 0.4, 0.4, 0.45, 0.5, 159.0]` returns median `0.375`ms and satisfies the 50ms symbol-search budget.\n- **AC3 — Uniform regression still fails:** a pure aggregation test over ten `60.0`ms samples returns median `60.0`ms and fails the 50ms symbol-search budget.\n- **AC4 — Both paths covered:** semantic search keeps a strict median budget under 100ms; symbol search keeps a strict median budget under 50ms. The two existing runtime benchmarks each use the same aggregation helper.\n- **AC5 — Hang guard:** every individual measured call remains below 1000ms. This is explicitly a hang/deadlock guard, not tail-latency coverage.\n- **AC6 — CI recovery:** the full test suite, ruff check, and ruff format check pass locally; after merge the GitHub CI matrix passes on Python 3.11, 3.12, and 3.13.\n\n## Constraints\n\n- Test-only change: do not modify `src/lgrep/` behavior.\n- Keep 10 measured calls per benchmark; no suite-runtime increase for a larger sample set.\n- Do not delete, skip, or budget-inflate either benchmark.\n- Use Python standard library only; project requires Python 3.11+.\n\n## Out of scope\n\n- A tail-latency SLA. That needs dedicated profiling/load tooling, not a shared-runner unit test.\n- Changing CI runners or job topology.\n- Altering the measured search implementations.",
+    "design": "# Design — Fix flaky latency benchmarks\n\n## Decision\n\nReplace the hand-rolled pseudo-percentile with a tiny pure helper based on `statistics.median`. Both runtime benchmarks call it for their ten measured samples.\n\nMedian is the correct signal for this test:\n\n- It withstands up to four high outliers in ten samples; the fifth can change the result.\n- A uniform regression affects every query and shifts the median, so the existing 50ms symbol and 100ms semantic budgets remain meaningful.\n- `statistics.median` has no percentile-index arithmetic to get wrong and is guaranteed by Python 3.11+.\n\n## Shape\n\n`tests/test_benchmark_latency.py` gains a private `_median_latency_ms(samples)` helper and pure unit tests for that helper. The two runtime benchmarks retain exactly ten calls, then assert:\n\n1. median is below the existing path-specific regression budget;\n2. every sample is below 1000ms, explicitly named as a hang/deadlock guard.\n\nThe assertion text and docstrings say \"median,\" not p95. The 1000ms guard is deliberately not a tail-latency promise; it detects pathological blocking while the median detects a regression in the search path.\n\n## Tests\n\n- One 159ms outlier among nine sub-millisecond samples yields the expected median (`pytest.approx(0.375)`) and passes the 50ms budget.\n- Ten 60ms samples yield 60ms and fail the symbol budget.\n- Even-count behavior is asserted (`[1..9,100]` → 5.5) so the estimator is explicit.\n- Exact-budget boundary fails because runtime assertions remain strict `<`.\n- Hang guard boundary is pure-tested: 999.9ms passes, 1000.0ms fails.\n- Both runtime paths use the same helper.\n\n## Rejected alternatives\n\n- Real p95: not statistically meaningful at n=10; even inclusive p95 still follows an isolated outlier.\n- More samples: unnecessary for median and needlessly increases suite work.\n- Trimmed mean: hand-rolled slice arithmetic reopens the defect class.\n- Raising the budget or skipping the test: masks the problem and weakens regression coverage.\n\n## Risk\n\nMedian does not represent a tail SLA. That is intentional; a shared-runner unit test cannot prove one. The separate hang guard preserves bounded failure detection.",
+    "executiveSummary": "# Executive Summary — Fix flaky latency benchmarks\n\n## Outcome\n\nCI no longer lets one scheduler pause masquerade as a product regression. The two latency tests had calculated `int(10 * 0.95)`, which selected the maximum sample while claiming to report p95. One 109ms or 159ms shared-runner stall could red-line a search operation whose normal time is roughly 0.3ms.\n\nBoth benchmarks now use Python's standard `statistics.median` across the existing ten calls. The actual regression budgets remain strict: 100ms for local semantic search and 50ms for symbol search. A separate strict 1000ms per-call check catches hangs and deadlocks without pretending to be tail-latency coverage.\n\n## Value\n\nUnrelated changes stop failing CI because another process briefly received CPU time. At the same time, a uniform slowdown still fails: ten 60ms symbol-search samples produce a 60ms median and breach the unchanged 50ms budget.\n\n## Verification\n\n- Pure tests prove one 159ms outlier is ignored, uniform slow behavior fails, even-count median behavior is correct, both budgets have strict boundaries, and the hang guard is strict.\n- Focused suite: 9 passed.\n- Independent verification: 724 full-suite tests passed; lint and formatting clean.\n- Review found and fixed missing pure boundary coverage for the semantic 100ms budget.\n\n## Risk\n\nThis is intentionally not a tail-latency SLA; shared-runner unit tests cannot establish one. The hang guard still catches pathological blocking. Post-merge CI across Python 3.11/3.12/3.13 is release evidence.",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-30T20:28:00.359Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | **AC1 — Honest aggregation:** both latency benchmarks use `statistics.median` over exactly 10 measured calls. No truncated index selection, percentile claim, or max-based variable/message remains. | pass | Both runtime benchmarks use Python stdlib statistics.median; focused 9 passed tr_ms7xd4dm_1ffb7331. |\n| AC2 | acceptance_criterion | **AC2 — One outlier does not decide CI:** a pure aggregation test over `[0.25, 0.3, 0.3, 0.35, 0.35, 0.4, 0.4, 0.45, 0.5, 159.0]` returns median `0.375`ms and satisfies the 50ms symbol-search budget. | pass | One 159ms outlier among nine low samples yields median 0.375 via pytest.approx and passes strict 50ms budget. |\n| AC3 | acceptance_criterion | **AC3 — Uniform regression still fails:** a pure aggregation test over ten `60.0`ms samples returns median `60.0`ms and fails the 50ms symbol-search budget. | pass | Ten 60ms samples yield 60ms and fail strict 50ms budget. |\n| AC4 | acceptance_criterion | **AC4 — Both paths covered:** semantic search keeps a strict median budget under 100ms; symbol search keeps a strict median budget under 50ms. The two existing runtime benchmarks each use the same aggregation helper. | pass | Ten calls retained on each path; semantic <100ms and symbol <50ms median boundaries pure-tested. |\n| AC5 | acceptance_criterion | **AC5 — Hang guard:** every individual measured call remains below 1000ms. This is explicitly a hang/deadlock guard, not tail-latency coverage. | pass | Per-sample 1000ms hang guard has strict 999.9/1000 boundary proof. |\n| AC6 | acceptance_criterion | **AC6 — CI recovery:** the full test suite, ruff check, and ruff format check pass locally; after merge the GitHub CI matrix passes on Python 3.11, 3.12, and 3.13. | pass | Focused 9 passed tr_ms7xd4dm_1ffb7331; independent full suite 724 passed; ruff clean; post-merge CI remains release proof. |\n| C1 | constraint | Test-only change: do not modify `src/lgrep/` behavior. | respected | Only tests/test_benchmark_latency.py changed. |\n| C2 | constraint | Keep 10 measured calls per benchmark; no suite-runtime increase for a larger sample set. | respected | Exactly ten calls remain per runtime benchmark. |\n| C3 | constraint | Do not delete, skip, or budget-inflate either benchmark. | respected | Existing strict 100/50 budgets retained; no skipped/deleted benchmark. |\n| C4 | constraint | Use Python standard library only; project requires Python 3.11+. | respected | Python stdlib statistics only; project is Python 3.11+. |\n| OOS1 | out_of_scope | A tail-latency SLA. That needs dedicated profiling/load tooling, not a shared-runner unit test. | not_applicable | No tail-SLA claim; hang guard is deadlock only. |\n| OOS2 | out_of_scope | Changing CI runners or job topology. | not_applicable | CI topology unchanged. |\n| OOS3 | out_of_scope | Altering the measured search implementations. | not_applicable | No source implementation change. |\n\n"
+  },
+  "artifacts": {
+    "problemStatement": {
+      "updatedAt": "2026-07-30T05:42:09.258Z",
+      "contentHash": "008a2e0582cf58b452405c07b6d98c4ec995464d8dadabe9a2878f778fa57967",
+      "source": "temporal",
+      "readable": false
+    },
+    "proposal": {
+      "updatedAt": "2026-07-30T05:42:40.225Z",
+      "contentHash": "4e8f0bc8f81768cb130111596b7261e01c5af1bf440f93d5acd22fbc08f7d7f5",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-30T08:01:52.124Z",
+      "contentHash": "73c67410a9618ff6655a178d63a2681175d5ac3222f726f27d5256e8ec2bb401",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-30T18:40:36.587Z",
+      "contentHash": "2954b7289222bca4387a33f4bff7a917edeb47659552615f29a540d5b3450145",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-30T19:48:30.215Z",
+      "contentHash": "1e55995b49500218eae740f0e97b16c4127b84a10f74427c9762681db0a08b6a",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "reentry_history": [
+    {
+      "from_gate": "acceptance",
+      "reason": "Force fresh acceptance readiness evaluation after accepted verification-evidence dispositions remained masked by a stale stuck snapshot created before the dispositions.",
+      "scope_delta": "No code or scope change. Workflow-state recovery only: re-evaluate existing durable evidence and restore the derived all-pass review matrix.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-07-30T20:26:30.942Z",
+      "gates_reset": [
+        "acceptance",
+        "release"
+      ]
+    },
+    {
+      "from_gate": "execution",
+      "reason": "Recover a stale acceptance gate snapshot: acceptance re-entry short-circuited with 0 gates reopened despite persisted evidence dispositions. Reset execution and downstream gates to force a fresh readiness evaluation.",
+      "scope_delta": "No code, task, contract, or evidence change. Workflow-state recovery only; execution will be re-completed from existing checkpoints and evidence, then the all-pass review matrix restored.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-07-30T20:27:41.340Z",
+      "gates_reset": [
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    }
+  ],
+  "same_project_dependencies": [],
+  "lastSignalAt": "2026-07-30T20:32:47.921Z",
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "Trunk CI failures on PR #6 (job 90779400278) and main @216acba (run 30517051431); adv-tron recon candidate #2, independently reproduced locally"
+  },
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true,
+  "verification_evidence_dispositions": [
+    {
+      "taskId": "tk-b439c00f4e14",
+      "concernKey": "verification",
+      "disposition": "fixed",
+      "evidence": "Fresh durable GREEN evidence is recorded as adv_run_test tr_ms7w53jf_9e7bf4d9: 8 focused benchmark tests passed, ruff check and ruff format check passed. The worker's older report references non-durable run IDs only; the current checkpoint verification and reviewer remediation use the durable run.",
+      "dispositionedAt": "2026-07-30T20:12:34.177Z"
+    },
+    {
+      "taskId": "tk-0edb2ec14795",
+      "concernKey": "verification",
+      "disposition": "fixed",
+      "evidence": "Fresh durable acceptance-review evidence is adv_run_test tr_ms7xd4dm_1ffb7331: 9 focused benchmark tests passed, ruff check and ruff format check passed. Independent verifier additionally ran full suite: 724 passed, ruff clean. The worker report's stale IDs were replaced by current durable evidence and checkpoint c913a8d.",
+      "dispositionedAt": "2026-07-30T20:12:43.609Z"
+    }
+  ],
+  "release_notes": {
+    "audience": "internal",
+    "category": "fixed",
+    "headline_internal": "Latency benchmarks now use median regression checks instead of a mislabeled maximum, preventing shared-runner scheduling stalls from failing trunk",
+    "highlights": [
+      "Both semantic and symbol latency benchmarks retain their existing strict 100ms and 50ms regression budgets across ten calls.",
+      "A single scheduling outlier no longer decides CI; uniform slowdowns still fail the same budgets.",
+      "A separate strict 1000ms per-sample hang guard catches pathological blocking without claiming a tail-latency SLA."
+    ],
+    "area": "CI reliability",
+    "user_action_required": false
+  },
+  "worker_bundle_impact": {
+    "kind": "not_applicable",
+    "rationale": "Test-only Python repository change. No ADV worker bundle, Temporal workflow code, or replay-determinism surface is present; diff is tests/test_benchmark_latency.py only.",
+    "confirmed_at": "2026-07-30T20:32:21.148Z"
+  },
+  "creation_request_hash": "4c7b3432a78f1d27b386e83d42789c509dea7d81b6c6646828ad012dbe5d90b4",
+  "projection_revision": 43,
+  "projection_commits": [
+    {
+      "mutation_kind": "problemStatementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "b2469635edf1cc2255c76a6451eb58a20423753faef96042a79446ae6f58c344:createArtifacts:problemStatement",
+      "operation_id": "b2469635edf1cc2255c76a6451eb58a20423753faef96042a79446ae6f58c344:createArtifacts:problemStatement",
+      "payload_hash": "291ed61970cbaba1a5caadfbc140d846cc7a8e04f8464a01e9b29d7fa2298457",
+      "state_revision": 1,
+      "prior_revision": 0,
+      "new_revision": 1,
+      "committed_at": "2026-07-30T05:42:09.424Z"
+    },
+    {
+      "mutation_kind": "proposalUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "de016e5eee8a5c6115be671b56a70d3f6f07d2de37fe7e66936e6977c20e51fd:updateArtifacts:proposal",
+      "operation_id": "de016e5eee8a5c6115be671b56a70d3f6f07d2de37fe7e66936e6977c20e51fd:updateArtifacts:proposal",
+      "payload_hash": "6287ae15cdd529e3b00ce4678e221abc3beaa8aec8f653cebc36973404acaa3d",
+      "state_revision": 2,
+      "prior_revision": 1,
+      "new_revision": 2,
+      "committed_at": "2026-07-30T05:42:40.399Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 2,
+      "new_revision": 3,
+      "committed_at": "2026-07-30T07:42:12.346Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 3,
+      "new_revision": 4,
+      "committed_at": "2026-07-30T07:46:45.988Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 4,
+      "new_revision": 5,
+      "committed_at": "2026-07-30T07:46:46.179Z"
+    },
+    {
+      "mutation_kind": "agreementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "7a60fdc5247cbaed04e78b08195a7406e94a4775535d8c1bf9e1a3ab7759beaa:updateArtifacts:agreement",
+      "operation_id": "7a60fdc5247cbaed04e78b08195a7406e94a4775535d8c1bf9e1a3ab7759beaa:updateArtifacts:agreement",
+      "payload_hash": "4df775f24680329a87c3c462f813813323d7ce0eb651070997ccda4207cf94d7",
+      "state_revision": 3,
+      "prior_revision": 5,
+      "new_revision": 6,
+      "committed_at": "2026-07-30T08:01:52.268Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 6,
+      "new_revision": 7,
+      "committed_at": "2026-07-30T17:21:18.376Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 7,
+      "new_revision": 8,
+      "committed_at": "2026-07-30T17:21:25.003Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 8,
+      "new_revision": 9,
+      "committed_at": "2026-07-30T17:21:39.441Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "ad7fe6511fa3fdc0530ec073cb299277072f9768aac14a3e2917d1671238c06a:updateArtifacts:design",
+      "operation_id": "ad7fe6511fa3fdc0530ec073cb299277072f9768aac14a3e2917d1671238c06a:updateArtifacts:design",
+      "payload_hash": "a035bd225ff0f10ec5ebb1bfefd4a5414e4de4c55e35ab6ceb96876c56361618",
+      "state_revision": 4,
+      "prior_revision": 9,
+      "new_revision": 10,
+      "committed_at": "2026-07-30T17:22:06.514Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 10,
+      "new_revision": 11,
+      "committed_at": "2026-07-30T17:26:37.621Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 11,
+      "new_revision": 12,
+      "committed_at": "2026-07-30T17:26:37.894Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "d8e92cb8f153b7b891e343274dc394ead325b39f62f41fb28ef06ff89fdae3d1:updateArtifacts:design",
+      "operation_id": "d8e92cb8f153b7b891e343274dc394ead325b39f62f41fb28ef06ff89fdae3d1:updateArtifacts:design",
+      "payload_hash": "c700be9bba8350fdebae7981adcf59c3206edbcbedc48f9e2dbf6e94b6540221",
+      "state_revision": 5,
+      "prior_revision": 12,
+      "new_revision": 13,
+      "committed_at": "2026-07-30T18:40:37.284Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 13,
+      "new_revision": 14,
+      "committed_at": "2026-07-30T18:41:05.591Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 14,
+      "new_revision": 15,
+      "committed_at": "2026-07-30T18:41:43.365Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 15,
+      "new_revision": 16,
+      "committed_at": "2026-07-30T18:41:43.585Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 16,
+      "new_revision": 17,
+      "committed_at": "2026-07-30T18:42:03.859Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 17,
+      "new_revision": 18,
+      "committed_at": "2026-07-30T18:52:59.807Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 18,
+      "new_revision": 19,
+      "committed_at": "2026-07-30T18:53:41.467Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 19,
+      "new_revision": 20,
+      "committed_at": "2026-07-30T19:00:01.447Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 20,
+      "new_revision": 21,
+      "committed_at": "2026-07-30T19:00:01.856Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 21,
+      "new_revision": 22,
+      "committed_at": "2026-07-30T19:11:59.253Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 22,
+      "new_revision": 23,
+      "committed_at": "2026-07-30T19:11:59.583Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 23,
+      "new_revision": 24,
+      "committed_at": "2026-07-30T19:13:09.740Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 24,
+      "new_revision": 25,
+      "committed_at": "2026-07-30T19:14:02.731Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 25,
+      "new_revision": 26,
+      "committed_at": "2026-07-30T19:34:05.992Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 26,
+      "new_revision": 27,
+      "committed_at": "2026-07-30T19:40:08.727Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 27,
+      "new_revision": 28,
+      "committed_at": "2026-07-30T19:42:54.448Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 28,
+      "new_revision": 29,
+      "committed_at": "2026-07-30T19:42:54.791Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 29,
+      "new_revision": 30,
+      "committed_at": "2026-07-30T19:47:20.713Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785440878048_xrs9vzsu",
+      "prior_revision": 30,
+      "new_revision": 31,
+      "committed_at": "2026-07-30T19:47:58.241Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "4536eeb8f89d2219e987044718fb6287c819d8b35bea579830ccdbf5a4875c2c:updateArtifacts:executiveSummary",
+      "operation_id": "4536eeb8f89d2219e987044718fb6287c819d8b35bea579830ccdbf5a4875c2c:updateArtifacts:executiveSummary",
+      "payload_hash": "cb703397b19420f75b0bd36a7252f52cfa41b0975260e1785dfcd1c25ebd2b74",
+      "state_revision": 6,
+      "prior_revision": 31,
+      "new_revision": 32,
+      "committed_at": "2026-07-30T19:48:30.615Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 32,
+      "new_revision": 33,
+      "committed_at": "2026-07-30T20:12:11.838Z"
+    },
+    {
+      "mutation_kind": "verification_evidence_disposition",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785442354230_s41orinf",
+      "prior_revision": 33,
+      "new_revision": 34,
+      "committed_at": "2026-07-30T20:12:34.484Z"
+    },
+    {
+      "mutation_kind": "verification_evidence_disposition",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785442363620_wo8qf5v4",
+      "prior_revision": 34,
+      "new_revision": 35,
+      "committed_at": "2026-07-30T20:12:43.891Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 35,
+      "new_revision": 36,
+      "committed_at": "2026-07-30T20:12:52.982Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 36,
+      "new_revision": 37,
+      "committed_at": "2026-07-30T20:26:31.313Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 37,
+      "new_revision": 38,
+      "committed_at": "2026-07-30T20:27:41.944Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785443280447_gnhd1dqe",
+      "prior_revision": 38,
+      "new_revision": 39,
+      "committed_at": "2026-07-30T20:28:00.889Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 39,
+      "new_revision": 40,
+      "committed_at": "2026-07-30T20:28:20.534Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 40,
+      "new_revision": 41,
+      "committed_at": "2026-07-30T20:28:28.552Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixFlakyLatencyBenchmarks",
+      "prior_revision": 41,
+      "new_revision": 42,
+      "committed_at": "2026-07-30T20:32:21.583Z"
+    },
+    {
+      "mutation_kind": "releaseNotesSet",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "56c3b875b912897c3776de5dc387304189355384958b7a77a4c25530f0783bde:releaseNotesSet",
+      "operation_id": "56c3b875b912897c3776de5dc387304189355384958b7a77a4c25530f0783bde:releaseNotesSet",
+      "payload_hash": "66528687c7d3f355b0f89ebb65ce38dce687ec333183552e42861f1a9cf4842a",
+      "state_revision": 7,
+      "prior_revision": 42,
+      "new_revision": 43,
+      "committed_at": "2026-07-30T20:32:48.390Z"
+    }
+  ],
+  "state_revision": 7
+}
