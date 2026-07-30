@@ -1,3 +1,5 @@
+## 2026-07-30 (v3.2.3)\n\n### Changed\n- checkpoint tk-7d4722205f39\n- checkpoint tk-0edb2ec14795\n- checkpoint tk-389d9063d15c\n- checkpoint tk-dfa0f990b25c\n- checkpoint tk-b439c00f4e14
+
 ## 2026-07-30 (v3.2.2)\n\n### Fixed\n- correct transport-safety drift and pin ruff to unbreak lint\n- stop staleness annotation leaking into cached index; confine freshness read\n\n### Changed\n- checkpoint tk-d93f0f72a3b7\n- checkpoint tk-ec6f446f6a1d\n- checkpoint tk-593a5819ec49\n- checkpoint tk-c149dd1461a8
 
 ## Unreleased (v3.2.2)
