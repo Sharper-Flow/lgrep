@@ -11,6 +11,7 @@ import hashlib
 import time
 from pathlib import Path
 
+from lgrep.discovery import MAX_FILE_SIZE_BYTES
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
@@ -21,8 +22,9 @@ MAX_REFERENCE_RESULTS = 100
 
 # Share of the result cap held back for test occurrences under "include_tests".
 # Without a reserve, production occurrences alone fill the cap in any real
-# repository and the filter has no observable effect. Unused reserve is
-# returned to production, so the cap is never left partly empty.
+# repository and the filter has no observable effect. Unused reserve is handed
+# back to the other group, so capacity is never wasted while either group still
+# has rows left; a corpus smaller than the cap simply returns fewer rows.
 TEST_RESERVE_RATIO = 0.2
 
 _DISCLAIMER = (
@@ -30,30 +32,50 @@ _DISCLAIMER = (
 )
 
 
-def _annotate_staleness(results: list[dict], root: Path, indexed_hashes: dict[str, str]) -> int:
-    """Mark each returned row stale when its backing file no longer matches the index.
+def _annotate_staleness(
+    results: list[dict], root: Path, indexed_hashes: dict[str, str]
+) -> tuple[list[dict], int]:
+    """Return copies of the returned rows tagged with a freshness verdict.
 
     The index already stores a per-file SHA-256 to skip unchanged files during
-    incremental indexing; that hash is reused here as the freshness oracle so no
-    new state is introduced. Work is bounded by the distinct files present in
-    the returned slice, never by repository size, and nothing is re-indexed:
-    freshness is reported, not repaired.
+    incremental indexing; that hash is reused here as the freshness oracle.
+    Work is bounded by the distinct files present in the returned slice, never
+    by repository size, and nothing is re-indexed: freshness is reported, not
+    repaired.
+
+    Rows are copied rather than mutated. The dicts in ``results`` are the same
+    objects held in the in-memory index cache, so writing to them would leak a
+    read-only lookup's verdict into cached state and, on the next save, onto
+    disk.
+
+    ``file_path`` values come from the persisted index, which is a local cache
+    file rather than a trusted input, so the resolved path is confined to the
+    repository root and oversized reads are refused. Anything unreadable,
+    escaping, or oversized is reported stale rather than raising.
     """
     verdicts: dict[str, bool] = {}
+
+    def _is_stale(rel_path: str) -> bool:
+        try:
+            candidate = (root / rel_path).resolve()
+            if not candidate.is_relative_to(root.resolve()):
+                return True
+            if candidate.stat().st_size > MAX_FILE_SIZE_BYTES:
+                return True
+            current = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        except (OSError, ValueError):
+            # Missing, unreadable, or malformed backing path: stale, never an error.
+            return True
+        return indexed_hashes.get(rel_path) != current
+
+    annotated: list[dict] = []
     for row in results:
         rel_path = row.get("file_path", "")
         if rel_path not in verdicts:
-            indexed_hash = indexed_hashes.get(rel_path)
-            try:
-                current = hashlib.sha256((root / rel_path).read_bytes()).hexdigest()
-            except OSError:
-                # Missing or unreadable backing file: stale, never an error.
-                verdicts[rel_path] = True
-            else:
-                verdicts[rel_path] = indexed_hash != current
-        row["is_stale"] = verdicts[rel_path]
+            verdicts[rel_path] = _is_stale(rel_path)
+        annotated.append({**row, "is_stale": verdicts[rel_path]})
 
-    return sum(1 for is_stale in verdicts.values() if is_stale)
+    return annotated, sum(1 for is_stale in verdicts.values() if is_stale)
 
 
 def search_references(
@@ -184,7 +206,7 @@ def search_references(
 
     total_matches = len(matches)
     returned_tests = sum(1 for m in results if m.get("is_test_file"))
-    stale_file_count = _annotate_staleness(results, Path(repo_path), index.files)
+    results, stale_file_count = _annotate_staleness(results, Path(repo_path), index.files)
 
     tokens_saved = estimate_savings(len(results))
     return {

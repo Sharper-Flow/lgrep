@@ -2,17 +2,19 @@
 
 ### Security
 
-- **Deleting via MCP now needs an explicit grant.** `prune_orphans` and `prune_symbols` decided authority from the transport kind, treating `stdio` as proof of a single local caller. That assumption fails under a proxy: Vision runs lgrep as a stdio subprocess but republishes it on a shared, unauthenticated port, and diagnostics through that proxy still report `stdio` — so any client reaching the port could delete. Authority is now an explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, defaulting to off. Without it the tools return a preview plus a `refused_reason` naming the grant and the CLI equivalent. The CLI `--execute` path is unchanged.
+- **Deleting via MCP now needs an explicit grant.** `prune_orphans` and `prune_symbols` decided authority from the transport kind, treating `stdio` as proof of a single local caller. That assumption fails under a proxy: Vision runs lgrep as a stdio subprocess but republishes it on a shared, unauthenticated port, and diagnostics through that proxy still report `stdio` — so any client reaching the port could delete. Authority is now an explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, defaulting to off. Without it the tools return a preview plus a new `refused_reason` field naming the grant and the CLI equivalent. The CLI `--execute` path is unchanged.
 
 ### Fixed
 
 - **`include_tests` actually includes tests.** The `production_first` and `include_tests` branches applied identical sort keys, so the filter was a dead branch: production occurrences filled the 100-result cap and test occurrences were unreachable. `include_tests` now reserves a minority share of the cap for test rows, handing unused reserve back to production so the cap stays full. `production_first` ordering and `tests_only` are unchanged.
 
-- **Stale results now say they are stale.** Occurrences from a file edited since indexing were returned with their old line numbers and text and nothing to distinguish them from current ones. Each result now carries `is_stale`, computed by comparing the backing file against the per-file SHA-256 the index already stores, and responses report `stale_file_count`. A deleted backing file is reported stale rather than raising. Lookup reports freshness without re-indexing, and the check is bounded by the returned rows rather than repository size.
+- **Stale results now say they are stale.** Occurrences from a file edited since indexing were returned with their old line numbers and text and nothing to distinguish them from current ones. Each result now carries `is_stale`, computed by comparing the backing file against the per-file SHA-256 the index already stores, and responses report `stale_file_count`. A deleted backing file is reported stale rather than raising. Lookup reports freshness without re-indexing, does not write verdicts back into the cached index, confines the freshness read to the repository root, and is bounded by the returned rows rather than repository size.
 
 ### Added
 
 - **Truncation is visible.** Reference responses now report `production_matches`, `test_matches`, `returned_production`, and `returned_tests`, so callers can tell results were cut off instead of inferring it.
+
+New response fields, all additive: `is_stale` on each reference result; `production_matches`, `test_matches`, `returned_production`, `returned_tests`, and `stale_file_count` on the reference response; `refused_reason` on `PruneOrphansResult` and `PruneSymbolsResult`.
 
 ## 2026-07-29 (v3.2.1)
 

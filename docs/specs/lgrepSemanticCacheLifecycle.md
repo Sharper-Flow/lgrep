@@ -261,31 +261,23 @@ When `dry_run=False`, `prune_orphans` MUST enforce three guards before any `shut
 
 ---
 
-### MCP prune_orphans coerces dry_run on non-stdio transports
+### MCP prune_orphans requires an explicit capability grant
 
 **ID:** `rq-prune-mcp-transport-safety` | **Priority:** **[MUST]**
 
-The MCP `prune_orphans` tool MUST coerce `dry_run=True` whenever the server transport is not `stdio` (or an equivalent local transport). The transport kind MUST be carried on the application context (set from `LGREP_TRANSPORT` at server startup). Unknown or absent transport MUST be treated as non-local. The tool's description MUST tell callers to use the CLI for destructive prunes on shared deployments.
+The MCP `prune_orphans` tool MUST default to preview-only and MUST perform deletion in exactly one condition: an explicit out-of-band capability grant (`LGREP_ALLOW_DESTRUCTIVE_MCP`) is present in the server environment. Transport kind MUST be excluded from the authority decision. A proxy can front a local stdio pipe with a shared network surface, so a transport reported as `stdio` is uninformative about caller identity. When the grant is absent, the tool MUST return a preview whose `refused_reason` names both the grant and the CLI equivalent. The CLI path is unaffected, because that caller already holds local shell authority.
 
-**Tags:** `prune-orphans`, `mcp`, `security`, `transport`
+Supersedes the earlier transport-inference rule, which granted destructive rights by default in precisely the deployment that most needed protection.
+
+**Tags:** `prune-orphans`, `mcp`, `security`, `least-privilege`
 
 #### Scenarios
 
-**stdio transport allows caller-chosen dry_run** (`rq-prune-mcp-transport-safety.1`)
+**Absent grant yields a preview even on stdio** (`rq-prune-mcp-transport-safety.1`)
 
 **Given:**
 - An LgrepContext with transport=stdio
-- An MCP caller requesting dry_run=False
-
-**When:** the prune_orphans tool runs
-
-**Then:**
-- The effective dry_run matches the caller's request
-
-**HTTP transport forces dry_run=True** (`rq-prune-mcp-transport-safety.2`)
-
-**Given:**
-- An LgrepContext with transport=streamable-http
+- `LGREP_ALLOW_DESTRUCTIVE_MCP` is not set
 - An MCP caller requesting dry_run=False
 
 **When:** the prune_orphans tool runs
@@ -293,7 +285,19 @@ The MCP `prune_orphans` tool MUST coerce `dry_run=True` whenever the server tran
 **Then:**
 - The response's dry_run field is True
 - deleted_dirs is 0
-- The on-disk orphan still exists
+- refused_reason names the grant and the CLI equivalent
+
+**Present grant honours the caller's request** (`rq-prune-mcp-transport-safety.2`)
+
+**Given:**
+- `LGREP_ALLOW_DESTRUCTIVE_MCP` is set
+- An MCP caller requesting dry_run=False
+
+**When:** the prune_orphans tool runs
+
+**Then:**
+- The effective dry_run matches the caller's request
+- refused_reason is absent
 
 ---
 

@@ -396,8 +396,15 @@ class TestPruneSymbolsTool:
         assert result["dry_run"] is False
 
     @pytest.mark.asyncio
-    async def test_mcp_prune_symbols_non_stdio_coerces_dry_run_true(self, tmp_path, monkeypatch):
-        """HTTP transports are shared; destructive prune must be coerced to dry-run."""
+    async def test_mcp_prune_symbols_without_grant_coerces_dry_run_true(
+        self, tmp_path, monkeypatch
+    ):
+        """Coercion is grant-based, not transport-based.
+
+        The streamable-http transport here is incidental: the same request would
+        also be refused on stdio, and would be honoured on either transport once
+        the grant is set.
+        """
         monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path))
         monkeypatch.delenv("LGREP_ALLOW_DESTRUCTIVE_MCP", raising=False)
         fn = self._get_tool_fn("prune_symbols")

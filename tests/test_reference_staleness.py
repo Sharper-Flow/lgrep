@@ -98,3 +98,57 @@ def test_lookup_does_not_reindex_as_a_side_effect(indexed_repo):
     assert _run(indexed_repo)["stale_file_count"] == 1, (
         "lookup must not silently refresh the index"
     )
+
+
+def test_lookup_does_not_write_verdicts_into_the_index(indexed_repo):
+    """A read-only lookup must not leak its verdict into cached index state.
+
+    The rows handed back by the store are the same objects the in-memory cache
+    holds, so annotating them in place would persist ``is_stale`` to disk on the
+    next save.
+    """
+    from lgrep.storage.index_store import IndexStore, normalize_repo_key
+
+    _run(indexed_repo)
+
+    store = IndexStore(storage_dir=str(indexed_repo / ".idx"))
+    index = store.load(normalize_repo_key(str(indexed_repo)))
+    cached_rows = [row for rows in index.occurrences.values() for row in rows]
+
+    assert cached_rows, "fixture should have indexed occurrences"
+    assert all("is_stale" not in row for row in cached_rows), (
+        "search_references leaked is_stale into the cached index"
+    )
+
+
+def test_backing_path_escaping_the_repo_is_stale_not_read(indexed_repo, tmp_path):
+    """A poisoned index entry must not read outside the repository root."""
+    outside = tmp_path / "outside.py"
+    outside.write_text("secret = 1\n")
+
+    from lgrep.storage.index_store import IndexStore, normalize_repo_key
+
+    store = IndexStore(storage_dir=str(indexed_repo / ".idx"))
+    key = normalize_repo_key(str(indexed_repo))
+    index = store.load(key)
+    index.occurrences["greet"].append(
+        {
+            "id": "poisoned:occurrence:greet:1",
+            "name": "greet",
+            "file_path": f"../{outside.name}",
+            "line_number": 1,
+            "line_text": "secret = 1",
+            "kind": "call",
+            "enclosing_symbol_id": None,
+            "is_test_file": False,
+        }
+    )
+    store.save(index)
+
+    result = _run(indexed_repo)
+
+    poisoned = [r for r in result["results"] if r["id"] == "poisoned:occurrence:greet:1"]
+    assert poisoned, "the poisoned row should still be returned"
+    assert poisoned[0]["is_stale"] is True, (
+        "a path escaping the repository root must be reported stale, not read"
+    )

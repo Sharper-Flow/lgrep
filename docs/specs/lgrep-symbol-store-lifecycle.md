@@ -207,37 +207,41 @@ Entries whose `repo_path` field starts with the literal prefix `github:` MUST be
 
 ---
 
-### MCP transport safety: non-stdio coerces dry_run=True
+### MCP destructive safety: deletion requires an explicit capability grant
 
 **ID:** `rq-7cT4wN1qJs` | **Priority:** **[MUST]**
 
-The MCP `prune_symbols` tool MUST coerce `dry_run=True` when the MCP transport is not stdio (i.e., HTTP, streamable-http, or unknown). Transport kind is sourced from the application lifespan context. Unknown transport MUST be treated as non-local (defensive default). The tool's user-facing description MUST direct callers to use the CLI (`lgrep prune-symbols --execute`) for destructive prunes on shared deployments, mirroring the `prune_orphans` MCP tool description convention.
+The MCP `prune_symbols` tool MUST default to preview-only and MUST delete in exactly one condition: the explicit out-of-band capability grant `LGREP_ALLOW_DESTRUCTIVE_MCP` is present in the server environment. Transport kind MUST NOT participate in the authority decision, because a proxy can front a local stdio pipe with a shared network surface and the subprocess still reports `stdio`. When the grant is absent the tool MUST return a preview whose `refused_reason` names both the grant and the CLI equivalent (`lgrep prune-symbols --execute`), mirroring the `prune_orphans` convention. The CLI path is unaffected.
+
+Supersedes the earlier transport-inference rule, which granted destructive rights by default in precisely the deployment that most needed protection.
 
 #### Scenarios
 
-**stdio transport allows caller-chosen dry_run** (`rq-7cT4wN1qJs.1`)
+**Absent grant yields a preview even on stdio** (`rq-7cT4wN1qJs.1`)
 
 **Given:**
 - an MCP request invokes `prune_symbols` with `dry_run: false`
 - the transport is stdio
-
-**When:** the MCP handler processes the request
-
-**Then:**
-- the request proceeds with `dry_run: false`
-- destructive deletion is allowed
-
-**HTTP transport coerces dry_run=True** (`rq-7cT4wN1qJs.2`)
-
-**Given:**
-- an MCP request invokes `prune_symbols` with `dry_run: false`
-- the transport is HTTP or streamable-http
+- `LGREP_ALLOW_DESTRUCTIVE_MCP` is not set
 
 **When:** the MCP handler processes the request
 
 **Then:**
 - the handler coerces `dry_run: true`
 - no files are deleted
-- the response indicates the coercion (e.g., `dry_run: true` in the report)
+- `refused_reason` names the grant and the CLI equivalent
+
+**Present grant honours the caller's request** (`rq-7cT4wN1qJs.2`)
+
+**Given:**
+- an MCP request invokes `prune_symbols` with `dry_run: false`
+- `LGREP_ALLOW_DESTRUCTIVE_MCP` is set
+
+**When:** the MCP handler processes the request
+
+**Then:**
+- the request proceeds with `dry_run: false`
+- destructive deletion is allowed
+- `refused_reason` is absent
 
 ---
