@@ -166,7 +166,9 @@ class IndexSymbolsFolderResult(TypedDict):
 
     files_indexed: int
     files_skipped: int
+    files_deleted: int
     symbols_indexed: int
+    occurrences_indexed: int
     repo_path: str
     _meta: _Meta
 

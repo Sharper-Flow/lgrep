@@ -2,6 +2,8 @@
 
 ### Added
 
+- **`lgrep_search_references` MCP tool** — searches an indexed Python repository for bounded candidate symbol usages. Supports `production_first`, `include_tests`, and `tests_only` filters plus optional occurrence-kind filtering; results are advisory candidates, not compiler-accurate or exhaustive.
+
 - **`lgrep prune-symbols` CLI subcommand** — finds and optionally deletes stale symbol-store index files (`~/.cache/lgrep/symbols/index_*.json`) whose `repo_path` references deleted worktree paths. Defaults to dry-run; `--execute` performs deletion; `--execute` and `--dry-run` are mutually exclusive (exit 2). Mirrors `lgrep prune-orphans` flag shape.
 
 - **`prune_symbols` MCP tool** — same capability exposed via MCP for agent-driven cleanup. Coerces `dry_run=True` on non-stdio transports (HTTP/streamable-http) for safety on shared deployments; stdio honors caller's choice. Mirrors `prune_orphans` transport-safety pattern.

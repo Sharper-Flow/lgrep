@@ -299,6 +299,7 @@ Typical OpenCode flow:
 1. Ask an intent question with `lgrep_search_semantic`
 2. Inspect structure with `lgrep_get_file_outline` or `lgrep_get_repo_outline`
 3. Retrieve exact symbols with `lgrep_search_symbols` and `lgrep_get_symbol`
+4. Find bounded candidate usages with `lgrep_search_references`
 
 Examples:
 
@@ -307,6 +308,7 @@ lgrep_search_semantic(query="authentication flow", path="/path/to/project")
 lgrep_get_file_outline(path="/path/to/project/src/auth.py")
 lgrep_index_symbols_folder(path="/path/to/project")
 lgrep_search_symbols(query="authenticate", path="/path/to/project")
+lgrep_search_references(query="authenticate", path="/path/to/project")
 lgrep_get_symbol(symbol_id="src/auth.py:function:authenticate", path="/path/to/project")
 ```
 
@@ -324,6 +326,7 @@ High-value prompts:
 |---|---|---|
 | Intent or concept discovery | `lgrep_search_semantic` | Search by meaning |
 | Find a function or class by name | `lgrep_search_symbols` | Exact symbol lookup |
+| Find candidate usages of a symbol | `lgrep_search_references` | Bounded occurrence lookup; not exhaustive |
 | Inspect a single file's structure | `lgrep_get_file_outline` | Fast AST outline |
 | Inspect repo structure | `lgrep_get_repo_outline` | Symbol-level overview |
 | Find exact text or identifiers | `lgrep_search_text` or `grep` | Literal match |
@@ -384,6 +387,7 @@ Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If yo
 | `lgrep_get_file_outline(path)` | Show symbol outline for one file |
 | `lgrep_get_repo_outline(path, max_files=500)` | Show symbol outline for a repo |
 | `lgrep_search_symbols(query, path, limit=20, kind?)` | Search symbols by name |
+| `lgrep_search_references(query, path, limit=20, usage_filter="production_first", kind?)` | Find bounded candidate symbol usages |
 | `lgrep_search_text(query, path, max_results=50)` | Search literal text |
 | `lgrep_get_symbol(symbol_id, path)` | Retrieve one symbol |
 | `lgrep_get_symbols(symbol_ids, path)` | Retrieve multiple symbols |

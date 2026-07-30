@@ -103,6 +103,8 @@ class TestSymbolToolResponses:
         data = result
         assert "_meta" in data
         assert "duration_ms" in data["_meta"]
+        assert data["files_deleted"] == 0
+        assert data["occurrences_indexed"] == 0
 
     @pytest.mark.asyncio
     async def test_list_repos_returns_json_with_meta(self, tmp_path):

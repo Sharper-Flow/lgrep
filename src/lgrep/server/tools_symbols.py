@@ -85,7 +85,9 @@ async def index_symbols_folder(
     return IndexSymbolsFolderResult(
         files_indexed=result["files_indexed"],
         files_skipped=result["files_skipped"],
+        files_deleted=result["files_deleted"],
         symbols_indexed=result["symbols_indexed"],
+        occurrences_indexed=result["occurrences_indexed"],
         repo_path=result["repo_path"],
         _meta={"duration_ms": 0.0, "tool": "index_symbols_folder"},
     )
