@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -532,16 +533,21 @@ async def search_references(
     resolved_path = str(Path(path).resolve())
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
+        # Bind the tool arguments before crossing the supervisor boundary.
+        # run_blocking() owns the names kind/caller/project/fn/cancel_event, so a
+        # bare kind= kwarg would bind to the supervisor's own job-kind parameter.
         result = await app_ctx.runtime.run_blocking(
             "search_references",
             "search_references",
             resolved_path,
-            _search_references,
-            query,
-            path,
-            limit=limit,
-            usage_filter=usage_filter,
-            kind=kind,
+            partial(
+                _search_references,
+                query,
+                path,
+                limit=limit,
+                usage_filter=usage_filter,
+                kind=kind,
+            ),
         )
     else:
         result = await asyncio.to_thread(
