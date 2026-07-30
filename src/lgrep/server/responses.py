@@ -294,7 +294,9 @@ class GetSymbolsResult(TypedDict):
 class InvalidateCacheResult(TypedDict):
     """Response for invalidate_cache."""
 
-    status: str  # "deleted" | "not_found"
+    status: str  # "deleted" | "not_found" | "refused"
+    # Present when a destructive request was refused without the grant.
+    refused_reason: NotRequired[str]
     _meta: _Meta
 
 
@@ -385,6 +387,8 @@ class WorktreeInvalidationResult(TypedDict):
     paths_cleaned: int
     bytes_reclaimed: int
     entries: list[WorktreeInvalidationEntry]
+    # Present when a destructive request was refused without the grant.
+    refused_reason: NotRequired[str]
     _meta: _Meta
 
 

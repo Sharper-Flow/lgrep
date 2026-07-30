@@ -28,6 +28,7 @@ from lgrep.server.responses import (
     ToolError,
     error_response,
 )
+from lgrep.server.tools_maintenance import _destructive_grant_present
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
@@ -582,6 +583,8 @@ async def search_references(
     description=(
         "Delete a repository symbol index cache entry to force a full symbol re-index. "
         "Use when index corruption or schema drift is suspected. "
+        "Deletion over MCP requires the server to set LGREP_ALLOW_DESTRUCTIVE_MCP=1; "
+        "otherwise the call refuses deletion and says so. There is no CLI equivalent. "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(
@@ -602,12 +605,21 @@ async def invalidate_cache(
 ) -> InvalidateCacheResult:
     """Remove the symbol index for a repository, forcing a full re-index on next use.
 
-    Args:
-        path: Absolute path to the repository root
-
-    Returns:
-        Status ("deleted" or "not_found") and meta envelope.
+    Destructive runs require the ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant on the
+    server. Without it the handler refuses the deletion and reports why.
     """
+    if not _destructive_grant_present():
+        return InvalidateCacheResult(
+            status="refused",
+            refused_reason=(
+                "Destructive run refused: LGREP_ALLOW_DESTRUCTIVE_MCP is not set. "
+                "Symbol index deletion is not available over MCP. "
+                "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 on the server to allow destructive "
+                "MCP calls. There is no CLI equivalent."
+            ),
+            _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
+        )
+
     result = await asyncio.to_thread(_invalidate_cache, path)
     return InvalidateCacheResult(
         status=result["status"],

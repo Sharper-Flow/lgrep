@@ -294,7 +294,10 @@ class TestDiskCacheAutoLoad:
         assert ("prune_orphans", "tools_maintenance", None) in calls
 
     @pytest.mark.asyncio
-    async def test_invalidate_worktree_cache_routes_blocking_work_through_runtime(self, tmp_path):
+    async def test_invalidate_worktree_cache_routes_blocking_work_through_runtime(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("LGREP_ALLOW_DESTRUCTIVE_MCP", "1")
         mock_ctx = MagicMock(spec=Context)
         app_ctx = LgrepContext(transport="stdio")
         mock_ctx.request_context.lifespan_context = app_ctx

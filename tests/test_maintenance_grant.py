@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 from lgrep.server import mcp
+from lgrep.storage import get_project_db_path, write_project_meta
+from lgrep.tools.index_folder import index_folder
 
 GRANT_ENV = "LGREP_ALLOW_DESTRUCTIVE_MCP"
 DESTRUCTIVE_TOOLS = ("prune_orphans", "prune_symbols")
@@ -101,3 +103,110 @@ def test_transport_no_longer_decides_authority():
         "transport-based trust inference must be removed; a proxy can front a "
         "local stdio pipe with a shared network surface"
     )
+
+
+class TestRemainingDestructiveGrants:
+    """Grant gating for the remaining destructive MCP handlers.
+
+    ``invalidate_cache`` and ``invalidate_worktree_cache`` delete persistent
+    storage, so they refuse destructive runs unless the server carries the
+    explicit ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant.
+    """
+
+    def _tool_fn(self, name: str):
+        for tool in mcp._tool_manager.list_tools():
+            if tool.name == name:
+                return tool.fn
+        raise KeyError(f"Tool not found: {name}")
+
+    @pytest.mark.asyncio
+    async def test_invalidate_cache_refused_without_grant(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(GRANT_ENV, raising=False)
+        monkeypatch.setattr("lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        result = await self._tool_fn("invalidate_cache")(path=str(repo))
+
+        assert result["status"] == "refused", (
+            "invalidate_cache must refuse destructive runs without the grant"
+        )
+        reason = result.get("refused_reason")
+        assert reason, "refusal must report why"
+        assert GRANT_ENV in reason, "refusal must name the required grant"
+        assert "no cli equivalent" in reason.lower(), (
+            "refusal must truthfully say no CLI equivalent"
+        )
+        # No live symbol store was touched
+        assert not (tmp_path / "symbols").exists()
+
+    @pytest.mark.asyncio
+    async def test_invalidate_cache_honoured_with_grant(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(GRANT_ENV, "1")
+        monkeypatch.setattr("lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "file.py").write_text("def f(): pass\n")
+        index_folder(str(repo), storage_dir=tmp_path / "symbols")
+
+        result = await self._tool_fn("invalidate_cache")(path=str(repo))
+
+        assert result["status"] == "deleted", (
+            "invalidate_cache must honour the destructive request once the grant is set"
+        )
+        assert result.get("refused_reason") is None
+        from lgrep.tools.list_repos import list_repos
+
+        assert str(repo) not in list_repos(storage_dir=tmp_path / "symbols")["repos"]
+
+    @pytest.mark.asyncio
+    async def test_invalidate_worktree_cache_refused_without_grant(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(GRANT_ENV, raising=False)
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path)
+        (db_path / "chunks.lance").mkdir(parents=True)
+
+        result = await self._tool_fn("invalidate_worktree_cache")(paths=[str(project)])
+
+        assert result["paths_cleaned"] == 0, (
+            "invalidate_worktree_cache must not clean anything without the grant"
+        )
+        assert result["bytes_reclaimed"] == 0
+        assert result["entries"] == []
+        reason = result.get("refused_reason")
+        assert reason, "refusal must report why"
+        assert GRANT_ENV in reason, "refusal must name the required grant"
+        assert "no cli equivalent" in reason.lower(), (
+            "refusal must truthfully say no CLI equivalent"
+        )
+        # No live cache was touched
+        assert db_path.is_dir()
+
+    @pytest.mark.asyncio
+    async def test_invalidate_worktree_cache_honoured_with_grant(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(GRANT_ENV, "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        project = tmp_path / "project"
+        project.mkdir()
+        db_path = get_project_db_path(project)
+        write_project_meta(project, db_path=db_path)
+        (db_path / "chunks.lance").mkdir(parents=True)
+
+        # Remove the canonical project so the cache becomes an orphan fixture.
+        project.rmdir()
+        assert not project.exists()
+
+        result = await self._tool_fn("invalidate_worktree_cache")(paths=[str(project)])
+
+        assert result["paths_cleaned"] == 1, (
+            "invalidate_worktree_cache must honour the destructive request once the grant is set"
+        )
+        assert result.get("refused_reason") is None
+        entry = result["entries"][0]
+        assert entry["error"] is None
+        assert entry["cache_deleted"] is True
+        assert entry["bytes_reclaimed"] > 0
+        assert not db_path.exists()
