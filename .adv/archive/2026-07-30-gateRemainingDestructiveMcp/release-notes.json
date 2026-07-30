@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "change_id": "gateRemainingDestructiveMcp",
+  "title": "Gate remaining destructive MCP tools",
+  "release_notes": {
+    "audience": "both",
+    "category": "security",
+    "headline_internal": "Every destructive MCP tool now requires the explicit LGREP_ALLOW_DESTRUCTIVE_MCP grant",
+    "headline_external": "Destructive maintenance calls through lgrep MCP now require an explicit server-side opt-in",
+    "highlights": [
+      "All four destructive MCP tools now require LGREP_ALLOW_DESTRUCTIVE_MCP=1 before deleting: prune_orphans, prune_symbols, invalidate_cache, and invalidate_worktree_cache.",
+      "Without the grant, prune tools return a preview; invalidation tools safely do nothing and return a refused_reason.",
+      "The unsafe transport-based authority inference remains removed. Diagnostics still report startup transport, but it no longer uses LGREP_TRANSPORT as a runtime environment side channel.",
+      "Worktree cache invalidation documentation now accurately states that it can delete a canonical cache directory when the project is gone and no aliases remain."
+    ],
+    "area": "lgrep MCP server",
+    "user_action_required": true,
+    "breaking": {
+      "description": "MCP callers that previously used invalidate_cache or invalidate_worktree_cache to delete data without LGREP_ALLOW_DESTRUCTIVE_MCP now receive a no-op refusal.",
+      "migration": "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 in the server environment only when destructive MCP maintenance is intended. Invalidation tools have no CLI equivalent; prune CLI --execute commands remain unchanged."
+    }
+  }
+}

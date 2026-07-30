@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-30T20:34:49.090Z",
+  "capabilities": [],
+  "change_hash": "3c6b4a0dc6a1d20cfb6b950161f0b42c99b73754c81f2c32b3fafd1d06ac035e",
+  "change_id": "gateRemainingDestructiveMcp",
+  "completed_tasks": 3,
+  "created_at": "2026-07-30T05:18:27.084Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-30T20:32:01.189Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "e349e3a6c95ca3ecdebb569a205ad4ec970f91011cf2d5b70343524f15e98008",
+  "task_count": 3,
+  "title": "Gate remaining destructive MCP tools",
+  "version": "1"
+}
