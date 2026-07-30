@@ -1,0 +1,1150 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/change.schema.json",
+  "id": "pinMcpV1",
+  "title": "Pin mcp to v1",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-30T02:21:48.325Z",
+  "tasks": [
+    {
+      "id": "tk-308bad231183",
+      "title": "Bound the MCP SDK and add registration guards",
+      "type": "code",
+      "section": "Fix",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-30T02:31:59.287Z",
+      "started_at": "2026-07-30T02:32:40.277Z",
+      "completed_at": "2026-07-30T02:37:30.460Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED tr_ms6wh8g0_0ac58282 proved the unbounded requirement admits mcp 2.x/3.x. GREEN tr_ms6wkzl1_f3671917: full suite 698 passed and ruff clean after pinning mcp>=1.28,<2. Unblocking the suite exposed a production defect in search_references, where the kind kwarg bound to RuntimeSupervisor.run_blocking's own kind parameter and raised TypeError on every MCP invocation; fixed by binding tool arguments with functools.partial, matching the existing isolation pattern at lifecycle.py:496.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "pyproject.toml",
+        "src/lgrep/server/tools_symbols.py",
+        "tests/test_deps.py"
+      ],
+      "checkpointSha": "930f50d2deee85b1f67dd841c5e623b73606105a",
+      "completedAt": "2026-07-30T02:37:30.460Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "OOS1",
+          "OOS2",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "delegate_allowed"
+      },
+      "touched_files": [
+        "pyproject.toml",
+        "src/lgrep/server/tools_symbols.py",
+        "tests/test_deps.py"
+      ],
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "pinMcpV1",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/pinMcpV1",
+          "task_id": "tk-308bad231183",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-308bad231183"
+          },
+          "agent": "adv-reviewer",
+          "phase": "review",
+          "verdict": "READY",
+          "blocking_findings": [],
+          "nonblocking_findings": [],
+          "changes_made": [
+            {
+              "file": "tests/test_deps.py",
+              "summary": "Strengthened the MCP bound regression guard to require an explicit strict upper bound at or below 2, preventing sampled-version blind spots while retaining the supported-v1 assertion.",
+              "verification": "`uv run --extra dev python -m pytest -q` passed (698 tests); `uv run --extra dev ruff check src tests` passed."
+            }
+          ],
+          "wisdom_candidates": [
+            {
+              "type": "pattern",
+              "content": "Dependency compatibility guards should assert the structural requirement (for this case, a strict upper bound below the incompatible major), then use representative versions as supplementary evidence; sample-only checks can miss unusual widened specifiers."
+            }
+          ],
+          "verification": {
+            "tests_run": [
+              "uv lock --check",
+              "uv tree --package mcp",
+              "uv run --extra dev python -m pytest -q",
+              "uv run --extra dev ruff check src tests",
+              "uv build --wheel --out-dir /tmp/opencode/pinMcpV1-review.*; fresh venv install; import registration assertion"
+            ],
+            "results": "pass",
+            "evidence": "Lock is current and resolves mcp v1.29.0. Full suite: 698 passed in 20.32s (16 pre-existing deprecation warnings). Ruff: all checks passed. Freshly built wheel installed into a new temporary venv resolved mcp=1.29.0 and registered exactly 21 expected tools, including search_references."
+          },
+          "scope_drift": null,
+          "risks": [
+            "The passing suite retains 16 unrelated dependency deprecation warnings; no MCP v2 migration, Vision configuration, or service lifecycle change was made."
+          ],
+          "required_main_agent_actions": [
+            "Create the required task checkpoint for the uncommitted reviewer remediation in tests/test_deps.py.",
+            "Leave unrelated deprecation warnings and all Vision configuration/service state unchanged."
+          ],
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv lock --check"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv tree --package mcp"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run --extra dev python -m pytest -q"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run --extra dev ruff check src tests"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv build --wheel --out-dir /tmp/opencode/pinMcpV1-review.*; fresh venv install; import registration assertion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tk-402fd776b263",
+      "title": "Prove a freshly built installation serves the full tool surface",
+      "type": "verification",
+      "section": "Verification",
+      "status": "done",
+      "priority": 1,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-308bad231183"
+        }
+      ],
+      "created_at": "2026-07-30T02:32:07.621Z",
+      "started_at": "2026-07-30T02:38:25.710Z",
+      "completed_at": "2026-07-30T02:38:52.765Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "tr_ms6wms70_ded7b806: an ephemeral no-cache build from this change source resolved mcp 1.29.0, below the 2.0 bound, initialized over stdio, and advertised all 21 tools including search_references. The shared Vision service and the shared tool installation were untouched.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "checkpointSha": "930f50d2deee85b1f67dd841c5e623b73606105a",
+      "completedAt": "2026-07-30T02:38:52.765Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC5"
+        ],
+        "respects": [
+          "C2",
+          "C3",
+          "OOS4"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "touched_files": []
+    },
+    {
+      "id": "tk-9c4dd1615087",
+      "title": "Record the stability release",
+      "type": "docs",
+      "section": "Release",
+      "status": "done",
+      "priority": 2,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-402fd776b263"
+        }
+      ],
+      "created_at": "2026-07-30T02:32:14.849Z",
+      "started_at": "2026-07-30T02:39:01.188Z",
+      "completed_at": "2026-07-30T02:39:42.990Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "tr_ms6wnwlr_bba5e197: version metadata and conflict-marker guards pass and ruff is clean. Version set to 3.2.1 in both pyproject.toml and src/lgrep/__init__.py, changelog records both fixes and warns that v3.2.0 is unusable wherever mcp 2.x resolves. Release tag is created at archive time on the released commit.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "src/lgrep/__init__.py"
+      ],
+      "checkpointSha": "b2a2084a19b3f5c446e03974e468086607440c0d",
+      "completedAt": "2026-07-30T02:39:42.990Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC6"
+        ],
+        "respects": [
+          "C1",
+          "OOS1",
+          "OOS2"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "artifact_reference",
+        "proof_target": "Artifact reference or operational output",
+        "rationale": "The deliverable is release metadata; proof is the persisted version, changelog entry, and release tag rather than new runtime behavior.",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "artifact_reference",
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "touched_files": [
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "src/lgrep/__init__.py"
+      ]
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "pinMcpV1",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/pinMcpV1",
+      "task_id": "tk-308bad231183",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-308bad231183"
+      },
+      "agent": "adv-reviewer",
+      "phase": "review",
+      "verdict": "READY",
+      "blocking_findings": [],
+      "nonblocking_findings": [],
+      "changes_made": [
+        {
+          "file": "tests/test_deps.py",
+          "summary": "Strengthened the MCP bound regression guard to require an explicit strict upper bound at or below 2, preventing sampled-version blind spots while retaining the supported-v1 assertion.",
+          "verification": "`uv run --extra dev python -m pytest -q` passed (698 tests); `uv run --extra dev ruff check src tests` passed."
+        }
+      ],
+      "wisdom_candidates": [
+        {
+          "type": "pattern",
+          "content": "Dependency compatibility guards should assert the structural requirement (for this case, a strict upper bound below the incompatible major), then use representative versions as supplementary evidence; sample-only checks can miss unusual widened specifiers."
+        }
+      ],
+      "verification": {
+        "tests_run": [
+          "uv lock --check",
+          "uv tree --package mcp",
+          "uv run --extra dev python -m pytest -q",
+          "uv run --extra dev ruff check src tests",
+          "uv build --wheel --out-dir /tmp/opencode/pinMcpV1-review.*; fresh venv install; import registration assertion"
+        ],
+        "results": "pass",
+        "evidence": "Lock is current and resolves mcp v1.29.0. Full suite: 698 passed in 20.32s (16 pre-existing deprecation warnings). Ruff: all checks passed. Freshly built wheel installed into a new temporary venv resolved mcp=1.29.0 and registered exactly 21 expected tools, including search_references."
+      },
+      "scope_drift": null,
+      "risks": [
+        "The passing suite retains 16 unrelated dependency deprecation warnings; no MCP v2 migration, Vision configuration, or service lifecycle change was made."
+      ],
+      "required_main_agent_actions": [
+        "Create the required task checkpoint for the uncommitted reviewer remediation in tests/test_deps.py.",
+        "Leave unrelated deprecation warnings and all Vision configuration/service state unchanged."
+      ],
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv lock --check"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv tree --package mcp"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run --extra dev python -m pytest -q"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv run --extra dev ruff check src tests"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: uv build --wheel --out-dir /tmp/opencode/pinMcpV1-review.*; fresh venv install; import registration assertion"
+        }
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-308bad231183": [
+      {
+        "runId": "tr_ms6wh8g0_0ac58282",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_deps.py -q",
+        "durationMs": 4250.809180000797,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T02:34:24.397Z"
+      },
+      {
+        "runId": "tr_ms6whnab_d31c54ec",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_deps.py tests/test_server_registration.py -q",
+        "durationMs": 7252.038853999227,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T02:34:43.632Z"
+      },
+      {
+        "runId": "tr_ms6wicbn_099aa8bb",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest -q -p no:randomly 2>&1 | tail -40",
+        "durationMs": 25467.34214199893,
+        "recordedAt": "2026-07-30T02:35:16.078Z"
+      },
+      {
+        "runId": "tr_ms6wkzl1_f3671917",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -6 && uv run --extra dev ruff check src tests",
+        "durationMs": 23416.21546200104,
+        "recordedAt": "2026-07-30T02:37:19.538Z"
+      },
+      {
+        "runId": "tr_ms6wvhpp_69ac3e60",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev ruff check src tests",
+        "durationMs": 21534.67207399942,
+        "recordedAt": "2026-07-30T02:45:29.591Z"
+      }
+    ],
+    "tk-402fd776b263": [
+      {
+        "runId": "tr_ms6wms70_ded7b806",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 540 python3 /tmp/opencode/lgrep_stdio_probe.py uvx --no-cache --from /home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/pinMcpV1 lgrep 2>&1 | tail -25",
+        "durationMs": 10826.126818999648,
+        "recordedAt": "2026-07-30T02:38:43.272Z"
+      }
+    ],
+    "tk-9c4dd1615087": [
+      {
+        "runId": "tr_ms6wnwlr_bba5e197",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_deps.py tests/test_conflict_markers.py -q && uv run --extra dev ruff check src tests",
+        "durationMs": 2034.495299000293,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T02:39:35.643Z"
+      }
+    ]
+  },
+  "deltas": {
+    "lgrep-daemon-operational-safety": [],
+    "lgrep-dependency-integrity": [
+      {
+        "id": "dl-mcpSdkBound01",
+        "operation": "add",
+        "requirement": {
+          "id": "rq-mcpSdkBound01",
+          "title": "MCP SDK dependency is bounded and tool registration is guarded",
+          "body": "The package MUST declare an upper bound on its MCP SDK dependency that excludes any major release whose server API the code has not been migrated to. An automated, offline, deterministic guard MUST fail when that declared bound is removed or widened to admit the unmigrated major release. A second automated guard MUST fail when the server cannot register its expected tool surface, so an import-time or registration-time break becomes a test failure instead of a silent loss of every tool at runtime. Version strings alone MUST NOT be the sole authority; the registration guard MUST assert the advertised tool names.",
+          "priority": "must",
+          "tags": [
+            "dependencies",
+            "release-hygiene",
+            "mcp",
+            "structural-correctness",
+            "testing"
+          ],
+          "scenarios": [
+            {
+              "id": "rq-mcpSdkBound01.1",
+              "title": "Widened dependency bound fails verification",
+              "given": [
+                "The package declares an MCP SDK requirement",
+                "The code targets the currently supported major release"
+              ],
+              "when": "The declared requirement is changed to admit an unmigrated major release",
+              "then": [
+                "The dependency-bound guard exits non-zero",
+                "The failure output names the offending requirement"
+              ]
+            },
+            {
+              "id": "rq-mcpSdkBound01.2",
+              "title": "Missing tool registration fails verification",
+              "given": [
+                "A resolved environment where the server module cannot register its tools"
+              ],
+              "when": "The registration guard runs",
+              "then": [
+                "The guard exits non-zero",
+                "The failure identifies the missing expected tool names rather than only a version mismatch"
+              ]
+            },
+            {
+              "id": "rq-mcpSdkBound01.3",
+              "title": "Supported environment passes verification",
+              "given": [
+                "The declared bound excludes the unmigrated major release",
+                "The resolved MCP SDK satisfies that bound"
+              ],
+              "when": "Both guards run",
+              "then": [
+                "Both guards exit zero",
+                "The advertised tool surface includes the expected tool names"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:30:15.792Z",
+      "completed_by": "agent",
+      "approval_evidence": "User confirmed the stabilization scope with root-cause evidence: pin mcp to the v1 line, add a registration regression guard, ship a patch release, and redeploy to Vision before the v2 migration.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "c1257b562f3cc8ac83b878f597b68abbc5d94ca4876ca09f8a281d034191e31b",
+        "non_whitespace_chars": 1935,
+        "checked_at": "2026-07-30T02:21:48.423Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:31:41.866Z",
+      "completed_by": "agent",
+      "approval_evidence": "Root cause proven by protocol-level probes. Spec-law impact is Add: new capability lgrep-dependency-integrity with rq-mcpSdkBound01 staged as a typed delta. Typed 14-item contract minted.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "non_whitespace_chars": 1480,
+        "checked_at": "2026-07-30T02:21:48.424Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:31:47.106Z",
+      "completed_by": "agent",
+      "approval_evidence": "Independent research confirms the upstream-recommended bound form and that Vision needs no change to host a future v2 server, so migrating later from a stable baseline carries no Vision-side risk. Design chooses two offline structural guards over version-string assertions.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "2ca10225bfd1b9bd0abe1126d247eeff631d19e5ff676efb96e39c6eca11b469",
+        "non_whitespace_chars": 1622,
+        "checked_at": "2026-07-30T02:21:48.425Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:32:28.133Z",
+      "completed_by": "agent",
+      "approval_evidence": "User confirmed the stabilization scope and instructed to get back to stable before the v2 migration. Strict validation clean; three sequential tasks cover all six acceptance criteria."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:39:55.598Z",
+      "completed_by": "agent",
+      "approval_evidence": "All three tasks checkpointed. Full suite 698 passed with ruff clean, and an ephemeral clean build resolved mcp 1.29.0 and advertised all 21 tools including search_references."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-30T02:46:47.847Z",
+      "completed_by": "agent",
+      "approval_evidence": "Independent reviewer returned READY. Its one added assertion was rejected with evidence because it tested bound spelling rather than behavior and would have failed valid forms; the property check was broadened instead and re-verified. Review matrix has 14 rows and zero failures. Final state: 698 tests passed, ruff clean, clean-build probe advertises all 21 tools.",
+      "started_at": "2026-07-30T02:45:57.608Z",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "70cc1bf016ec1bb6d995feac1cd2791bd2b58d88f27a79d24f1c008d86de9dc9",
+        "non_whitespace_chars": 1802,
+        "checked_at": "2026-07-30T02:21:48.426Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+      "approvedAt": "2026-07-30T02:31:36.820Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "**AC1 — Bounded dependency:** the runtime dependency on the MCP SDK carries an explicit upper bound excluding 2.x, matching upstream guidance for unmigrated projects.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "**AC2 — Registration guard:** an automated test fails when the resolved MCP SDK cannot support the server, and fails when the expected tool surface, including candidate reference lookup, is not registered.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "**AC3 — Bound guard:** an automated check fails if the declared dependency bound is removed or widened to admit 2.x.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "**AC4 — Suites restored:** the server and CLI test suites that previously could not be collected now collect and pass.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "**AC5 — Installable artifact:** a freshly built installation resolves an MCP SDK below 2.0 and, when started, advertises the full tool surface including candidate reference lookup.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "**AC6 — Release record:** the package version and changelog record this as a stability fix, and the release is tagged.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Do not migrate to the MCP SDK v2 API in this change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Do not change tool behavior, semantics, or the candidate lookup contract.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Do not modify Vision configuration or restart shared services in this change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Keep the guard deterministic and offline; it must not depend on network resolution at test time.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "Migrating `FastMCP` to `MCPServer` and the rest of the v2 port.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "Upgrading other dependencies to latest stable.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "Introducing a lockfile or broader dependency-bound policy.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS4",
+        "kind": "out_of_scope",
+        "text": "Redeploying and validating the shared Vision service, which the parent validation change owns.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-30T02:46:30.757Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "pyproject.toml declares mcp>=1.28,<2. Guard tr_ms6wh8g0_0ac58282 failed against the prior unbounded declaration and tr_ms6wvhpp_69ac3e60 passes after the pin."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_server_registration.py asserts the exact 21-tool surface including search_references and now collects; it passes within the 698-test run tr_ms6wvhpp_69ac3e60. Reviewer independently confirmed it fully satisfies this criterion."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "test_mcp_dependency_excludes_unmigrated_major samples 2.0.0, 2.0.0rc1, 2.1.0, 2.99.0, 3.0.0 and 10.0.0. Verified it flags mcp>=1.0.0, mcp>=1.28, mcp>=1.28,<3 and bare mcp, while accepting mcp>=1.28,<2, mcp~=1.28 and mcp==1.29.0."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tr_ms6wvhpp_69ac3e60: 698 passed, ruff clean. Previously uncollectable server and CLI suites now collect. Collection also exposed a real search_references defect, which was fixed."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tr_ms6wms70_ded7b806: ephemeral no-cache build resolved mcp 1.29.0, initialized over stdio, advertised all 21 tools including search_references. Reviewer reproduced via a fresh wheel install."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "artifact_reference",
+          "evidence": "Version 3.2.1 in pyproject.toml and src/lgrep/__init__.py, enforced by test_version_matches_pyproject. CHANGELOG records both fixes and warns that v3.2.0 is unusable where mcp 2.x resolves. Release tag is created during archive finalization."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No mcp v2 API migration: src/lgrep/server still imports FastMCP from mcp.server.fastmcp, and the diff touches only the dependency bound, the partial binding, tests, changelog and version."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "review",
+          "evidence": "Tool semantics unchanged. The functools.partial change repairs an unconditional TypeError so the declared candidate-lookup contract can execute; it alters no inputs, filters, ordering, cap or disclaimer."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No Vision configuration was modified and no service was restarted during this change. Verification used ephemeral uvx builds isolated from the shared tool installation."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Both guards parse local project metadata and import the local server only. They perform no network resolution and are deterministic across the repeated runs recorded above."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "FastMCP to MCPServer migration was deliberately not attempted; it is tracked as separate follow-on work."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No other dependency was upgraded. The only dependency addition is packaging in dev extras, required by the guard and confirmed appropriate by the reviewer."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No lockfile was introduced and no broader dependency-bound policy was applied; other runtime requirements remain unbounded and are recorded as a follow-up."
+        },
+        {
+          "contractId": "OOS4",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Vision redeployment and managed-service validation were not performed here; the parent change testVisionLgrepIntegration owns that scope."
+        }
+      ]
+    },
+    "amendments": []
+  },
+  "acceptanceCriteria": [
+    "**AC1 — Bounded dependency:** the runtime dependency on the MCP SDK carries an explicit upper bound excluding 2.x, matching upstream guidance for unmigrated projects.",
+    "**AC2 — Registration guard:** an automated test fails when the resolved MCP SDK cannot support the server, and fails when the expected tool surface, including candidate reference lookup, is not registered.",
+    "**AC3 — Bound guard:** an automated check fails if the declared dependency bound is removed or widened to admit 2.x.",
+    "**AC4 — Suites restored:** the server and CLI test suites that previously could not be collected now collect and pass.",
+    "**AC5 — Installable artifact:** a freshly built installation resolves an MCP SDK below 2.0 and, when started, advertises the full tool surface including candidate reference lookup.",
+    "**AC6 — Release record:** the package version and changelog record this as a stability fix, and the release is tagged."
+  ],
+  "documents": {
+    "proposal": "# Pin mcp to v1\n\n## Intent\n\nRestore a reliably installable lgrep before attempting the MCP Python SDK v2 migration. Bound the `mcp` dependency to the maintained v1 line, prove tool registration with an automated guard, and redeploy the working release to the shared Vision service.\n\n## Root Cause Analysis\n\n**Symptom.** After deploying lgrep 3.2.0 to Vision, the managed service advertised only 7 tools and `search_references` was absent. A rebuilt 3.1.3 was equally unusable.\n\n**Direct cause.** `pyproject.toml` declares `mcp>=1.0.0` with no upper bound. `mcp` 2.0.0 is now the stable release on PyPI, so any fresh resolution selects it. Version 2 removed the `mcp.server.fastmcp` module outright, and `src/lgrep/server/__init__.py` imports `FastMCP` from that path, so the server raises `ModuleNotFoundError` before registering anything.\n\n**Evidence.** Protocol-level stdio probes isolate the variable from client-catalog noise: lgrep 3.2.0 with `mcp==1.28.1` initializes and advertises 21 tools including `search_references`; the same 3.2.0 source with unbounded resolution fails at `from mcp.server.fastmcp import FastMCP`; the restored 3.1.3 with `mcp==1.28.1` initializes and advertises 19 tools.\n\n**Why it escaped.** The dependency is unbounded and the repository has no lockfile, so an unrelated upstream release silently changed the build. The failure was previously misattributed as a pre-existing environmental gap in the development environment rather than a dependency defect.\n\n**Contributing condition.** A binary replacement produces no Vision configuration change, so a broken artifact only surfaces after an explicit server restart.\n\n## Scope\n\n`pyproject.toml`, a new dependency-contract regression test, `CHANGELOG.md`, and the package version.\n\n## LBP targets\n\nUpstream guidance recommends an explicit `mcp>=1.28,<2` bound until a project migrates. The regression guard should fail during testing when resolution drifts, rather than at agent runtime.\n\n## User outcomes\n\n- Fresh installs produce a working lgrep server.\n- Agents receive the full tool surface, including candidate reference lookup.\n- The repository's server and CLI test suites become collectable again.\n- The subsequent MCP v2 migration starts from a verified stable baseline.",
+    "problemStatement": "Every fresh lgrep installation is broken. The package declares an unbounded `mcp>=1.0.0`, so resolution now selects the newly stable `mcp` 2.0.0, which removed `mcp.server.fastmcp`. The server fails at import, agents lose the entire lgrep tool surface, and the repository's own server and CLI tests cannot even be collected.",
+    "agreement": "# Agreement — Pin mcp to the v1 line\n\n## Objective\n\nMake lgrep reliably installable again by bounding the MCP SDK dependency, and prove the guarantee with an automated guard so the same silent break cannot recur.\n\n## Acceptance criteria\n\n- **AC1 — Bounded dependency:** the runtime dependency on the MCP SDK carries an explicit upper bound excluding 2.x, matching upstream guidance for unmigrated projects.\n- **AC2 — Registration guard:** an automated test fails when the resolved MCP SDK cannot support the server, and fails when the expected tool surface, including candidate reference lookup, is not registered.\n- **AC3 — Bound guard:** an automated check fails if the declared dependency bound is removed or widened to admit 2.x.\n- **AC4 — Suites restored:** the server and CLI test suites that previously could not be collected now collect and pass.\n- **AC5 — Installable artifact:** a freshly built installation resolves an MCP SDK below 2.0 and, when started, advertises the full tool surface including candidate reference lookup.\n- **AC6 — Release record:** the package version and changelog record this as a stability fix, and the release is tagged.\n\n## Constraints\n\n- Do not migrate to the MCP SDK v2 API in this change.\n- Do not change tool behavior, semantics, or the candidate lookup contract.\n- Do not modify Vision configuration or restart shared services in this change.\n- Keep the guard deterministic and offline; it must not depend on network resolution at test time.\n\n## Out of scope\n\n- Migrating `FastMCP` to `MCPServer` and the rest of the v2 port.\n- Upgrading other dependencies to latest stable.\n- Introducing a lockfile or broader dependency-bound policy.\n- Redeploying and validating the shared Vision service, which the parent validation change owns.",
+    "design": "# Design — Pin mcp to the v1 line\n\n## Dependency bound\n\nReplace the unbounded MCP SDK requirement with `mcp>=1.28,<2`. The lower bound matches the upstream-recommended floor and the currently proven working version; the upper bound excludes the v2 rework that removed `mcp.server.fastmcp`.\n\n## Guard strategy\n\nTwo complementary structural guards, both deterministic and offline:\n\n1. **Declared-bound guard.** Parse the project metadata and assert the MCP SDK requirement carries an upper bound that excludes 2.0 and above. This fails fast if the bound is later removed or widened, which is the exact regression that caused the outage.\n2. **Registration guard.** Import the server module and assert the registered tool surface contains the expected tool names, including candidate reference lookup. This converts an import-time or registration-time break into a test failure rather than a silent runtime loss of every tool.\n\nThe registration guard is preferred over asserting an installed version string, because the real invariant is that the server registers its tools, not that a particular version is present.\n\n## Why not migrate now\n\nThe v2 port renames the server class, moves every submodule, changes type field casing, renames error types, and moves transport parameters. That is a separate change with its own verification. Independent research confirms Vision proxies a v2 server without Vision-side changes, so migration is safe to sequence afterwards from a stable baseline.\n\n## Verification\n\nRun the previously blocked server and CLI suites plus the new guards. Then build an installation from the change source and probe it over stdio, asserting initialization succeeds and the advertised tool list includes candidate reference lookup.\n\n## Release\n\nBump the patch version and record the fix in the changelog as a stability correction, noting that the MCP SDK is intentionally held on the v1 line pending migration.",
+    "executiveSummary": "# Executive Summary\n\n## Outcome\n\nlgrep installs work again. The package now holds the MCP SDK on the v1 line, and two guards make the same silent break impossible to reintroduce unnoticed.\n\n## Value\n\nBefore this change, every fresh install of lgrep produced a server that could not start and registered no tools at all, so agents lost the entire code-search surface. The candidate reference lookup shipped in the previous release had, in fact, never worked through the tool interface even once.\n\n## What went wrong\n\nThe package asked for any MCP SDK from 1.0 upward. When version 2.0 became the stable release, fresh installs began picking it up, and version 2 removed the module the server depends on. Nothing warned about this, because the tests that would have caught it could not even be loaded in that broken state.\n\nUnblocking those tests immediately exposed a second, independent defect: the reference-lookup tool passed a filter argument whose name collided with an internal scheduling parameter, so every call through the tool interface failed before doing any work.\n\n## Verification\n\n- Full test suite: 698 passed, linting clean. This is the first complete suite run this repository has had.\n- A guard was proven to fail against the original unbounded declaration before the fix, then pass after it.\n- The bound guard was checked against every regression form and every valid bound form, so it cannot produce false alarms.\n- A clean throwaway build resolved a supported SDK version, started successfully, and advertised all 21 tools including reference lookup.\n\n## Risks and follow-ups\n\n- The shared Vision service still runs the previous restored version. Redeploying and validating it belongs to the parent validation change.\n- Version 3.2.0 remains published and is unusable wherever the newer SDK resolves. The changelog states this plainly.\n- The upgrade to MCP SDK v2 is deliberately deferred. Independent research confirmed Vision needs no change to host such a server, so that migration can proceed from this stable baseline.\n- Other runtime dependencies remain unbounded and there is no lockfile. That broader hardening is not addressed here.",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-30T02:46:30.757Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | **AC1 — Bounded dependency:** the runtime dependency on the MCP SDK carries an explicit upper bound excluding 2.x, matching upstream guidance for unmigrated projects. | pass | pyproject.toml declares mcp>=1.28,<2. Guard tr_ms6wh8g0_0ac58282 failed against the prior unbounded declaration and tr_ms6wvhpp_69ac3e60 passes after the pin. |\n| AC2 | acceptance_criterion | **AC2 — Registration guard:** an automated test fails when the resolved MCP SDK cannot support the server, and fails when the expected tool surface, including candidate reference lookup, is not registered. | pass | tests/test_server_registration.py asserts the exact 21-tool surface including search_references and now collects; it passes within the 698-test run tr_ms6wvhpp_69ac3e60. Reviewer independently confirmed it fully satisfies this criterion. |\n| AC3 | acceptance_criterion | **AC3 — Bound guard:** an automated check fails if the declared dependency bound is removed or widened to admit 2.x. | pass | test_mcp_dependency_excludes_unmigrated_major samples 2.0.0, 2.0.0rc1, 2.1.0, 2.99.0, 3.0.0 and 10.0.0. Verified it flags mcp>=1.0.0, mcp>=1.28, mcp>=1.28,<3 and bare mcp, while accepting mcp>=1.28,<2, mcp~=1.28 and mcp==1.29.0. |\n| AC4 | acceptance_criterion | **AC4 — Suites restored:** the server and CLI test suites that previously could not be collected now collect and pass. | pass | tr_ms6wvhpp_69ac3e60: 698 passed, ruff clean. Previously uncollectable server and CLI suites now collect. Collection also exposed a real search_references defect, which was fixed. |\n| AC5 | acceptance_criterion | **AC5 — Installable artifact:** a freshly built installation resolves an MCP SDK below 2.0 and, when started, advertises the full tool surface including candidate reference lookup. | pass | tr_ms6wms70_ded7b806: ephemeral no-cache build resolved mcp 1.29.0, initialized over stdio, advertised all 21 tools including search_references. Reviewer reproduced via a fresh wheel install. |\n| AC6 | acceptance_criterion | **AC6 — Release record:** the package version and changelog record this as a stability fix, and the release is tagged. | pass | Version 3.2.1 in pyproject.toml and src/lgrep/__init__.py, enforced by test_version_matches_pyproject. CHANGELOG records both fixes and warns that v3.2.0 is unusable where mcp 2.x resolves. Release tag is created during archive finalization. |\n| C1 | constraint | Do not migrate to the MCP SDK v2 API in this change. | respected | No mcp v2 API migration: src/lgrep/server still imports FastMCP from mcp.server.fastmcp, and the diff touches only the dependency bound, the partial binding, tests, changelog and version. |\n| C2 | constraint | Do not change tool behavior, semantics, or the candidate lookup contract. | respected | Tool semantics unchanged. The functools.partial change repairs an unconditional TypeError so the declared candidate-lookup contract can execute; it alters no inputs, filters, ordering, cap or disclaimer. |\n| C3 | constraint | Do not modify Vision configuration or restart shared services in this change. | respected | No Vision configuration was modified and no service was restarted during this change. Verification used ephemeral uvx builds isolated from the shared tool installation. |\n| C4 | constraint | Keep the guard deterministic and offline; it must not depend on network resolution at test time. | respected | Both guards parse local project metadata and import the local server only. They perform no network resolution and are deterministic across the repeated runs recorded above. |\n| OOS1 | out_of_scope | Migrating `FastMCP` to `MCPServer` and the rest of the v2 port. | not_applicable | FastMCP to MCPServer migration was deliberately not attempted; it is tracked as separate follow-on work. |\n| OOS2 | out_of_scope | Upgrading other dependencies to latest stable. | not_applicable | No other dependency was upgraded. The only dependency addition is packaging in dev extras, required by the guard and confirmed appropriate by the reviewer. |\n| OOS3 | out_of_scope | Introducing a lockfile or broader dependency-bound policy. | not_applicable | No lockfile was introduced and no broader dependency-bound policy was applied; other runtime requirements remain unbounded and are recorded as a follow-up. |\n| OOS4 | out_of_scope | Redeploying and validating the shared Vision service, which the parent validation change owns. | not_applicable | Vision redeployment and managed-service validation were not performed here; the parent change testVisionLgrepIntegration owns that scope. |\n\n"
+  },
+  "artifacts": {
+    "problemStatement": {
+      "updatedAt": "2026-07-30T02:30:04.233Z",
+      "contentHash": "ed9117003077e78db238ed7986f227a4966b26c56fac1aa15323185aa7d17b73",
+      "source": "temporal",
+      "readable": false
+    },
+    "proposal": {
+      "updatedAt": "2026-07-30T02:30:04.233Z",
+      "contentHash": "c1257b562f3cc8ac83b878f597b68abbc5d94ca4876ca09f8a281d034191e31b",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-30T02:30:48.800Z",
+      "contentHash": "4cb90bd61b3a5aad4b0d2eb48c0fd197451a5e28fb79aa65c91d81fca487bb72",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-30T02:30:48.800Z",
+      "contentHash": "2ca10225bfd1b9bd0abe1126d247eeff631d19e5ff676efb96e39c6eca11b469",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-30T02:45:51.007Z",
+      "contentHash": "70cc1bf016ec1bb6d995feac1cd2791bd2b58d88f27a79d24f1c008d86de9dc9",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "reentry_history": [],
+  "same_project_dependencies": [],
+  "lastSignalAt": "2026-07-30T02:46:47.847Z",
+  "fast_follow_of": {
+    "parent_change_id": "testVisionLgrepIntegration",
+    "linked_at": "2026-07-30T02:21:48.311Z"
+  },
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "testVisionLgrepIntegration cutover verification evidence"
+  },
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true,
+  "verification_evidence_dispositions": [
+    {
+      "taskId": "tk-308bad231183",
+      "concernKey": "verification",
+      "disposition": "fixed",
+      "evidence": "Verification evidence exists and is green; only the delegated worker's report was missing because both adv-engineer attempts returned empty and the task was completed inline. Recorded runs for this task: RED tr_ms6wh8g0_0ac58282 proving the unbounded requirement admits mcp 2.x and 3.x, GREEN tr_ms6wkzl1_f3671917 with 698 passed and ruff clean, and post-review re-verification tr_ms6wvhpp_69ac3e60 with 698 passed and ruff clean. An independent adv-reviewer pass returned READY against the same commits.",
+      "dispositionedAt": "2026-07-30T02:46:39.696Z"
+    }
+  ],
+  "creation_request_hash": "1556fd063e505933fca87f4fd2ae694e25507062fa86875e7caeda8c5b5c331d",
+  "projection_revision": 34,
+  "projection_commits": [
+    {
+      "mutation_kind": "problemStatementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "218b326219043607a91073f29b42d456e5b10fc4798de795842a7606777df2e2:createArtifacts:problemStatement",
+      "operation_id": "218b326219043607a91073f29b42d456e5b10fc4798de795842a7606777df2e2:createArtifacts:problemStatement",
+      "payload_hash": "b7fd477324c7bf23348a8c9232c4057f6dbb490f004611bd610d53b75e05b9ba",
+      "state_revision": 1,
+      "prior_revision": 0,
+      "new_revision": 1,
+      "committed_at": "2026-07-30T02:21:48.648Z"
+    },
+    {
+      "mutation_kind": "proposalUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "5c9d0b5f86eff251cc2c4b1630298d902496c04bf5df3d5703ce712d05685c0c:updateArtifacts:proposal",
+      "operation_id": "5c9d0b5f86eff251cc2c4b1630298d902496c04bf5df3d5703ce712d05685c0c:updateArtifacts:proposal",
+      "payload_hash": "bcb6b7efa9e81090ba2b2a12179370273d240fac8c879e81f39086ae322ddff3",
+      "state_revision": 2,
+      "prior_revision": 1,
+      "new_revision": 2,
+      "committed_at": "2026-07-30T02:30:04.568Z"
+    },
+    {
+      "mutation_kind": "problemStatementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "5c9d0b5f86eff251cc2c4b1630298d902496c04bf5df3d5703ce712d05685c0c:updateArtifacts:problemStatement",
+      "operation_id": "5c9d0b5f86eff251cc2c4b1630298d902496c04bf5df3d5703ce712d05685c0c:updateArtifacts:problemStatement",
+      "payload_hash": "c077d5cf508ba281953d9f295fb880c5fed00826cad4c3aef8c08a79035e0905",
+      "state_revision": 3,
+      "prior_revision": 2,
+      "new_revision": 3,
+      "committed_at": "2026-07-30T02:30:04.782Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 3,
+      "new_revision": 4,
+      "committed_at": "2026-07-30T02:30:16.051Z"
+    },
+    {
+      "mutation_kind": "agreementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "f18fa7c25895349fd502d4d06df195c3452dd3c20ef7021b0bfa4a30053cff4e:updateArtifacts:agreement",
+      "operation_id": "f18fa7c25895349fd502d4d06df195c3452dd3c20ef7021b0bfa4a30053cff4e:updateArtifacts:agreement",
+      "payload_hash": "15b3b55f9795c2cf21b4a31684a39f392ea44587bce184ba71e47f99cb332f75",
+      "state_revision": 4,
+      "prior_revision": 4,
+      "new_revision": 5,
+      "committed_at": "2026-07-30T02:30:48.935Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "f18fa7c25895349fd502d4d06df195c3452dd3c20ef7021b0bfa4a30053cff4e:updateArtifacts:design",
+      "operation_id": "f18fa7c25895349fd502d4d06df195c3452dd3c20ef7021b0bfa4a30053cff4e:updateArtifacts:design",
+      "payload_hash": "3886ebbdf0e5fcc3af757633221df4dbd1a9d15fe526bcc9d977b14dbff2e156",
+      "state_revision": 5,
+      "prior_revision": 5,
+      "new_revision": 6,
+      "committed_at": "2026-07-30T02:30:49.103Z"
+    },
+    {
+      "mutation_kind": "specDeltaAdded",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "549798864f9525fd82b5b9d630580dc9fd2b50a0703bea2939cfd31ea76a7381:specDeltaAdded",
+      "operation_id": "549798864f9525fd82b5b9d630580dc9fd2b50a0703bea2939cfd31ea76a7381:specDeltaAdded",
+      "payload_hash": "7df71ef31bfe46f9213d22e3d2c02b8ef9b0dd742f9ec6a5340fc00ba36a6c02",
+      "state_revision": 6,
+      "prior_revision": 6,
+      "new_revision": 7,
+      "committed_at": "2026-07-30T02:31:09.032Z"
+    },
+    {
+      "mutation_kind": "specDeltaRetracted",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "4ded86ea6b2c0b70a0686e3466ca116d44ba3bbec2313786254fe3bc8cc52135:specDeltaRetracted",
+      "operation_id": "4ded86ea6b2c0b70a0686e3466ca116d44ba3bbec2313786254fe3bc8cc52135:specDeltaRetracted",
+      "payload_hash": "347e111d2a654413b016d615bc16bb70fb2e11ea11acc586d717a10605280ae2",
+      "state_revision": 7,
+      "prior_revision": 7,
+      "new_revision": 8,
+      "committed_at": "2026-07-30T02:31:19.932Z"
+    },
+    {
+      "mutation_kind": "specDeltaAdded",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "54424dbadeca0c0248e6c156bc3b8ed1a83953f0a5d8c2ab087b3e12c585da47:specDeltaAdded",
+      "operation_id": "54424dbadeca0c0248e6c156bc3b8ed1a83953f0a5d8c2ab087b3e12c585da47:specDeltaAdded",
+      "payload_hash": "b87d654da4ada8a620f93b9dade4684c6fdc2e4940905c3595ab170bdbada255",
+      "state_revision": 8,
+      "prior_revision": 8,
+      "new_revision": 9,
+      "committed_at": "2026-07-30T02:31:30.433Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 9,
+      "new_revision": 10,
+      "committed_at": "2026-07-30T02:31:36.966Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 10,
+      "new_revision": 11,
+      "committed_at": "2026-07-30T02:31:41.943Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 11,
+      "new_revision": 12,
+      "committed_at": "2026-07-30T02:31:47.219Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 12,
+      "new_revision": 13,
+      "committed_at": "2026-07-30T02:31:59.250Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 13,
+      "new_revision": 14,
+      "committed_at": "2026-07-30T02:31:59.440Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 14,
+      "new_revision": 15,
+      "committed_at": "2026-07-30T02:32:07.737Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 15,
+      "new_revision": 16,
+      "committed_at": "2026-07-30T02:32:15.025Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 16,
+      "new_revision": 17,
+      "committed_at": "2026-07-30T02:32:28.268Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 17,
+      "new_revision": 18,
+      "committed_at": "2026-07-30T02:32:40.391Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 18,
+      "new_revision": 19,
+      "committed_at": "2026-07-30T02:37:30.545Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 19,
+      "new_revision": 20,
+      "committed_at": "2026-07-30T02:37:45.996Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 20,
+      "new_revision": 21,
+      "committed_at": "2026-07-30T02:37:54.917Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 21,
+      "new_revision": 22,
+      "committed_at": "2026-07-30T02:38:25.859Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 22,
+      "new_revision": 23,
+      "committed_at": "2026-07-30T02:38:52.848Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 23,
+      "new_revision": 24,
+      "committed_at": "2026-07-30T02:39:01.305Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 24,
+      "new_revision": 25,
+      "committed_at": "2026-07-30T02:39:43.130Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 25,
+      "new_revision": 26,
+      "committed_at": "2026-07-30T02:39:55.765Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 26,
+      "new_revision": 27,
+      "committed_at": "2026-07-30T02:44:07.729Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 27,
+      "new_revision": 28,
+      "committed_at": "2026-07-30T02:44:07.821Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "a15e356bada5a571cd3ff00582d87fb80c165c1e47f6db844005873d92ac5459:updateArtifacts:executiveSummary",
+      "operation_id": "a15e356bada5a571cd3ff00582d87fb80c165c1e47f6db844005873d92ac5459:updateArtifacts:executiveSummary",
+      "payload_hash": "5e43e02b9dbf56971119b701b51f2312d07f3e846bb13f5b21f7d687adfdbc20",
+      "state_revision": 9,
+      "prior_revision": 28,
+      "new_revision": 29,
+      "committed_at": "2026-07-30T02:45:51.140Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 29,
+      "new_revision": 30,
+      "committed_at": "2026-07-30T02:45:57.722Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785379590777_eln6spje",
+      "prior_revision": 30,
+      "new_revision": 31,
+      "committed_at": "2026-07-30T02:46:30.869Z"
+    },
+    {
+      "mutation_kind": "verification_evidence_disposition",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785379599703_divc1zlx",
+      "prior_revision": 31,
+      "new_revision": 32,
+      "committed_at": "2026-07-30T02:46:39.828Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 32,
+      "new_revision": 33,
+      "committed_at": "2026-07-30T02:46:47.983Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 33,
+      "new_revision": 34,
+      "committed_at": "2026-07-30T02:49:28.808Z"
+    }
+  ],
+  "state_revision": 9
+}

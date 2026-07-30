@@ -1,0 +1,23 @@
+# Acceptance
+
+Reviewed at: 2026-07-30T02:46:30.757Z
+
+## Contract Review Matrix
+
+| ID | Kind | Requirement | Status | Evidence |
+|---|---|---|---|---|
+| AC1 | acceptance_criterion | **AC1 — Bounded dependency:** the runtime dependency on the MCP SDK carries an explicit upper bound excluding 2.x, matching upstream guidance for unmigrated projects. | pass | pyproject.toml declares mcp>=1.28,<2. Guard tr_ms6wh8g0_0ac58282 failed against the prior unbounded declaration and tr_ms6wvhpp_69ac3e60 passes after the pin. |
+| AC2 | acceptance_criterion | **AC2 — Registration guard:** an automated test fails when the resolved MCP SDK cannot support the server, and fails when the expected tool surface, including candidate reference lookup, is not registered. | pass | tests/test_server_registration.py asserts the exact 21-tool surface including search_references and now collects; it passes within the 698-test run tr_ms6wvhpp_69ac3e60. Reviewer independently confirmed it fully satisfies this criterion. |
+| AC3 | acceptance_criterion | **AC3 — Bound guard:** an automated check fails if the declared dependency bound is removed or widened to admit 2.x. | pass | test_mcp_dependency_excludes_unmigrated_major samples 2.0.0, 2.0.0rc1, 2.1.0, 2.99.0, 3.0.0 and 10.0.0. Verified it flags mcp>=1.0.0, mcp>=1.28, mcp>=1.28,<3 and bare mcp, while accepting mcp>=1.28,<2, mcp~=1.28 and mcp==1.29.0. |
+| AC4 | acceptance_criterion | **AC4 — Suites restored:** the server and CLI test suites that previously could not be collected now collect and pass. | pass | tr_ms6wvhpp_69ac3e60: 698 passed, ruff clean. Previously uncollectable server and CLI suites now collect. Collection also exposed a real search_references defect, which was fixed. |
+| AC5 | acceptance_criterion | **AC5 — Installable artifact:** a freshly built installation resolves an MCP SDK below 2.0 and, when started, advertises the full tool surface including candidate reference lookup. | pass | tr_ms6wms70_ded7b806: ephemeral no-cache build resolved mcp 1.29.0, initialized over stdio, advertised all 21 tools including search_references. Reviewer reproduced via a fresh wheel install. |
+| AC6 | acceptance_criterion | **AC6 — Release record:** the package version and changelog record this as a stability fix, and the release is tagged. | pass | Version 3.2.1 in pyproject.toml and src/lgrep/__init__.py, enforced by test_version_matches_pyproject. CHANGELOG records both fixes and warns that v3.2.0 is unusable where mcp 2.x resolves. Release tag is created during archive finalization. |
+| C1 | constraint | Do not migrate to the MCP SDK v2 API in this change. | respected | No mcp v2 API migration: src/lgrep/server still imports FastMCP from mcp.server.fastmcp, and the diff touches only the dependency bound, the partial binding, tests, changelog and version. |
+| C2 | constraint | Do not change tool behavior, semantics, or the candidate lookup contract. | respected | Tool semantics unchanged. The functools.partial change repairs an unconditional TypeError so the declared candidate-lookup contract can execute; it alters no inputs, filters, ordering, cap or disclaimer. |
+| C3 | constraint | Do not modify Vision configuration or restart shared services in this change. | respected | No Vision configuration was modified and no service was restarted during this change. Verification used ephemeral uvx builds isolated from the shared tool installation. |
+| C4 | constraint | Keep the guard deterministic and offline; it must not depend on network resolution at test time. | respected | Both guards parse local project metadata and import the local server only. They perform no network resolution and are deterministic across the repeated runs recorded above. |
+| OOS1 | out_of_scope | Migrating `FastMCP` to `MCPServer` and the rest of the v2 port. | not_applicable | FastMCP to MCPServer migration was deliberately not attempted; it is tracked as separate follow-on work. |
+| OOS2 | out_of_scope | Upgrading other dependencies to latest stable. | not_applicable | No other dependency was upgraded. The only dependency addition is packaging in dev extras, required by the guard and confirmed appropriate by the reviewer. |
+| OOS3 | out_of_scope | Introducing a lockfile or broader dependency-bound policy. | not_applicable | No lockfile was introduced and no broader dependency-bound policy was applied; other runtime requirements remain unbounded and are recorded as a follow-up. |
+| OOS4 | out_of_scope | Redeploying and validating the shared Vision service, which the parent validation change owns. | not_applicable | Vision redeployment and managed-service validation were not performed here; the parent change testVisionLgrepIntegration owns that scope. |
+

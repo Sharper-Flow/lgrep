@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "change_id": "pinMcpV1",
+  "delta_set_sha256": "708dd40a2ed3ed8c207c0f2e7aced2147d74f5a1a57942bb75c9c4c08c0c03cf",
+  "capabilities": [
+    {
+      "capability": "lgrep-dependency-integrity",
+      "base_version": "0.0.0",
+      "target_version": "1.0.0",
+      "spec_sha256": "c99f012c78f534365202ba6595e7fe753211f213ed0b1bce14dea5ca7b04c402",
+      "document_sha256": "3c45b98a2cd27721ac0ac154549805b53b3811f55898af2d271737af1ec43a4f",
+      "requirement_sha256": {
+        "rq-mcpSdkBound01": "a72e8b6fedbfb870507105f8e100940d857bfd2a63738576880b32a13543601b"
+      },
+      "dispositions": [
+        {
+          "deltaId": "dl-mcpSdkBound01",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-mcpSdkBound01"
+        }
+      ]
+    }
+  ]
+}
