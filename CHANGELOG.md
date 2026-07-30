@@ -1,4 +1,14 @@
-## Unreleased
+## Unreleased (v3.2.1)
+
+### Fixed
+
+- **Fresh installs no longer resolve an MCP SDK that cannot start the server.** The runtime requirement was `mcp>=1.0.0` with no upper bound. Once `mcp` 2.0.0 became the stable release, every fresh resolution picked it up, and 2.x removed the `mcp.server.fastmcp` module that `lgrep.server` imports — so the server raised `ModuleNotFoundError` at import and registered zero tools. The requirement is now `mcp>=1.28,<2`, matching upstream guidance for projects that have not yet migrated to the `MCPServer` API. Two offline guards in `tests/test_deps.py` fail if the bound is ever removed or widened to admit 2.x, or tightened past the verified 1.28 floor. The migration to MCP SDK v2 is tracked separately.
+
+- **`lgrep_search_references` failed on every MCP invocation.** The tool passed its `kind` filter as a keyword argument straight into `RuntimeSupervisor.run_blocking`, whose own first parameter is also named `kind`, so each call raised `TypeError: got multiple values for argument 'kind'` before reaching the lookup. Tool arguments are now bound with `functools.partial` before crossing the supervisor boundary, so inner arguments cannot collide with supervisor parameter names. This defect was invisible because the test that covers it could not be collected while the SDK resolution was broken.
+
+> **v3.2.0 is unusable** wherever resolution selects `mcp` 2.x. Use v3.2.1 or later.
+
+## 2026-07-29 (v3.2.0)
 
 ### Added
 
