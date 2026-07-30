@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-30T00:46:14.764Z",
+  "capabilities": [],
+  "change_hash": "318d33257297c98c7b9c31770daf624563ba0d888731e6dd6dc7393ef988125a",
+  "change_id": "addReferenceLookup",
+  "completed_tasks": 3,
+  "created_at": "2026-07-29T21:59:32.257Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-30T00:45:00.287Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "5a2fd5dad70558a22c3c1e03bd7e4653bfcbbbd7fd5e350f5716d6a78e091335",
+  "task_count": 3,
+  "title": "Add reference lookup",
+  "version": "1"
+}
