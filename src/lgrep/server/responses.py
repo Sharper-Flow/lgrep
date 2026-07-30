@@ -251,6 +251,11 @@ class _SearchReferencesResultRequired(TypedDict):
     query: str
     usage_filter: str
     total_matches: int
+    # Match/return counts per group, so truncation is visible rather than inferred.
+    production_matches: int
+    test_matches: int
+    returned_production: int
+    returned_tests: int
     results: list[ReferenceCandidate]
     candidate_names: list[str]
     disclaimer: str

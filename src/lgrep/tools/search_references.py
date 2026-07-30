@@ -22,6 +22,12 @@ _USAGE_FILTERS = frozenset({"production_first", "include_tests", "tests_only"})
 _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
 MAX_REFERENCE_RESULTS = 100
 
+# Share of the result cap held back for test occurrences under "include_tests".
+# Without a reserve, production occurrences alone fill the cap in any real
+# repository and the filter has no observable effect. Unused reserve is
+# returned to production, so the cap is never left partly empty.
+TEST_RESERVE_RATIO = 0.2
+
 _DISCLAIMER = (
     "Candidate occurrences only; results are not compiler-accurate or exhaustive."
 )
@@ -101,6 +107,10 @@ def search_references(
             "query": query,
             "usage_filter": usage_filter,
             "total_matches": 0,
+            "production_matches": 0,
+            "test_matches": 0,
+            "returned_production": 0,
+            "returned_tests": 0,
             "results": [],
             "candidate_names": [],
             "disclaimer": _DISCLAIMER,
@@ -114,35 +124,52 @@ def search_references(
     if kind is not None:
         matches = [m for m in matches if m.get("kind") == kind]
 
+    def _position(m: dict) -> tuple:
+        return (m.get("file_path", ""), m.get("line_number", 0))
+
+    production = sorted((m for m in matches if not m.get("is_test_file")), key=_position)
+    tests = sorted((m for m in matches if m.get("is_test_file")), key=_position)
+
     if usage_filter == "tests_only":
-        matches = [m for m in matches if m.get("is_test_file")]
-    elif usage_filter == "production_first":
-        # Production files first, then tests, then stable order within each group.
-        matches.sort(
-            key=lambda m: (
-                bool(m.get("is_test_file")),
-                m.get("file_path", ""),
-                m.get("line_number", 0),
-            )
-        )
+        matches = tests
+        results = tests[:limit]
+    elif usage_filter == "include_tests":
+        reserve = min(len(tests), int(limit * TEST_RESERVE_RATIO)) if tests else 0
+        if tests and reserve == 0:
+            reserve = min(len(tests), 1)
+
+        chosen_production = production[: max(limit - reserve, 0)]
+        chosen_tests = tests[:reserve]
+
+        # Hand any unused capacity back to the other group so the cap stays full.
+        spare = limit - len(chosen_production) - len(chosen_tests)
+        if spare > 0:
+            extra_tests = tests[len(chosen_tests) : len(chosen_tests) + spare]
+            chosen_tests += extra_tests
+            spare -= len(extra_tests)
+        if spare > 0:
+            chosen_production += production[
+                len(chosen_production) : len(chosen_production) + spare
+            ]
+
+        results = chosen_production + chosen_tests
     else:
-        # "include_tests" — keep both groups but still make ordering deterministic.
-        matches.sort(
-            key=lambda m: (
-                bool(m.get("is_test_file")),
-                m.get("file_path", ""),
-                m.get("line_number", 0),
-            )
-        )
+        # "production_first" — production occurrences first, tests after.
+        matches = production + tests
+        results = matches[:limit]
 
     total_matches = len(matches)
-    results = matches[:limit]
+    returned_tests = sum(1 for m in results if m.get("is_test_file"))
 
     tokens_saved = estimate_savings(len(results))
     return {
         "query": query,
         "usage_filter": usage_filter,
         "total_matches": total_matches,
+        "production_matches": len(production),
+        "test_matches": len(tests),
+        "returned_production": len(results) - returned_tests,
+        "returned_tests": returned_tests,
         "results": results,
         "candidate_names": candidate_names,
         "disclaimer": _DISCLAIMER,
