@@ -192,9 +192,12 @@ async def prune_symbols(
 
 @mcp.tool(
     description=(
-        "Invalidate worktree-specific cache entries. Removes the "
+        "Invalidate worktree-specific cache entries. For each path: removes the "
         "worktree alias from project_meta.json and unloads from server memory. "
-        "Does NOT delete the canonical LanceDB cache."
+        "If the canonical project path is gone and no aliases remain, the cache "
+        "directory is deleted. Deletion over MCP requires the server to set "
+        "LGREP_ALLOW_DESTRUCTIVE_MCP=1; otherwise the call refuses deletion and says "
+        "so. There is no CLI equivalent. MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -217,8 +220,25 @@ async def invalidate_worktree_cache(
     ``project_meta.json`` alias list, and if the canonical project is gone
     and no aliases remain, deletes the cache dir. Invalidated paths are
     also removed from the server's in-memory project state.
+
+    Destructive runs require the ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant on the
+    server. Without it the handler refuses the deletion and reports why.
     """
     t0 = time.monotonic()
+
+    if not _destructive_grant_present():
+        return WorktreeInvalidationResult(
+            paths_cleaned=0,
+            bytes_reclaimed=0,
+            entries=[],
+            refused_reason=(
+                "Destructive run refused: LGREP_ALLOW_DESTRUCTIVE_MCP is not set. "
+                "Worktree cache deletion is not available over MCP. "
+                "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 on the server to allow destructive "
+                "MCP calls. There is no CLI equivalent."
+            ),
+            _meta=make_meta(t0),
+        )
 
     # Run the core invalidation logic in a thread (sync I/O)
     entries, paths_cleaned, bytes_reclaimed = await _run_blocking(

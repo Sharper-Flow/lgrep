@@ -87,12 +87,11 @@ class LgrepContext:
     Each project gets its own ProjectState (ChunkStore, Indexer, FileWatcher),
     keyed by resolved absolute path string. A single VoyageEmbedder is shared
     across all projects to avoid duplicate API client overhead.
-
-    ``transport`` records the MCP transport kind (``"stdio"``, ``"http"``,
-    ``"sse"``, ...) when the server is started via ``run_server``. Tools
-    that perform destructive operations use this to apply transport-aware
-    safety (for example, refusing ``dry_run=False`` on shared HTTP
-    transports). ``None`` means "unknown" and is treated as untrusted.
+    ``transport`` records the MCP transport kind (``"stdio"``,
+    ``"streamable-http"``, ``"sse"``, ...) when the server is started via
+    ``run_server``. It is stored on the application context from an internal
+    bootstrap attribute rather than from an environment variable, and is used
+    only for diagnostics. ``None`` means "unknown".
     """
 
     projects: dict[str, ProjectState] = field(default_factory=dict)
@@ -126,10 +125,12 @@ async def _startup(server: FastMCP) -> LgrepContext:
     if not voyage_api_key:
         log.error("voyage_api_key_missing", hint="Set VOYAGE_API_KEY env var")
 
-    # Transport is populated by ``bootstrap.run_server`` via
-    # LGREP_TRANSPORT; absent when running under tests or embedded use
-    # where the caller did not go through run_server.
-    transport = os.environ.get("LGREP_TRANSPORT")
+    # Transport is recorded by ``bootstrap.run_server`` in a module attribute.
+    # Reading it lazily here avoids a circular import at package load time and
+    # keeps the value out of the environment (no side channel).
+    from lgrep.server import bootstrap as _bootstrap
+
+    transport = _bootstrap.get_startup_transport()
 
     ctx = LgrepContext(voyage_api_key=voyage_api_key, transport=transport)
     log.info("lgrep_ready", transport=transport)

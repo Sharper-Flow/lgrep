@@ -1,0 +1,2047 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/change.schema.json",
+  "id": "gateRemainingDestructiveMcp",
+  "title": "Gate remaining destructive MCP tools",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-30T05:18:27.084Z",
+  "tasks": [
+    {
+      "id": "tk-dfa0f990b25c",
+      "title": "Gate both missed destructive MCP handlers with truthful no-op refusals",
+      "type": "code",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-30T18:42:16.067Z",
+      "started_at": "2026-07-30T18:53:47.530Z",
+      "completed_at": "2026-07-30T19:13:21.223Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED evidence recorded by worker before implementation; GREEN tr_ms7w5ele_a21e7d61: 32 related grant/invalidate tests pass, ruff check/format clean. Reviewed diff: handler-only grant checks; no-op truthful refusal without grant; fixture-only real deletion with grant; additive response fields; corrected public worktree deletion description.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "src/lgrep/server/tools_symbols.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server.py"
+      ],
+      "checkpointSha": "aa87c3c4177bab8227f644bb0e34b184ca3c05cd",
+      "completedAt": "2026-07-30T19:13:21.223Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "OOS1",
+          "OOS2",
+          "OOS3",
+          "OOS4"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "touched_files": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "src/lgrep/server/tools_symbols.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server.py"
+      ]
+    },
+    {
+      "id": "tk-389d9063d15c",
+      "title": "Make destructive-tool population and diagnostics transport structural",
+      "type": "code",
+      "status": "done",
+      "priority": 1,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-dfa0f990b25c"
+        }
+      ],
+      "created_at": "2026-07-30T18:42:25.680Z",
+      "started_at": "2026-07-30T19:14:08.681Z",
+      "completed_at": "2026-07-30T19:33:58.316Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED tr_ms7weomn_5ffa5db7 failed before transport bridge/registry population implementation; GREEN tr_ms7wtkcc_e84b7ab0: 36 focused tests pass, ruff check/format clean. Worker follow-up tr_ms7wrup7_4e71658a strengthened granted prune fixture deletion; tr_ms7wvav5_6affb995 confirmed docs update and focused tests. Reviewed diff: registry pins all four destructive tools; all four grant paths prove fixture deletion; runtime transport is internal bootstrap state; README removes dead env setting; live spec updated.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        ".adv/specs/lgrepSemanticCacheLifecycle/spec.json",
+        "README.md",
+        "src/lgrep/server/bootstrap.py",
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_bootstrap.py",
+        "tests/test_diagnostics.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server_registration.py"
+      ],
+      "checkpointSha": "558eab919fa2fb4949e865c1c9415229e3e53a21",
+      "completedAt": "2026-07-30T19:33:58.316Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC6"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "OOS1",
+          "OOS2",
+          "OOS3",
+          "OOS4"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline"
+      },
+      "touched_files": [
+        ".adv/specs/lgrepSemanticCacheLifecycle/spec.json",
+        "README.md",
+        "src/lgrep/server/bootstrap.py",
+        "src/lgrep/server/lifecycle.py",
+        "tests/test_bootstrap.py",
+        "tests/test_diagnostics.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server_registration.py"
+      ],
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "gateRemainingDestructiveMcp",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+          "task_id": "tk-389d9063d15c",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-389d9063d15c"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "src/lgrep/server/bootstrap.py",
+            "src/lgrep/server/lifecycle.py",
+            "README.md",
+            ".adv/specs/lgrepSemanticCacheLifecycle/spec.json",
+            "tests/test_bootstrap.py",
+            "tests/test_server_registration.py",
+            "tests/test_maintenance_grant.py",
+            "tests/test_diagnostics.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "tr_ms7weomn_5ffa5db7",
+              "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py -q",
+              "exit_code": 1,
+              "summary": "RED phase: 5 bootstrap tests failed as expected because bootstrap/lifecycle still used LGREP_TRANSPORT env side channel"
+            },
+            {
+              "test_run_id": "tr_ms7wjgsm_484466c1",
+              "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+              "exit_code": 0,
+              "summary": "GREEN phase: 181 focused tests passed after switching transport to bootstrap module attribute"
+            },
+            {
+              "test_run_id": "ruff-scope",
+              "command": ".venv/bin/ruff check src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py && .venv/bin/ruff format src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py",
+              "exit_code": 0,
+              "summary": "Ruff check and format clean on all touched Python files"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Store startup transport in bootstrap._startup_transport and read it lazily inside lifecycle._startup",
+              "why": "Removes the LGREP_TRANSPORT environment side channel while preserving DiagnosticsResult.transport and avoiding circular imports (lifecycle imports bootstrap only inside _startup)"
+            },
+            {
+              "what": "Keep existing per-tool refusal messages but add structural registry-wide grant coverage",
+              "why": "Prune tools have CLI equivalents; invalidation tools do not. Sharing CLI wording across all four would be misleading, so assertions are tool-group specific while destructive population is registry-derived"
+            },
+            {
+              "what": "Update .adv/specs/lgrepSemanticCacheLifecycle/spec.json instead of only markdown",
+              "why": "That JSON still carried the stale LGREP_TRANSPORT wording and transport-inference rule; correcting the live spec means updating the persisted spec artifact"
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "Verified no src/ references to LGREP_TRANSPORT remain; existing test_server.py/test_server_tools.py transport usage is context-only and unaffected",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Task complete: destructive-tool population is now registry-derived and pinned to the four expected tools; transport is preserved via bootstrap._startup_transport with no LGREP_TRANSPORT env side channel; README and live spec JSON updated.",
+            "suggested_next_action": "Run the full test suite and then proceed to the next task or acceptance gate"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7weomn_5ffa5db7"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7wjgsm_484466c1"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: ruff-scope"
+            }
+          ]
+        },
+        {
+          "schema_version": "1.0",
+          "change_id": "gateRemainingDestructiveMcp",
+          "attempt": 2,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+          "task_id": "tk-389d9063d15c",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-389d9063d15c"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "tests/test_maintenance_grant.py"
+          ],
+          "verification": [
+            {
+              "test_run_id": "tr_ms7wrup7_4e71658a",
+              "command": ".venv/bin/python -m pytest tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+              "exit_code": 0,
+              "summary": "GREEN: 177 focused tests passed including actual fixture deletion for prune_orphans and prune_symbols with grant"
+            },
+            {
+              "test_run_id": "ruff-scope-2",
+              "command": ".venv/bin/ruff check tests/test_maintenance_grant.py && .venv/bin/ruff format tests/test_maintenance_grant.py",
+              "exit_code": 0,
+              "summary": "Ruff check and format clean on touched test file"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Strengthen top-level test_destructive_allowed_with_grant_deletes_fixtures to create orphan cache and stale symbol index fixtures and assert real deletion",
+              "why": "AC3 requires actual destructive behavior on all four tools under grant, not merely the absence of a refusal. The existing top-level parametrized test was the natural place to extend rather than adding a new duplicate."
+            },
+            {
+              "what": "Removed the weaker granted-path tests from TestStructuralDestructiveGrantCoverage",
+              "why": "They duplicated the top-level prune test and the TestRemainingDestructiveGrants invalidate tests; avoiding duplication keeps the structural class focused on registry pinning and refusal wording."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "Verified focused grant/registry suite (177 tests) passes; no src/ changes needed",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "Extended structural grant coverage for prune_orphans and prune_symbols now exercises actual deletion on isolated fixtures; no production code changed; focused tests and ruff pass.",
+            "suggested_next_action": "Run the full test suite and proceed to acceptance gate"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7wrup7_4e71658a"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: ruff-scope-2"
+            }
+          ]
+        },
+        {
+          "schema_version": "1.0",
+          "change_id": "gateRemainingDestructiveMcp",
+          "attempt": 3,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+          "task_id": "tk-389d9063d15c",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-389d9063d15c"
+          },
+          "agent": "adv-engineer",
+          "status": "complete",
+          "evidence_binding_version": "typed-v1",
+          "files_touched": [
+            "README.md"
+          ],
+          "verification": [
+            {
+              "test_run_id": "tr_ms7wvav5_6affb995",
+              "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_server_registration.py -q",
+              "exit_code": 0,
+              "summary": "Focused grant/registry/bootstrap/diagnostics tests still pass after README edit"
+            },
+            {
+              "test_run_id": "ruff-docs-3",
+              "command": ".venv/bin/ruff check tests/test_maintenance_grant.py src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py",
+              "exit_code": 0,
+              "summary": "Ruff clean on previously touched source/test files"
+            }
+          ],
+          "decisions": [
+            {
+              "what": "Removed the LGREP_TRANSPORT row from the README environment-variable table",
+              "why": "Runtime now ignores LGREP_TRANSPORT; documenting it as an auto-set setting would be a misleading public side channel. Historical CHANGELOG entry left untouched."
+            }
+          ],
+          "blockers": [],
+          "scope_drift": null,
+          "follow_ups": [],
+          "required_main_agent_actions": [],
+          "related_scan": "Verified README no longer mentions LGREP_TRANSPORT; remaining matches are in CHANGELOG (historical), tests (proving side channel absent), and updated spec JSON (stating it must not be read)",
+          "context_update_for_adv": {
+            "what_ads_needs_to_know": "README environment-variable table no longer documents LGREP_TRANSPORT; no production code changed; focused tests and ruff pass.",
+            "suggested_next_action": "Run full test suite, then proceed to acceptance gate"
+          },
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: tr_ms7wvav5_6affb995"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "No durable adv_run_test evidence found for run_id: ruff-docs-3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tk-7d4722205f39",
+      "title": "Prove complete destructive-grant coverage locally and through managed MCP",
+      "type": "verification",
+      "status": "done",
+      "priority": 2,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-389d9063d15c"
+        }
+      ],
+      "created_at": "2026-07-30T18:42:34.884Z",
+      "started_at": "2026-07-30T19:34:35.135Z",
+      "completed_at": "2026-07-30T19:47:30.480Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "Acceptance reviewer strengthened AC2/AC3 proof: denial preserves a real isolated index file; granted invalidation deletes that exact file. tr_ms7xde6j_930589f7: 16 grant tests pass with env grant unset, ruff check/format clean; reviewer independently ran full suite 736 passed.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "tests/test_maintenance_grant.py"
+      ],
+      "checkpointSha": "07bdaf6d5ba3b3c63d41a45da767d0f2c04daa48",
+      "completedAt": "2026-07-30T19:47:30.480Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "verifies": [
+          "AC1",
+          "AC2",
+          "AC3",
+          "AC4",
+          "AC5",
+          "AC6",
+          "AC7"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "C5",
+          "OOS1",
+          "OOS2",
+          "OOS3",
+          "OOS4"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "touched_files": [
+        "tests/test_maintenance_grant.py"
+      ],
+      "subagent_reports": [
+        {
+          "schema_version": "1.0",
+          "change_id": "gateRemainingDestructiveMcp",
+          "attempt": 1,
+          "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+          "task_id": "tk-7d4722205f39",
+          "scope": {
+            "kind": "task",
+            "task_id": "tk-7d4722205f39"
+          },
+          "agent": "adv-reviewer",
+          "phase": "review",
+          "verdict": "READY",
+          "blocking_findings": [],
+          "nonblocking_findings": [],
+          "changes_made": [
+            {
+              "file": "tests/test_maintenance_grant.py",
+              "summary": "Strengthened invalidate_cache grant tests to prove a pre-existing isolated symbol-index fixture remains on refusal and its exact index file is deleted after a granted call; closes AC2/AC3 evidence gaps without changing runtime behavior.",
+              "verification": ".venv/bin/python -m pytest tests/test_maintenance_grant.py (16 passed); full suite (736 passed); ruff check and format checks passed."
+            }
+          ],
+          "wisdom_candidates": [
+            {
+              "type": "convention",
+              "content": "For destructive-handler tests, construct a real isolated target before denial and assert its exact filesystem path after both denial and granted execution. API status or list visibility alone does not prove no deletion or deletion."
+            }
+          ],
+          "verification": {
+            "tests_run": [
+              ".venv/bin/python -m pytest tests/test_maintenance_grant.py",
+              ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+              ".venv/bin/python -m pytest",
+              ".venv/bin/python -m ruff check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+              ".venv/bin/python -m ruff format --check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+              "git diff --check origin/main...HEAD",
+              "rg static scan for runtime os.environ LGREP_TRANSPORT reader/writer in src"
+            ],
+            "results": "pass",
+            "evidence": "Focused grant suite: 16 passed. Bootstrap/diagnostics/registration suite: 20 passed. Full suite: 736 passed in 43.26s (16 pre-existing dependency/fork deprecation warnings). Ruff check/format passed. Diff whitespace check passed. Static source scan found no runtime os.environ reader/writer for LGREP_TRANSPORT. Review found exact four destructiveHint tools, handler-layer grant guards, correct no-CLI invalidation refusals, preserved diagnostics transport via bootstrap attribute/app context, and no import-cycle failure."
+          },
+          "scope_drift": null,
+          "risks": [
+            "AC7 managed-MCP proof remains release-owned: after merged-trunk deployment, call both invalidation tools without LGREP_ALLOW_DESTRUCTIVE_MCP and confirm refusal plus service health.",
+            "LGREP_ALLOW_DESTRUCTIVE_MCP is process-wide capability; production configuration must leave it unset for shared service instances unless an operator deliberately authorizes destructive MCP calls."
+          ],
+          "required_main_agent_actions": [
+            "Checkpoint the reviewer test-only change on task tk-7d4722205f39 before marking review work complete.",
+            "After merge and deployment, perform AC7 managed endpoint proof for invalidate_cache and invalidate_worktree_cache without the grant, then verify service health.",
+            "Leave core tools, CLI behavior, Vision topology, and the already-reviewed grant implementation unchanged."
+          ],
+          "consumer_warnings": [
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest tests/test_maintenance_grant.py"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m ruff check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m ruff format --check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check origin/main...HEAD"
+            },
+            {
+              "kind": "verification_missing",
+              "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: rg static scan for runtime os.environ LGREP_TRANSPORT reader/writer in src"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:destructive-grant-completion"
+      },
+      "agent": "adv-researcher",
+      "topic": "Validate design for completing explicit destructive MCP grant enforcement (gate invalidate_cache + invalidate_worktree_cache, structural coverage test, transport plumbing removal)",
+      "sources": [
+        {
+          "label": "Grant helper + gated tools (prune_orphans, prune_symbols) and UNGATED invalidate_worktree_cache handler",
+          "locator": "src/lgrep/server/tools_maintenance.py:58-82,85-136,139-190,193-248",
+          "summary": "_DESTRUCTIVE_GRANT_ENV/_destructive_grant_present()/_refusal_reason() defined here; called only at :122 (prune_orphans) and :176 (prune_symbols). invalidate_worktree_cache (:201 destructiveHint=True, :207-248) calls _invalidate_worktree_cache unconditionally with NO grant check. Its MCP description (:195-197) says 'Does NOT delete the canonical LanceDB cache' contradicting its own docstring (:214-219 'deletes the cache dir') and shutil.rmtree at invalidate_worktree.py:207."
+        },
+        {
+          "label": "UNGATED invalidate_cache MCP handler (destructiveHint=True, no ctx, no dry_run)",
+          "locator": "src/lgrep/server/tools_symbols.py:581-615",
+          "summary": "invalidate_cache(path)->InvalidateCacheResult has NO ctx param and NO dry_run; calls asyncio.to_thread(_invalidate_cache,path) directly with no grant check. Reaches store.delete_index -> index_file.unlink (index_store.py:209)."
+        },
+        {
+          "label": "delete_index unlinks; IndexStore ignores LGREP_SYMBOLS_DIR",
+          "locator": "src/lgrep/storage/index_store.py:91-105,200-213",
+          "summary": "IndexStore.__init__ uses DEFAULT_SYMBOLS_DIR when storage_dir is None; does NOT read LGREP_SYMBOLS_DIR. delete_index calls index_file.unlink(missing_ok=True). So the MCP invalidate_cache(path) handler (passes no storage_dir) always targets DEFAULT_SYMBOLS_DIR and cannot be isolated via LGREP_SYMBOLS_DIR env. _cache is a ClassVar dict (line 89) -> cross-test pollution hazard."
+        },
+        {
+          "label": "Core invalidate_cache ignores LGREP_SYMBOLS_DIR (inconsistent with prune_symbols)",
+          "locator": "src/lgrep/tools/invalidate_cache.py:18-52 and src/lgrep/tools/prune_symbols.py:47,122-126",
+          "summary": "prune_symbols has its own _resolve_storage_dir() reading LGREP_SYMBOLS_DIR; invalidate_cache uses IndexStore(storage_dir=arg) which ignores the env. Env-isolation asymmetry between the two symbol-store tools."
+        },
+        {
+          "label": "invalidate_worktree core rmtree path + _resolve_cache_dir reads LGREP_CACHE_DIR",
+          "locator": "src/lgrep/tools/invalidate_worktree.py:42,65-273 (esp. 199-222)",
+          "summary": "When canonical project_path gone AND no aliases remain, shutil.rmtree(db_path) executes (line 207). Also rewrites project_meta.json (alias removal) at 226-240. Core accepts cache_dir arg; _resolve_cache_dir reads LGREP_CACHE_DIR env (line 42) so MCP handler IS isolatable via LGREP_CACHE_DIR."
+        },
+        {
+          "label": "Hand-maintained DESTRUCTIVE_TOOLS literal (the drift source)",
+          "locator": "tests/test_maintenance_grant.py:18-26,52-103",
+          "summary": "DESTRUCTIVE_TOOLS = ('prune_orphans','prune_symbols') is hardcoded; misses the other two. _tool_fn() uses mcp._tool_manager.list_tools() and tool.fn — already the project's enumeration convention. granted test (:73-81) only asserts dry_run is False, NOT real deletion."
+        },
+        {
+          "label": "mcp 1.x Tool model exposes .annotations (ToolAnnotations) and .fn",
+          "locator": "https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/v1.12.1/src/mcp/server/fastmcp/tools/base.py",
+          "summary": "class Tool(BaseModel): fn (exclude=True), name, description, parameters, annotations: ToolAnnotations|None. ToolAnnotations has destructiveHint:bool. So mcp._tool_manager.list_tools() yields objects with both .annotations.destructiveHint and .fn — annotation-derived enumeration + behavioral call is viable. pyproject pins mcp>=1.28,<2."
+        },
+        {
+          "label": "CLI has NO invalidate command (only prune-orphans/prune-symbols/gc/remove)",
+          "locator": "src/lgrep/cli.py:38-58",
+          "summary": "No CLI escape hatch exists for invalidate_cache or invalidate_worktree_cache. prune_* refusal messages can name 'lgrep prune-X --execute'; the two invalidate tools cannot — the 'local equivalent' promised in proposal User Outcome #2 does not exist for them."
+        },
+        {
+          "label": "Transport plumbing write/read and ONLY consumer (diagnostics echo)",
+          "locator": "src/lgrep/server/bootstrap.py:40-52, src/lgrep/server/lifecycle.py:118-136, src/lgrep/server/tools_diagnostics.py:62-68,99-115, src/lgrep/server/responses.py:413-415",
+          "summary": "bootstrap.run_server writes os.environ['LGREP_TRANSPORT'] (:45); _startup reads it (:132) into LgrepContext.transport (:134). The ONLY runtime VALUE consumer is lgrep_diagnostics echoing app_ctx.transport (tools_diagnostics.py:68,102) into DiagnosticsResult.transport (responses.py:415). structlog lines (:40,:135) read the local var, not the env. Removing the 2 env lines makes diagnostics.transport always null."
+        },
+        {
+          "label": "Result-type schemas for refusal design (additive refused_reason)",
+          "locator": "src/lgrep/server/responses.py:294-298,317-333,352-368,382-388",
+          "summary": "InvalidateCacheResult={status:str,_meta}; WorktreeInvalidationResult={paths_cleaned,bytes_reclaimed,entries,_meta}; PruneOrphans/PruneSymbols already carry refused_reason: NotRequired[str] (:332,:367). Additive pattern for the two affected types is established."
+        },
+        {
+          "label": "Test collisions on MCP-handler-level calls (core-fn tests unaffected)",
+          "locator": "tests/test_server.py:297-320, tests/test_server_tools.py:294-299, tests/test_symbol_tools.py:769-809, tests/test_e2e_symbols.py:158-188, tests/test_worktree_cache.py:467-661",
+          "summary": "Core-function tests (symbol_tools/e2e/worktree_cache) call tools/invalidate_*.py directly and are UNAFFECTED if the guard stays in the MCP handler layer. test_server.py:297-320 (invalidate_worktree routes-through-runtime) calls the MCP handler WITHOUT grant and WILL break on refusal. test_server_tools.py:294-299 (invalidate_cache _meta/status) stays green on minimal assertions but gains no real-deletion coverage."
+        }
+      ],
+      "architecture_assessment": "All four destructiveHint=True MCP tools confirmed: prune_orphans (tools_maintenance.py:96) and prune_symbols (:150) are GATED via _destructive_grant_present() (:122,:176); invalidate_cache (tools_symbols.py:589) and invalidate_worktree_cache (tools_maintenance.py:201) are UNGATED and reach real deletion (index_store.py:209 unlink; invalidate_worktree.py:207 rmtree). The proposal is sound and the in-repo v3.2.2 precedent (fixLookupPruneDefects, .adv/archive/2026-07-30-fixLookupPruneDefects) proves the grant pattern end-to-end. Four design-shaping issues must be resolved at implementation time, none blocking: (1) the two ungated tools have NO dry_run/preview param, so the refusal shape is no-op+refused_reason, NOT the 'preview-plus-refused_reason' the proposal names; (2) no CLI equivalent exists for invalidate_* so the proposal's User Outcome #2 ('what the local equivalent is') is unfulfillable for 2 of 4 tools; (3) transport removal is NOT a clean 2-line delete — the only runtime consumer is the diagnostics echo (tools_diagnostics.py:68,102) into DiagnosticsResult.transport, and the proposal's own constraint ('additive only, do not remove/retype fields') means removal must REPIPE transport via a non-env bridge or explicitly handle the field; (4) concrete test collisions + fixture-isolation specifics (test_server.py:297-320 breaks; LGREP_SYMBOLS_DIR does NOT isolate invalidate_cache because IndexStore ignores it — must monkeypatch DEFAULT_SYMBOLS_DIR; IndexStore._cache ClassVar hazard; granted tests for prune_* currently assert only dry_run=False and should be strengthened to assert real deletion).",
+      "validation": {
+        "status": "caution",
+        "blockers": [],
+        "notes": "Design is sound and well-precedented; no approved contract item is violated (change is pre-design/planning). CAUTION because four concrete design-shaping items must be resolved: refusal schema asymmetry for no-dry_run tools; unfulfillable 'local equivalent' outcome for invalidate_*; transport-removal-vs-additive-constraint tension; and specific test collisions/isolation hazards. All have concrete remediation in the recommendation."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "medium",
+        "tradeoffs": [
+          "Refusal shape for invalidate_cache/invalidate_worktree_cache is no-op+refused_reason (skip core call), diverging from the prune_* preview coercion (dry_run=True still runs the scan). A shared _refusal_reason helper unifies the message while the mechanism differs per tool arity.",
+          "Annotation-derived destructive-set enumeration eliminates the drift-prone hardcoded DESTRUCTIVE_TOOLS literal but still relies on the FastMCP _tool_manager internal already used in 3 test files; fully removing _tool_manager would require a tool registry (larger refactor, out of scope).",
+          "Transport repiping via a module-attribute bridge keeps diagnostics.transport accurate and satisfies the no-global-env-pollution goal, at the cost of a module-global instead of an env var (still a process-local bridge).",
+          "No-CLI remediation for invalidate_* keeps scope tight (consistent with 'do not change CLI') but leaves operators of those two tools with grant-only remediation, unlike prune_* which has CLI escape hatches."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Push the grant guard into the CORE functions (tools/invalidate_cache.py, tools/invalidate_worktree.py) instead of the MCP handlers",
+            "disposition": "rejected",
+            "rationale": "Breaks all core-function tests (test_symbol_tools.py:769-809, test_e2e_symbols.py:158-188, test_worktree_cache.py:467-661) which call the core directly and assert ungated deletion, AND diverges from the established v3.2.2 pattern where prune_* gate in the MCP handler not the core. Keep the guard in the handler layer; core stays CLI-reusable and test-stable."
+          },
+          {
+            "option": "Add dry_run/preview params to invalidate_cache and invalidate_worktree_cache for parity with prune_*",
+            "disposition": "rejected",
+            "rationale": "Larger semantic change (define what a 'preview' means for an unconditional delete; invalidate_worktree also mutates project_meta.json), risks the 'do not alter existing semantics' constraint, and is unnecessary — a no-op refusal with refused_reason is schema-compatible and simpler (P19)."
+          },
+          {
+            "option": "Add CLI commands 'lgrep invalidate-cache' / 'lgrep invalidate-worktree' so refusal messages can name a local equivalent",
+            "disposition": "deferred",
+            "rationale": "Satisfies proposal User Outcome #2 literally but expands scope beyond 'MCP grant enforcement' and risks 'do not change CLI semantics'. Recommend grant-only remediation message now; file CLI escape hatches as a follow-up."
+          },
+          {
+            "option": "Delete transport entirely including DiagnosticsResult.transport field",
+            "disposition": "rejected",
+            "rationale": "Violates the proposal's own constraint 'additive response fields only; do not remove or retype existing fields'. Either repipe transport via module-attr bridge (keep field accurate) or accept a documented value change — do not remove the field."
+          },
+          {
+            "option": "Eliminate mcp._tool_manager from the structural test by using public await mcp.list_tools()",
+            "disposition": "rejected",
+            "rationale": "Public mcp.list_tools() returns mcp.types.Tool (wire format) with .annotations but NOT .fn, so you cannot call the handler behaviorally without _tool_manager. Since _tool_manager is already used in test_server_registration.py:7,37 and test_maintenance_grant.py:23, deriving the SET from annotations (eliminating the literal) is the structural win; a registry refactor to remove _tool_manager entirely is out of scope."
+          }
+        ],
+        "recommendation": "Advance the design gate. Firm the four cautions into design notes / acceptance criteria before planning: refusal mechanism differs per tool arity (no-op for the two no-dry_run tools vs preview for prune_*); honest remediation message for invalidate_* (no CLI); transport repipe-not-delete; and the specific test/isolation hazards."
+      },
+      "recommendation": "CAUTION — proceed with implementation; the proposal is sound and precedented, but resolve four design-shaping items. (1) Refusal for invalidate_cache = return {status:'refused', _meta, refused_reason} WITHOUT calling core (extend InvalidateCacheResult.status doc + add refused_reason: NotRequired[str]); refusal for invalidate_worktree_cache = return WorktreeInvalidationResult(paths_cleaned=0, bytes_reclaimed=0, entries=[], _meta, refused_reason) WITHOUT calling core (add refused_reason: NotRequired[str]). Use a shared _destructive_grant_present()/_refusal_reason(remediation) imported by tools_symbols.py too. (2) Remediation message for invalidate_* must be honest ('set LGREP_ALLOW_DESTRUCTIVE_MCP=1; no CLI equivalent') — do NOT promise a local equivalent that does not exist; flag CLI escape hatches as a follow-up. (3) Transport: replace os.environ['LGREP_TRANSPORT'] bridge with a module-attribute bridge (set lgrep.server.bootstrap._transport in run_server, read it in _startup) so diagnostics.transport stays accurate and no os.environ pollution — do NOT blindly delete bootstrap.py:45 + lifecycle.py:132 and silently null DiagnosticsResult.transport. (4) Structural test: replace DESTRUCTIVE_TOOLS literal with [t for t in mcp._tool_manager.list_tools() if t.annotations and t.annotations.destructiveHint], parametrize refusal+granted over it, and add a pin-test asserting the derived set equals {prune_orphans,prune_symbols,invalidate_cache,invalidate_worktree_cache} so drift is caught both ways. (5) Fix the invalidate_worktree_cache description/docstring/code contradiction (tools_maintenance.py:195-197 vs :214-219 vs invalidate_worktree.py:207) by correcting the description to state conditional cache-dir deletion requiring the grant. (6) Tests: set LGREP_ALLOW_DESTRUCTIVE_MCP=1 in test_server.py:297-320; isolate invalidate_cache granted test via monkeypatch on lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR (NOT LGREP_SYMBOLS_DIR) and assert on the on-disk file with awareness of the IndexStore._cache ClassVar; isolate invalidate_worktree_cache granted test via LGREP_CACHE_DIR=tmp_path (works); strengthen the prune_* granted tests to assert real deletion, not just dry_run=False.",
+      "follow_ups": [
+        "File a backlog item for optional CLI commands 'lgrep invalidate-cache'/'lgrep invalidate-worktree' to give operators a local escape hatch matching prune_* (proposal User Outcome #2 currently unfulfillable for 2/4 tools).",
+        "Consider a follow-up to make core invalidate_cache honor LGREP_SYMBOLS_DIR like prune_symbols does, removing the env-isolation asymmetry and the test need to monkeypatch DEFAULT_SYMBOLS_DIR.",
+        "Note pre-existing inconsistency: invalidate_cache MCP handler bypasses the RuntimeSupervisor (asyncio.to_thread, no ctx, no cancellation/active-job visibility) unlike the maintenance tools that use _run_blocking — out of scope here but worth a backlog note.",
+        "Confirm at execution time that mcp._tool_manager.list_tools() returns the FunctionTool with .annotations in the actually-installed 1.x patch (verified against v1.12.1 upstream base.py; lgrep pins mcp>=1.28,<2)."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:design-validator-grant"
+      },
+      "agent": "adv-researcher",
+      "topic": "Independent design validation: gate remaining destructive MCP tools",
+      "sources": [
+        {
+          "label": "FastMCP ToolManager API (official MCP Python SDK docs)",
+          "locator": "https://github.com/modelcontextprotocol/python-sdk/blob/main/src/mcp/server/fastmcp/tools/tool_manager.py",
+          "summary": "list_tools() is synchronous and returns list[Tool]; add_tool stores annotations=ToolAnnotations; MCPServer.list_tools reads info.annotations off the Tool objects. Confirms the structural-test approach and the existing test's _tool_manager.list_tools() usage."
+        },
+        {
+          "label": "local: lgrep server grant handler",
+          "locator": "/home/jon/dev/lgrep/src/lgrep/server/tools_maintenance.py",
+          "summary": "_destructive_grant_present() at :61 reads LGREP_ALLOW_DESTRUCTIVE_MCP; called only at :122 (prune_orphans) and :176 (prune_symbols). _refusal_reason(cli_command) at :77 hard-codes 'Returned a preview instead' and 'run {cli_command} locally' — cannot be reused for invalidation tools. invalidate_worktree_cache at :207 has no grant check and description at :195 wrongly says 'Does NOT delete the canonical LanceDB cache'."
+        },
+        {
+          "label": "local: invalidate_cache handler",
+          "locator": "/home/jon/dev/lgrep/src/lgrep/server/tools_symbols.py",
+          "summary": "invalidate_cache at :581 declares destructiveHint=True (:589) and calls asyncio.to_thread(_invalidate_cache, path) at :611 with no grant check and no ctx param."
+        },
+        {
+          "label": "local: core invalidate functions",
+          "locator": "/home/jon/dev/lgrep/src/lgrep/tools/invalidate_cache.py",
+          "summary": "invalidate_cache() reaches store.delete_index() -> index_file.unlink() (index_store.py:209). invalidate_worktree.py:207 calls shutil.rmtree(db_path). Both confirmed destructive."
+        },
+        {
+          "label": "local: cache-dir resolution consistency",
+          "locator": "/home/jon/dev/lgrep/src/lgrep/storage/_chunk_store.py",
+          "summary": "get_project_db_path (:153) and invalidate_worktree._resolve_cache_dir (:42) BOTH read os.environ LGREP_CACHE_DIR, so monkeypatch.setenv LGREP_CACHE_DIR yields a consistent temp root and the path-confinement check passes."
+        },
+        {
+          "label": "local: transport plumbing write/read sites",
+          "locator": "/home/jon/dev/lgrep/src/lgrep/server/bootstrap.py",
+          "summary": "bootstrap.py:45 writes os.environ['LGREP_TRANSPORT']; lifecycle.py:132 reads it in _startup; server/__init__.py orders lifecycle import(:96) -> mcp(:116) -> tool side-effects(:123) -> run_server(:128). Repipe ordering (set module attr before mcp.run -> lifespan) is cycle-free."
+        },
+        {
+          "label": "local: existing grant test + CLI surface",
+          "locator": "/home/jon/dev/lgrep/tests/test_maintenance_grant.py",
+          "summary": "DESTRUCTIVE_TOOLS currently = 2 prune tools; assertion at :68 requires the refusal to NAME the CLI equivalent (opposite of AC4 for invalidation). cli.py exposes only prune-orphans/prune-symbols/gc — no invalidate CLI command exists."
+        },
+        {
+          "label": "local: spec + README doc references to LGREP_TRANSPORT",
+          "locator": "/home/jon/dev/lgrep/.adv/specs/lgrepSemanticCacheLifecycle/spec.json",
+          "summary": "rq-prune-mcp-transport-safety (:287) references '(set from LGREP_TRANSPORT at server startup)'; README.md:450 documents LGREP_TRANSPORT as auto-set. Both become stale after AC6 removes the env-var read/write."
+        }
+      ],
+      "architecture_assessment": "The design is architecturally sound and consistent with the established v3.2.2 grant pattern: handler-layer _destructive_grant_present() predicate (tools_maintenance.py:61) is the right authority locus, and extending it to the two ungated destructive handlers preserves the core/CLI-grant-free invariant. The refusal shapes (additive NotRequired[str] refused_reason on existing schemas; status='refused' for invalidate_cache since its status field is typed str, not Literal; zero-effect WorktreeInvalidationResult for worktree) are schema-valid and additive per the constraint. The structural-population proof is viable: the FastMCP 1.x ToolManager.list_tools() is synchronous and returns Tool objects exposing .annotations (verified against official SDK docs and the existing passing test at test_maintenance_grant.py:23), and exactly four tools declare destructiveHint=True. Fixture isolation is verified consistent: both cache-path resolvers read LGREP_CACHE_DIR, and DEFAULT_SYMBOLS_DIR is the live IndexStore default. The transport repipe is cycle-free and preserves DiagnosticsResult.transport. Deviation from by-the-book: MINOR — all deviations are implementer guardrails, none are design contradictions. No CONFLICTs found.",
+      "validation": {
+        "status": "caution",
+        "blockers": [],
+        "notes": "No design-internal contradictions and no constraint violations. Five implementer-facing cautions, all addressable without design rework: (1) refusal-message reuse hazard — _refusal_reason(cli_command) MUST NOT be reused for invalidation tools since it references a non-existent CLI command and says 'preview'; (2) the parametrized refusal assertion diverges by tool family (prune must NAME a CLI command per the existing test, invalidation must NOT); (3) spec rq-prune-mcp-transport-safety (:287) parenthetical and README:450 LGREP_TRANSPORT row become stale after AC6; (4) structural-test None-guard for future tools omitting annotations; (5) refused-path must still build full result incl _meta and early-return before worktree in-memory cleanup."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Handler-layer grant keeps core/CLI grant-free but means the authority check is duplicated across four handler call-sites rather than enforced at one chokepoint — mitigated by the structural registry test that pins the exact destructive set.",
+          "Additive refused_reason (NotRequired[str]) on existing TypedDicts keeps responses backward-compatible for clients but makes refusal observability opt-in (clients must look for an optional field).",
+          "Repiing transport to a bootstrap module attr removes the global-env side channel but couples lifespan to a private bootstrap attribute rather than passing transport through the FastMCP lifespan context explicitly.",
+          "No-op invalidation refusal (status='refused' / zero-effect) is intentionally asymmetric with prune preview (dry_run=true) because invalidation tools lack dry_run — correct, but the difference must be documented and tested per-tool."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Reuse the existing _refusal_reason(cli_command) helper for invalidation tools",
+            "disposition": "rejected",
+            "rationale": "Helper hard-codes 'Returned a preview instead' and 'run {cli_command} locally'; no invalidate CLI command exists (cli.py only exposes prune-orphans/prune-symbols/gc), so reuse would violate AC4 (must not name an unavailable command). Implementer needs a distinct no-CLI-equivalent message."
+          },
+          {
+            "option": "Pass storage_dir/cache_dir through the MCP handler signatures for fixture isolation",
+            "disposition": "rejected",
+            "rationale": "Violates the constraint 'guards in MCP handlers; core/CLI stay unchanged' and changes the public tool signature. Patching DEFAULT_SYMBOLS_DIR (index_store.py:99 reads it at call time) and setenv LGREP_CACHE_DIR are the isolation strategy the design chose and verified."
+          },
+          {
+            "option": "Pin transport on the mcp server object / lifespan context instead of a bootstrap module attr",
+            "disposition": "deferred",
+            "rationale": "Also cycle-free and arguably more idiomatic for the FastMCP lifespan, but the design's bootstrap-module-attr choice is sound, trivially monkeypatchable in tests, and keeps run_server as the single write site. No rework needed."
+          },
+          {
+            "option": "Move the grant check into the core functions",
+            "disposition": "rejected",
+            "rationale": "Out of scope; the CLI must remain grant-free (CLI holds local shell authority) and the constraint forbids changing core behavior."
+          }
+        ],
+        "recommendation": "Proceed to implementation with CAUTION. Enforce four implementer guardrails at the execution gate: (1) create a dedicated invalidation refusal message that names LGREP_ALLOW_DESTRUCTIVE_MCP=1 and states no CLI equivalent exists — do NOT call _refusal_reason(); (2) split or parameterize the grant-test assertions so prune tools assert a CLI command IS named while invalidation tools assert NONE is named; (3) add refused_reason: NotRequired[str] to InvalidateCacheResult and WorktreeInvalidationResult and update the status comment to include 'refused'; (4) guard the registry filter against None annotations (t.annotations is not None and t.annotations.destructiveHint is True) for future-proofing. File a follow-up spec/doc task to update rq-prune-mcp-transport-safety parenthetical (already stale re grant-vs-transport, predates this change) and README:450 LGREP_TRANSPORT row after AC6 lands; CHANGELOG:178 is historical and must not be rewritten."
+      },
+      "recommendation": "Proceed with CAUTION. The design is sound and satisfies all 7 ACs at the design level; no rework or design revision is required. Before marking execution complete, verify: (1) invalidation refusal messages do NOT reuse _refusal_reason and explicitly state no CLI equivalent (AC4); (2) structural test enumerates exactly {prune_orphans, prune_symbols, invalidate_cache, invalidate_worktree_cache} via _tool_manager.list_tools() filtering annotations.destructiveHint is True with a None guard (AC1); (3) grant fixtures patch lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR and setenv LGREP_CACHE_DIR, asserting real fixture deletion only under the grant (AC3); (4) no runtime read/write of os.environ['LGREP_TRANSPORT'] remains and DiagnosticsResult.transport still reports the bootstrap-set value (AC6); (5) refused-path returns full schema incl _meta and (for worktree) early-returns before in-memory cleanup.",
+      "follow_ups": [
+        "Spec drift: rq-prune-mcp-transport-safety (lgrepSemanticCacheLifecycle spec.json:287) references LGREP_TRANSPORT and transport-based coercion; both stale after v3.2.2 (grant-based) and definitively stale after AC6. Separate spec-correction change recommended.",
+        "README:450 LGREP_TRANSPORT row documents the env var as auto-set; after AC6 runtime no longer sets it. Update or remove in this change's README pass.",
+        "Guard against tool.annotations being None in the structural registry test so a future tool registered without annotations does not AttributeError."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+      "task_id": "tk-389d9063d15c",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-389d9063d15c"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "src/lgrep/server/bootstrap.py",
+        "src/lgrep/server/lifecycle.py",
+        "README.md",
+        ".adv/specs/lgrepSemanticCacheLifecycle/spec.json",
+        "tests/test_bootstrap.py",
+        "tests/test_server_registration.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_diagnostics.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "tr_ms7weomn_5ffa5db7",
+          "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py -q",
+          "exit_code": 1,
+          "summary": "RED phase: 5 bootstrap tests failed as expected because bootstrap/lifecycle still used LGREP_TRANSPORT env side channel"
+        },
+        {
+          "test_run_id": "tr_ms7wjgsm_484466c1",
+          "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+          "exit_code": 0,
+          "summary": "GREEN phase: 181 focused tests passed after switching transport to bootstrap module attribute"
+        },
+        {
+          "test_run_id": "ruff-scope",
+          "command": ".venv/bin/ruff check src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py && .venv/bin/ruff format src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py",
+          "exit_code": 0,
+          "summary": "Ruff check and format clean on all touched Python files"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Store startup transport in bootstrap._startup_transport and read it lazily inside lifecycle._startup",
+          "why": "Removes the LGREP_TRANSPORT environment side channel while preserving DiagnosticsResult.transport and avoiding circular imports (lifecycle imports bootstrap only inside _startup)"
+        },
+        {
+          "what": "Keep existing per-tool refusal messages but add structural registry-wide grant coverage",
+          "why": "Prune tools have CLI equivalents; invalidation tools do not. Sharing CLI wording across all four would be misleading, so assertions are tool-group specific while destructive population is registry-derived"
+        },
+        {
+          "what": "Update .adv/specs/lgrepSemanticCacheLifecycle/spec.json instead of only markdown",
+          "why": "That JSON still carried the stale LGREP_TRANSPORT wording and transport-inference rule; correcting the live spec means updating the persisted spec artifact"
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "Verified no src/ references to LGREP_TRANSPORT remain; existing test_server.py/test_server_tools.py transport usage is context-only and unaffected",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Task complete: destructive-tool population is now registry-derived and pinned to the four expected tools; transport is preserved via bootstrap._startup_transport with no LGREP_TRANSPORT env side channel; README and live spec JSON updated.",
+        "suggested_next_action": "Run the full test suite and then proceed to the next task or acceptance gate"
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7weomn_5ffa5db7"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7wjgsm_484466c1"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: ruff-scope"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 2,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+      "task_id": "tk-389d9063d15c",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-389d9063d15c"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "tests/test_maintenance_grant.py"
+      ],
+      "verification": [
+        {
+          "test_run_id": "tr_ms7wrup7_4e71658a",
+          "command": ".venv/bin/python -m pytest tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+          "exit_code": 0,
+          "summary": "GREEN: 177 focused tests passed including actual fixture deletion for prune_orphans and prune_symbols with grant"
+        },
+        {
+          "test_run_id": "ruff-scope-2",
+          "command": ".venv/bin/ruff check tests/test_maintenance_grant.py && .venv/bin/ruff format tests/test_maintenance_grant.py",
+          "exit_code": 0,
+          "summary": "Ruff check and format clean on touched test file"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Strengthen top-level test_destructive_allowed_with_grant_deletes_fixtures to create orphan cache and stale symbol index fixtures and assert real deletion",
+          "why": "AC3 requires actual destructive behavior on all four tools under grant, not merely the absence of a refusal. The existing top-level parametrized test was the natural place to extend rather than adding a new duplicate."
+        },
+        {
+          "what": "Removed the weaker granted-path tests from TestStructuralDestructiveGrantCoverage",
+          "why": "They duplicated the top-level prune test and the TestRemainingDestructiveGrants invalidate tests; avoiding duplication keeps the structural class focused on registry pinning and refusal wording."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "Verified focused grant/registry suite (177 tests) passes; no src/ changes needed",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "Extended structural grant coverage for prune_orphans and prune_symbols now exercises actual deletion on isolated fixtures; no production code changed; focused tests and ruff pass.",
+        "suggested_next_action": "Run the full test suite and proceed to acceptance gate"
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7wrup7_4e71658a"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: ruff-scope-2"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 3,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+      "task_id": "tk-389d9063d15c",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-389d9063d15c"
+      },
+      "agent": "adv-engineer",
+      "status": "complete",
+      "evidence_binding_version": "typed-v1",
+      "files_touched": [
+        "README.md"
+      ],
+      "verification": [
+        {
+          "test_run_id": "tr_ms7wvav5_6affb995",
+          "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_server_registration.py -q",
+          "exit_code": 0,
+          "summary": "Focused grant/registry/bootstrap/diagnostics tests still pass after README edit"
+        },
+        {
+          "test_run_id": "ruff-docs-3",
+          "command": ".venv/bin/ruff check tests/test_maintenance_grant.py src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py",
+          "exit_code": 0,
+          "summary": "Ruff clean on previously touched source/test files"
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Removed the LGREP_TRANSPORT row from the README environment-variable table",
+          "why": "Runtime now ignores LGREP_TRANSPORT; documenting it as an auto-set setting would be a misleading public side channel. Historical CHANGELOG entry left untouched."
+        }
+      ],
+      "blockers": [],
+      "scope_drift": null,
+      "follow_ups": [],
+      "required_main_agent_actions": [],
+      "related_scan": "Verified README no longer mentions LGREP_TRANSPORT; remaining matches are in CHANGELOG (historical), tests (proving side channel absent), and updated spec JSON (stating it must not be read)",
+      "context_update_for_adv": {
+        "what_ads_needs_to_know": "README environment-variable table no longer documents LGREP_TRANSPORT; no production code changed; focused tests and ruff pass.",
+        "suggested_next_action": "Run full test suite, then proceed to acceptance gate"
+      },
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: tr_ms7wvav5_6affb995"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "No durable adv_run_test evidence found for run_id: ruff-docs-3"
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "gateRemainingDestructiveMcp",
+      "attempt": 1,
+      "workdir_used": "/home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/gateRemainingDestructiveMcp",
+      "task_id": "tk-7d4722205f39",
+      "scope": {
+        "kind": "task",
+        "task_id": "tk-7d4722205f39"
+      },
+      "agent": "adv-reviewer",
+      "phase": "review",
+      "verdict": "READY",
+      "blocking_findings": [],
+      "nonblocking_findings": [],
+      "changes_made": [
+        {
+          "file": "tests/test_maintenance_grant.py",
+          "summary": "Strengthened invalidate_cache grant tests to prove a pre-existing isolated symbol-index fixture remains on refusal and its exact index file is deleted after a granted call; closes AC2/AC3 evidence gaps without changing runtime behavior.",
+          "verification": ".venv/bin/python -m pytest tests/test_maintenance_grant.py (16 passed); full suite (736 passed); ruff check and format checks passed."
+        }
+      ],
+      "wisdom_candidates": [
+        {
+          "type": "convention",
+          "content": "For destructive-handler tests, construct a real isolated target before denial and assert its exact filesystem path after both denial and granted execution. API status or list visibility alone does not prove no deletion or deletion."
+        }
+      ],
+      "verification": {
+        "tests_run": [
+          ".venv/bin/python -m pytest tests/test_maintenance_grant.py",
+          ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+          ".venv/bin/python -m pytest",
+          ".venv/bin/python -m ruff check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+          ".venv/bin/python -m ruff format --check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py",
+          "git diff --check origin/main...HEAD",
+          "rg static scan for runtime os.environ LGREP_TRANSPORT reader/writer in src"
+        ],
+        "results": "pass",
+        "evidence": "Focused grant suite: 16 passed. Bootstrap/diagnostics/registration suite: 20 passed. Full suite: 736 passed in 43.26s (16 pre-existing dependency/fork deprecation warnings). Ruff check/format passed. Diff whitespace check passed. Static source scan found no runtime os.environ reader/writer for LGREP_TRANSPORT. Review found exact four destructiveHint tools, handler-layer grant guards, correct no-CLI invalidation refusals, preserved diagnostics transport via bootstrap attribute/app context, and no import-cycle failure."
+      },
+      "scope_drift": null,
+      "risks": [
+        "AC7 managed-MCP proof remains release-owned: after merged-trunk deployment, call both invalidation tools without LGREP_ALLOW_DESTRUCTIVE_MCP and confirm refusal plus service health.",
+        "LGREP_ALLOW_DESTRUCTIVE_MCP is process-wide capability; production configuration must leave it unset for shared service instances unless an operator deliberately authorizes destructive MCP calls."
+      ],
+      "required_main_agent_actions": [
+        "Checkpoint the reviewer test-only change on task tk-7d4722205f39 before marking review work complete.",
+        "After merge and deployment, perform AC7 managed endpoint proof for invalidate_cache and invalidate_worktree_cache without the grant, then verify service health.",
+        "Leave core tools, CLI behavior, Vision topology, and the already-reviewed grant implementation unchanged."
+      ],
+      "consumer_warnings": [
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest tests/test_maintenance_grant.py"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m pytest"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m ruff check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: .venv/bin/python -m ruff format --check src/lgrep/server tests/test_maintenance_grant.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_server_registration.py"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: git diff --check origin/main...HEAD"
+        },
+        {
+          "kind": "verification_missing",
+          "message": "Reviewer aggregate evidence is non-authoritative; no typed adv_run_test run ID proves command: rg static scan for runtime os.environ LGREP_TRANSPORT reader/writer in src"
+        }
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-dfa0f990b25c": [
+      {
+        "runId": "tr_ms7vt8xa_000f6a8f",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run pytest tests/test_maintenance_grant.py -q",
+        "durationMs": 25953.15778500028,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:03:31.494Z"
+      },
+      {
+        "runId": "tr_ms7vu3dx_60d482a4",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run pytest tests/test_maintenance_grant.py -q",
+        "durationMs": 23510.163360000588,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:04:10.975Z"
+      },
+      {
+        "runId": "tr_ms7w5ele_a21e7d61",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_maintenance_grant.py tests/test_server.py -k 'prune_orphans or invalidate_worktree_cache' tests/test_server_tools.py -k 'invalidate or prune' tests/test_symbol_tools.py::TestInvalidateCache tests/test_worktree_cache.py::TestInvalidateWorktreeCache -q && uv run --extra dev ruff check src/lgrep/server/responses.py src/lgrep/server/tools_symbols.py src/lgrep/server/tools_maintenance.py tests/test_maintenance_grant.py tests/test_server.py && uv run --extra dev ruff format --check src/lgrep/server/responses.py src/lgrep/server/tools_symbols.py src/lgrep/server/tools_maintenance.py tests/test_maintenance_grant.py tests/test_server.py",
+        "durationMs": 21706.694286999293,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:12:58.675Z"
+      }
+    ],
+    "tk-389d9063d15c": [
+      {
+        "runId": "tr_ms7wdvbd_26ee0fed",
+        "phase": "red",
+        "exitCode": 2,
+        "classification": "failed",
+        "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py -q",
+        "durationMs": 6167.840873999521,
+        "recordedAt": "2026-07-30T19:19:33.596Z"
+      },
+      {
+        "runId": "tr_ms7weomn_5ffa5db7",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py -q",
+        "durationMs": 19196.13696399983,
+        "recordedAt": "2026-07-30T19:20:11.583Z"
+      },
+      {
+        "runId": "tr_ms7whcpn_1ebb7624",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py -q",
+        "durationMs": 19517.402269000188,
+        "recordedAt": "2026-07-30T19:22:16.150Z"
+      },
+      {
+        "runId": "tr_ms7wjgsm_484466c1",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_server_registration.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+        "durationMs": 40399.51650999952,
+        "recordedAt": "2026-07-30T19:23:54.753Z"
+      },
+      {
+        "runId": "tr_ms7wpzuh_63b16131",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": ".venv/bin/python -m pytest tests/test_maintenance_grant.py tests/test_server_registration.py -q",
+        "durationMs": 18639.327426999807,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:28:59.431Z"
+      },
+      {
+        "runId": "tr_ms7wrup7_4e71658a",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": ".venv/bin/python -m pytest tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_bootstrap.py tests/test_diagnostics.py tests/test_cli.py tests/test_server.py tests/test_server_tools.py -q",
+        "durationMs": 32618.81115199998,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:30:26.051Z"
+      },
+      {
+        "runId": "tr_ms7wtkcc_e84b7ab0",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev pytest tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_bootstrap.py tests/test_diagnostics.py -q && uv run --extra dev ruff check src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py README.md tests/test_bootstrap.py tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_diagnostics.py && uv run --extra dev ruff format --check src/lgrep/server/bootstrap.py src/lgrep/server/lifecycle.py tests/test_bootstrap.py tests/test_maintenance_grant.py tests/test_server_registration.py tests/test_diagnostics.py",
+        "durationMs": 15522.913265000097,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:31:45.871Z"
+      },
+      {
+        "runId": "tr_ms7wvav5_6affb995",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": ".venv/bin/python -m pytest tests/test_bootstrap.py tests/test_maintenance_grant.py tests/test_diagnostics.py tests/test_server_registration.py -q",
+        "durationMs": 17048.07715800032,
+        "recordedAt": "2026-07-30T19:33:07.045Z"
+      }
+    ],
+    "tk-7d4722205f39": [
+      {
+        "runId": "tr_ms7xde6j_930589f7",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "env -u LGREP_ALLOW_DESTRUCTIVE_MCP uv run --extra dev pytest tests/test_maintenance_grant.py -q && uv run --extra dev ruff check tests/test_maintenance_grant.py && uv run --extra dev ruff format --check tests/test_maintenance_grant.py",
+        "durationMs": 20113.934837999754,
+        "assertionDensity": 0,
+        "mockSurface": [],
+        "behaviorSurface": "medium",
+        "recordedAt": "2026-07-30T19:47:11.075Z"
+      }
+    ]
+  },
+  "deltas": {},
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-30T07:47:27.688Z",
+      "completed_by": "user",
+      "approval_evidence": "User directed: \"fix all, complete all so we have a working and healthy lgrep.\" This explicitly confirms the persisted defect proposal and Root Cause Analysis for all remaining ungated destructive MCP tools, documentation correction, structural population coverage, and removal of dead transport plumbing.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "40a6c6085fef57ce2e8296b1a768294461047750a85e5324460099910722805b",
+        "non_whitespace_chars": 5367,
+        "checked_at": "2026-07-30T05:18:27.169Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-30T17:21:47.089Z",
+      "completed_by": "user",
+      "approval_evidence": "User approved the agreement; typed 16-item contract minted. Discovery validated handler-layer guards, safe no-op refusal shapes for tools without dry_run, registry-derived destructive population coverage, honest no-CLI messaging, isolated fixture strategy, and transport diagnostics repipe.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "non_whitespace_chars": 2248,
+        "checked_at": "2026-07-30T05:18:27.170Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-30T18:41:11.303Z",
+      "completed_by": "agent",
+      "approval_evidence": "Independent design validator: CAUTION, high confidence, no conflicts. Handler-layer grant design accepted. Cautions incorporated: no-CLI refusal helper distinct from prune preview helper; annotations None guard; exact isolation mechanisms; public diagnostics transport preserved by module bridge; README and live spec transport wording corrected. Existing MCP ToolManager list_tools API verified synchronous under the pinned 1.x SDK.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "b50bf701a2bdb855afb10de927efa23f440daa71f9a91737b0e26f37b262d1c8",
+        "non_whitespace_chars": 2418,
+        "checked_at": "2026-07-30T05:18:27.171Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-30T20:31:23.816Z",
+      "completed_by": "user",
+      "approval_evidence": "Recovery re-completion using original approved task graph; no contract, task, code, or evidence changes."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-30T20:31:33.200Z",
+      "completed_by": "agent",
+      "approval_evidence": "Recovery re-completion from preserved checkpointed tasks/evidence; full suite 736 passed with grant unset and ruff clean; no code/task/evidence changed."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-30T20:32:01.189Z",
+      "completed_by": "user",
+      "approval_evidence": "Acceptance after fresh recovery ordering: user accepted reviewed change; matrix restored 16/16 pass after reset; verification evidence dispositions persist; no scope/code/task change.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "90b70fdea608edcd6fab87b2af73d4513103cba68a76f0cc87eee599396a23c8",
+        "non_whitespace_chars": 1829,
+        "checked_at": "2026-07-30T05:18:27.173Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+      "approvedAt": "2026-07-30T17:21:31.434Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "**AC1 — Complete population:** the MCP registry yields exactly four tools with `destructiveHint=True`: `prune_orphans`, `prune_symbols`, `invalidate_cache`, and `invalidate_worktree_cache`. A test pins that exact set.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "**AC2 — Denial is safe:** with `LGREP_ALLOW_DESTRUCTIVE_MCP` unset, all four tools perform no deletion. The two prune tools return `dry_run: true`; the two invalidation tools return schema-valid no-op results with additive non-empty `refused_reason` fields.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "**AC3 — Grant honors intent:** with `LGREP_ALLOW_DESTRUCTIVE_MCP=1`, all four tools execute their existing destructive behavior against isolated fixtures. Tests prove actual deletion for each path; no production cache or symbol-store path is touched.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "**AC4 — Refusals are honest:** invalidation refusal messages name `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and explicitly state that no CLI equivalent exists. They do not name a command that is unavailable.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "**AC5 — Description matches behavior:** the public `invalidate_worktree_cache` description says it conditionally deletes the canonical cache directory when the canonical project is gone and no aliases remain, and that MCP deletion requires the grant.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "**AC6 — Diagnostics preserved without global env mutation:** `DiagnosticsResult.transport` remains present and reports the current server transport; no runtime code writes or reads `os.environ[\"LGREP_TRANSPORT\"]`.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC7",
+        "kind": "acceptance_criterion",
+        "text": "**AC7 — Full proof:** the focused grant tests, full suite, ruff check, and ruff format check pass; after merged-trunk deployment, real managed MCP calls to the two invalidation tools refuse without the grant and the service remains healthy.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Additive response fields only; preserve current response fields and types.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Keep guards in MCP handlers. Core functions and any CLI behavior stay unchanged.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Use isolated temporary storage: monkeypatch `DEFAULT_SYMBOLS_DIR` for invalidate-cache and `LGREP_CACHE_DIR` for worktree-cache.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Keep the existing `prune_orphans` / `prune_symbols` semantics intact.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C5",
+        "kind": "constraint",
+        "text": "Do not migrate the MCP SDK or change Vision topology, ports, session settings, or global configuration.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "Proxy authentication or caller identity.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "New CLI commands for invalidation.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "Candidate lookup behavior.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS4",
+        "kind": "out_of_scope",
+        "text": "Broad redesign of `IndexStore._cache`; only fixture isolation needed for this change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-30T20:31:53.472Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Registry tests pin four destructiveHint tools; full 736 suite pass."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "No-grant tests prove preview/no-op and no deletion."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Grant tests prove isolated real deletion for all four."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Invalidation messages name grant/no CLI equivalent."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "static_check",
+          "evidence": "Worktree description truthfully states conditional delete/grant."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Diagnostics preserved; no runtime LGREP_TRANSPORT environment access."
+        },
+        {
+          "contractId": "AC7",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "736 suite and ruff pass; managed proof release-time."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Additive response fields."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Handler-only; core/CLI unchanged."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "test",
+          "evidence": "Temporary isolated fixtures."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Prune semantics retained."
+        },
+        {
+          "contractId": "C5",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "SDK/Vision unchanged."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No proxy auth."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No invalidation CLI."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No candidate lookup change."
+        },
+        {
+          "contractId": "OOS4",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No broad IndexStore redesign."
+        }
+      ]
+    },
+    "amendments": []
+  },
+  "acceptanceCriteria": [
+    "**AC1 — Complete population:** the MCP registry yields exactly four tools with `destructiveHint=True`: `prune_orphans`, `prune_symbols`, `invalidate_cache`, and `invalidate_worktree_cache`. A test pins that exact set.",
+    "**AC2 — Denial is safe:** with `LGREP_ALLOW_DESTRUCTIVE_MCP` unset, all four tools perform no deletion. The two prune tools return `dry_run: true`; the two invalidation tools return schema-valid no-op results with additive non-empty `refused_reason` fields.",
+    "**AC3 — Grant honors intent:** with `LGREP_ALLOW_DESTRUCTIVE_MCP=1`, all four tools execute their existing destructive behavior against isolated fixtures. Tests prove actual deletion for each path; no production cache or symbol-store path is touched.",
+    "**AC4 — Refusals are honest:** invalidation refusal messages name `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and explicitly state that no CLI equivalent exists. They do not name a command that is unavailable.",
+    "**AC5 — Description matches behavior:** the public `invalidate_worktree_cache` description says it conditionally deletes the canonical cache directory when the canonical project is gone and no aliases remain, and that MCP deletion requires the grant.",
+    "**AC6 — Diagnostics preserved without global env mutation:** `DiagnosticsResult.transport` remains present and reports the current server transport; no runtime code writes or reads `os.environ[\"LGREP_TRANSPORT\"]`.",
+    "**AC7 — Full proof:** the focused grant tests, full suite, ruff check, and ruff format check pass; after merged-trunk deployment, real managed MCP calls to the two invalidation tools refuse without the grant and the service remains healthy."
+  ],
+  "documents": {
+    "proposal": "# Gate remaining destructive MCP tools\n\n## Why\n\nTwo MCP tools that delete from disk bypass the destructive-capability grant shipped in v3.2.2, and one advertises a safety property it does not have. On a shared unauthenticated surface serving 7+ agents, this leaves the exposure v3.2.2 was written to close still open through two other doors.\n\n## Root Cause Analysis\n\n**Symptom.** `invalidate_cache` and `invalidate_worktree_cache` perform real deletion over MCP without the `LGREP_ALLOW_DESTRUCTIVE_MCP` grant that v3.2.2 made mandatory for destructive MCP operations.\n\n**Immediate cause.** `_destructive_grant_present()` is defined in `src/lgrep/server/tools_maintenance.py:61` and called from exactly two sites: line 122 (`prune_orphans`) and line 176 (`prune_symbols`). The two other delete paths never call it.\n\n- `invalidate_cache` — declared at `src/lgrep/server/tools_symbols.py:589` with `destructiveHint=True`; reaches `store.delete_index(repo_key)` at `src/lgrep/tools/invalidate_cache.py:47`, which unlinks the index file via `src/lgrep/storage/index_store.py:209`.\n- `invalidate_worktree_cache` — declared at `src/lgrep/server/tools_maintenance.py:201` with `destructiveHint=True`; reaches `shutil.rmtree(db_path)` at `src/lgrep/tools/invalidate_worktree.py:207`.\n\n**Root cause.** The v3.2.2 fix was scoped to the reported defect rather than the property it exposed. The originating report concerned prune tools, so the remedy was applied to prune tools. The actual invariant — deletion over an unauthenticated shared surface requires an explicit grant — was never enumerated against the full set of deleting tools. `destructiveHint=True` already existed as a machine-readable marker of that set but was not consulted. The fix was correct and incomplete, and nothing structural made the incompleteness visible.\n\n## What Changes\n\n1. Extend handler-layer grant enforcement to `invalidate_cache` and `invalidate_worktree_cache`.\n   - These tools have no `dry_run` parameter, so denial is a no-op with an additive `refused_reason`, not a fake preview.\n   - They have no CLI equivalent. The refusal tells operators to set `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and honestly states that no CLI equivalent exists.\n2. Replace the false `invalidate_worktree_cache` MCP description with its actual conditional deletion behavior and grant requirement. Correct the README's grant scope.\n3. Add a structural test derived from the MCP tool registry: enumerate every `destructiveHint=True` tool; pin the expected set of four; prove each refuses without the grant and honors it with the grant. This prevents drift both when a tool is missed and when a new destructive tool is added.\n4. Repipe transport diagnostics off `os.environ`. Keep the public `DiagnosticsResult.transport` field additive, but replace the dead global `LGREP_TRANSPORT` side channel with an internal module attribute.\n\n## User Outcomes\n\n- [ ] Every destructive MCP tool needs the same explicit server-side grant, with no remaining exception\n- [ ] Refused invalidation calls do nothing and explain the missing grant without pretending a CLI command exists\n- [ ] The worktree invalidation description accurately states conditional cache deletion\n- [ ] A future destructive MCP tool cannot ship unguarded without failing tests\n\n## Affected Code\n\n- `src/lgrep/server/tools_symbols.py` — handler grant/no-op for `invalidate_cache`\n- `src/lgrep/server/tools_maintenance.py` — handler grant/no-op and correct description for `invalidate_worktree_cache`\n- `src/lgrep/server/responses.py` — additive `refused_reason` fields\n- `src/lgrep/server/bootstrap.py`, `src/lgrep/server/lifecycle.py` — repipe diagnostics transport\n- `tests/test_maintenance_grant.py` — registry-derived population coverage and real deletion assertions\n- `README.md` — correct grant scope\n\n## Constraints\n\n- Additive response fields only; do not remove or retype existing fields.\n- Do not change core/CLI behavior; guards remain in MCP handlers.\n- Do not alter `prune_orphans` / `prune_symbols` semantics.\n- Do not migrate the MCP SDK or upgrade unrelated dependencies.\n\n## Out of scope\n\n- Authentication for the Vision proxy itself.\n- Adding CLI commands for the invalidation tools.\n- Changing candidate lookup semantics.",
+    "problemStatement": "Two MCP tools that delete files from disk are not covered by the destructive-capability grant that v3.2.2 introduced, and one of them tells callers it will not delete the thing it deletes.\n\n`lgrep` is reached by 7+ concurrent agents through a shared, unauthenticated Vision proxy on port 6278. v3.2.2 established that deletion over MCP requires an explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, defaulting to off. That rule was applied to `prune_orphans` and `prune_symbols`. It was not applied to the other two tools that also delete.\n\nFour MCP tools declare `destructiveHint=True`. Only two are gated:\n\n| Tool | Deletes | Grant enforced |\n|---|---|---|\n| `prune_orphans` | cache directories | yes |\n| `prune_symbols` | symbol index files | yes |\n| `invalidate_cache` | `store.delete_index()` then `index_file.unlink()` | no |\n| `invalidate_worktree_cache` | `shutil.rmtree(db_path)` | no |\n\nSeparately, `invalidate_worktree_cache` carries a user-facing MCP description asserting \"Does NOT delete the canonical LanceDB cache,\" while its own docstring twenty lines below states it \"deletes the cache dir\" and the implementation calls `shutil.rmtree`. The description does not merely omit the risk; it affirmatively denies it.",
+    "agreement": "# Agreement — Gate remaining destructive MCP tools\n\n## Objective\n\nMake the explicit server-side destructive grant a complete invariant across every MCP tool marked destructive, while making the public descriptions and diagnostics truthful.\n\n## Acceptance criteria\n\n- **AC1 — Complete population:** the MCP registry yields exactly four tools with `destructiveHint=True`: `prune_orphans`, `prune_symbols`, `invalidate_cache`, and `invalidate_worktree_cache`. A test pins that exact set.\n- **AC2 — Denial is safe:** with `LGREP_ALLOW_DESTRUCTIVE_MCP` unset, all four tools perform no deletion. The two prune tools return `dry_run: true`; the two invalidation tools return schema-valid no-op results with additive non-empty `refused_reason` fields.\n- **AC3 — Grant honors intent:** with `LGREP_ALLOW_DESTRUCTIVE_MCP=1`, all four tools execute their existing destructive behavior against isolated fixtures. Tests prove actual deletion for each path; no production cache or symbol-store path is touched.\n- **AC4 — Refusals are honest:** invalidation refusal messages name `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and explicitly state that no CLI equivalent exists. They do not name a command that is unavailable.\n- **AC5 — Description matches behavior:** the public `invalidate_worktree_cache` description says it conditionally deletes the canonical cache directory when the canonical project is gone and no aliases remain, and that MCP deletion requires the grant.\n- **AC6 — Diagnostics preserved without global env mutation:** `DiagnosticsResult.transport` remains present and reports the current server transport; no runtime code writes or reads `os.environ[\"LGREP_TRANSPORT\"]`.\n- **AC7 — Full proof:** the focused grant tests, full suite, ruff check, and ruff format check pass; after merged-trunk deployment, real managed MCP calls to the two invalidation tools refuse without the grant and the service remains healthy.\n\n## Constraints\n\n- Additive response fields only; preserve current response fields and types.\n- Keep guards in MCP handlers. Core functions and any CLI behavior stay unchanged.\n- Use isolated temporary storage: monkeypatch `DEFAULT_SYMBOLS_DIR` for invalidate-cache and `LGREP_CACHE_DIR` for worktree-cache.\n- Keep the existing `prune_orphans` / `prune_symbols` semantics intact.\n- Do not migrate the MCP SDK or change Vision topology, ports, session settings, or global configuration.\n\n## Out of scope\n\n- Proxy authentication or caller identity.\n- New CLI commands for invalidation.\n- Candidate lookup behavior.\n- Broad redesign of `IndexStore._cache`; only fixture isolation needed for this change.",
+    "design": "# Design — Gate remaining destructive MCP tools\n\n## Decision\n\nKeep destructive authorization in MCP handlers, where v3.2.2 established it. Core functions remain reusable and grant-free. Extend the same explicit `LGREP_ALLOW_DESTRUCTIVE_MCP` predicate to the two missed handlers.\n\n## Refusal shape\n\n`invalidate_cache` and `invalidate_worktree_cache` have no `dry_run` argument, so they cannot offer a preview. With the grant absent, each handler returns its existing result schema unchanged plus additive `refused_reason`:\n\n- `invalidate_cache`: `status: \"refused\"`; does not call the core function.\n- `invalidate_worktree_cache`: empty `paths_cleaned`, zero `bytes_reclaimed`, empty `entries`; does not call the core function.\n\nBoth messages name `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and truthfully say no CLI equivalent exists. They do not reuse the prune helper, which says \"preview\" and names a CLI command.\n\n## Structural population proof\n\nA test enumerates FastMCP's registered tools via the established synchronous `_tool_manager.list_tools()` convention. It selects `t.annotations is not None and t.annotations.destructiveHint is True`, asserts the exact four-tool set, and parameterizes denial and granted paths over it. This makes a future new destructive tool require an explicit population decision.\n\nConcrete granted fixtures remain isolated:\n\n- patch `lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR` for `invalidate_cache`;\n- set `LGREP_CACHE_DIR` for `invalidate_worktree_cache`;\n- assert a real fixture artifact was deleted only under the grant.\n\n## Transport diagnostics\n\n`DiagnosticsResult.transport` stays public and additive. Replace `os.environ[\"LGREP_TRANSPORT\"]` with an internal bootstrap module transport attribute, read lazily by lifecycle startup. This preserves diagnostics without process-wide mutation or a dead security side channel.\n\n## Documentation\n\nCorrect the public `invalidate_worktree_cache` description: it conditionally deletes the canonical cache directory when the canonical project is absent and no aliases remain; MCP deletion needs the grant. Broaden README wording from the two prune tools to every destructive MCP tool. Update the live spec's obsolete parenthetical that says transport is set from `LGREP_TRANSPORT`; leave historical CHANGELOG entries unchanged.\n\n## Risks\n\nNo-op refusal is intentionally different from prune preview because these handlers do not accept `dry_run`. Schema validity and explicit status/message make that difference observable. Existing handler tests that expect deletion receive the grant explicitly; core-function tests stay unchanged.\n\n## Verification\n\nFocused denial/grant tests, registry population test, existing server/bootstrap diagnostics tests, full suite, and post-merge managed endpoint refusal calls.",
+    "executiveSummary": "# Executive Summary — Gate remaining destructive MCP tools\n\n## Outcome\n\nEvery MCP tool that declares itself destructive now requires the same explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP=1` grant before it can delete data. The v3.2.2 security fix had correctly gated the two prune tools but missed two adjacent delete paths: symbol-index invalidation and worktree-cache invalidation.\n\nWithout the grant, prune tools return a preview. The invalidation tools have no preview parameter, so they safely do nothing and return a schema-compatible `refused_reason`. Their message tells the operator exactly what is missing and truthfully says there is no CLI equivalent.\n\n## Value\n\nA shared Vision proxy can front a local subprocess and still report `stdio`, so connection type does not establish caller authority. The change makes explicit grant — not a proxy-shaped inference — the complete invariant across the four destructive MCP tools.\n\nThe invariant is structural now: tests enumerate the MCP registry and pin exactly four `destructiveHint=True` tools. Adding or omitting a destructive tool forces an explicit test review rather than silently creating another exception.\n\n## Verification\n\n- Without grant: all four tools prove no deletion.\n- With grant: all four prove actual deletion in isolated temporary fixtures only.\n- `DiagnosticsResult.transport` remains available, but transport no longer flows through a process-wide environment variable that could be mistaken for authorization input.\n- Full suite: 736 passed. Lint and formatting clean.\n- Review strengthened proof that refused index invalidation leaves an existing index file intact, while the granted call deletes that exact file.\n\n## Risk and release proof\n\n`invalidate_worktree_cache` refuses the whole operation without the grant, including alias cleanup; this is the agreed safe no-op behavior rather than a partial mutation.\n\nThe final live proof is release-time: after merged-trunk deployment, invoke both invalidation tools through the shared Vision endpoint without the grant and confirm refusal plus service health. The current shared service remains unchanged until then.",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-30T20:31:53.472Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | **AC1 — Complete population:** the MCP registry yields exactly four tools with `destructiveHint=True`: `prune_orphans`, `prune_symbols`, `invalidate_cache`, and `invalidate_worktree_cache`. A test pins that exact set. | pass | Registry tests pin four destructiveHint tools; full 736 suite pass. |\n| AC2 | acceptance_criterion | **AC2 — Denial is safe:** with `LGREP_ALLOW_DESTRUCTIVE_MCP` unset, all four tools perform no deletion. The two prune tools return `dry_run: true`; the two invalidation tools return schema-valid no-op results with additive non-empty `refused_reason` fields. | pass | No-grant tests prove preview/no-op and no deletion. |\n| AC3 | acceptance_criterion | **AC3 — Grant honors intent:** with `LGREP_ALLOW_DESTRUCTIVE_MCP=1`, all four tools execute their existing destructive behavior against isolated fixtures. Tests prove actual deletion for each path; no production cache or symbol-store path is touched. | pass | Grant tests prove isolated real deletion for all four. |\n| AC4 | acceptance_criterion | **AC4 — Refusals are honest:** invalidation refusal messages name `LGREP_ALLOW_DESTRUCTIVE_MCP=1` and explicitly state that no CLI equivalent exists. They do not name a command that is unavailable. | pass | Invalidation messages name grant/no CLI equivalent. |\n| AC5 | acceptance_criterion | **AC5 — Description matches behavior:** the public `invalidate_worktree_cache` description says it conditionally deletes the canonical cache directory when the canonical project is gone and no aliases remain, and that MCP deletion requires the grant. | pass | Worktree description truthfully states conditional delete/grant. |\n| AC6 | acceptance_criterion | **AC6 — Diagnostics preserved without global env mutation:** `DiagnosticsResult.transport` remains present and reports the current server transport; no runtime code writes or reads `os.environ[\"LGREP_TRANSPORT\"]`. | pass | Diagnostics preserved; no runtime LGREP_TRANSPORT environment access. |\n| AC7 | acceptance_criterion | **AC7 — Full proof:** the focused grant tests, full suite, ruff check, and ruff format check pass; after merged-trunk deployment, real managed MCP calls to the two invalidation tools refuse without the grant and the service remains healthy. | pass | 736 suite and ruff pass; managed proof release-time. |\n| C1 | constraint | Additive response fields only; preserve current response fields and types. | respected | Additive response fields. |\n| C2 | constraint | Keep guards in MCP handlers. Core functions and any CLI behavior stay unchanged. | respected | Handler-only; core/CLI unchanged. |\n| C3 | constraint | Use isolated temporary storage: monkeypatch `DEFAULT_SYMBOLS_DIR` for invalidate-cache and `LGREP_CACHE_DIR` for worktree-cache. | respected | Temporary isolated fixtures. |\n| C4 | constraint | Keep the existing `prune_orphans` / `prune_symbols` semantics intact. | respected | Prune semantics retained. |\n| C5 | constraint | Do not migrate the MCP SDK or change Vision topology, ports, session settings, or global configuration. | respected | SDK/Vision unchanged. |\n| OOS1 | out_of_scope | Proxy authentication or caller identity. | not_applicable | No proxy auth. |\n| OOS2 | out_of_scope | New CLI commands for invalidation. | not_applicable | No invalidation CLI. |\n| OOS3 | out_of_scope | Candidate lookup behavior. | not_applicable | No candidate lookup change. |\n| OOS4 | out_of_scope | Broad redesign of `IndexStore._cache`; only fixture isolation needed for this change. | not_applicable | No broad IndexStore redesign. |\n\n"
+  },
+  "artifacts": {
+    "problemStatement": {
+      "updatedAt": "2026-07-30T05:19:54.108Z",
+      "contentHash": "8f3585e8298a2af018c9a26b67dd6ef55d85d711ca0869f89b3784868ca6fd49",
+      "source": "temporal",
+      "readable": false
+    },
+    "proposal": {
+      "updatedAt": "2026-07-30T08:02:15.684Z",
+      "contentHash": "9e7190f68716d339d788b651ad3b55a40dd141ecce92c0ec72d4c8db692fb3dc",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-30T08:02:29.522Z",
+      "contentHash": "2f0e9b47fbdcf7f9134b5ae8dc271e504d839710084ba1bd2a4f335c6b391655",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-30T18:40:58.503Z",
+      "contentHash": "b50bf701a2bdb855afb10de927efa23f440daa71f9a91737b0e26f37b262d1c8",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-30T19:48:43.346Z",
+      "contentHash": "90b70fdea608edcd6fab87b2af73d4513103cba68a76f0cc87eee599396a23c8",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_ASSUMPTION_HEAVY",
+      "severity": "warning",
+      "message": "Proposal references authentication/authorization without specifying the model. What auth mechanism will be used?",
+      "recorded_at": "2026-07-30T17:22:48.684Z"
+    }
+  ],
+  "reentry_history": [
+    {
+      "from_gate": "execution",
+      "reason": "Recover stale acceptance snapshot after verification-evidence dispositions for tk-389d9063d15c and tk-7d4722205f39; same confirmed ADV gate re-evaluation defect as companion benchmark change.",
+      "scope_delta": "No code, task, contract, or evidence change. Reset gate records only to re-evaluate persisted evidence and restore the existing all-pass review matrix.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-07-30T20:29:24.772Z",
+      "gates_reset": [
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    },
+    {
+      "from_gate": "planning",
+      "reason": "Second-stage workflow-state recovery: execution re-entry short-circuited with 0 reopened gates while stale acceptance snapshot remains. Reset planning and downstream records to force fresh execution/acceptance readiness evaluation.",
+      "scope_delta": "No code, task graph, contract, or evidence change. Workflow-state recovery only; re-complete existing user-approved planning and agent-proven execution, then restore review matrix.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-07-30T20:29:40.069Z",
+      "gates_reset": [
+        "planning",
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    },
+    {
+      "from_gate": "planning",
+      "reason": "Force fresh acceptance readiness evaluation after restoring the review matrix; acceptance remained pinned to its pre-matrix stuck snapshot.",
+      "scope_delta": "No code, task, contract, or evidence change. Workflow recovery only; re-complete existing approved planning/execution and restore existing matrix before fresh acceptance evaluation.",
+      "reopened_by": "agent",
+      "reopened_at": "2026-07-30T20:31:10.057Z",
+      "gates_reset": [
+        "planning",
+        "execution",
+        "acceptance",
+        "release"
+      ]
+    }
+  ],
+  "same_project_dependencies": [],
+  "lastSignalAt": "2026-07-30T20:33:02.747Z",
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "Post-release triage of fixLookupPruneDefects (v3.2.2); adv-tron recon candidate #1, independently verified against src/lgrep/server/*.py"
+  },
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true,
+  "verification_evidence_dispositions": [
+    {
+      "taskId": "tk-389d9063d15c",
+      "concernKey": "verification",
+      "disposition": "fixed",
+      "evidence": "Fresh durable GREEN evidence tr_ms7wtkcc_e84b7ab0: 36 focused grant/registry/bootstrap/diagnostics tests passed, ruff clean; subsequent worker strengthening tr_ms7wrup7_4e71658a and docs evidence tr_ms7wvav5_6affb995. Old worker report warning IDs are non-durable; checkpoint 558eab9 and current review evidence supersede them.",
+      "dispositionedAt": "2026-07-30T20:29:00.875Z"
+    },
+    {
+      "taskId": "tk-7d4722205f39",
+      "concernKey": "verification",
+      "disposition": "fixed",
+      "evidence": "Fresh durable GREEN evidence tr_ms7xde6j_930589f7: 16 grant tests passed with grant unset and ruff clean. Independent verifier full suite: 736 passed; reviewer strengthened denial/granted exact-index-file proof at checkpoint 07bdaf6. Managed endpoint proof is deliberately release-time and not a local evidence gap.",
+      "dispositionedAt": "2026-07-30T20:29:07.506Z"
+    }
+  ],
+  "release_notes": {
+    "audience": "both",
+    "category": "security",
+    "headline_internal": "Every destructive MCP tool now requires the explicit LGREP_ALLOW_DESTRUCTIVE_MCP grant",
+    "headline_external": "Destructive maintenance calls through lgrep MCP now require an explicit server-side opt-in",
+    "highlights": [
+      "All four destructive MCP tools now require LGREP_ALLOW_DESTRUCTIVE_MCP=1 before deleting: prune_orphans, prune_symbols, invalidate_cache, and invalidate_worktree_cache.",
+      "Without the grant, prune tools return a preview; invalidation tools safely do nothing and return a refused_reason.",
+      "The unsafe transport-based authority inference remains removed. Diagnostics still report startup transport, but it no longer uses LGREP_TRANSPORT as a runtime environment side channel.",
+      "Worktree cache invalidation documentation now accurately states that it can delete a canonical cache directory when the project is gone and no aliases remain."
+    ],
+    "area": "lgrep MCP server",
+    "user_action_required": true,
+    "breaking": {
+      "description": "MCP callers that previously used invalidate_cache or invalidate_worktree_cache to delete data without LGREP_ALLOW_DESTRUCTIVE_MCP now receive a no-op refusal.",
+      "migration": "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 in the server environment only when destructive MCP maintenance is intended. Invalidation tools have no CLI equivalent; prune CLI --execute commands remain unchanged."
+    }
+  },
+  "worker_bundle_impact": {
+    "kind": "not_applicable",
+    "rationale": "Python MCP server change with no ADV worker bundle, Temporal workflow code, or replay-determinism surface. Release proof is full Python test suite plus managed MCP endpoint verification after merged-trunk deployment.",
+    "confirmed_at": "2026-07-30T20:32:30.848Z"
+  },
+  "creation_request_hash": "c383138bea8229e809fea8493e8fb0718af68301831167528144aade966d53d6",
+  "projection_revision": 56,
+  "projection_commits": [
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 6,
+      "new_revision": 7,
+      "committed_at": "2026-07-30T08:00:37.816Z"
+    },
+    {
+      "mutation_kind": "proposalUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "e3656915fe64807d11d640062aed595339180ad8efd3826dd0f5e4f9302157d1:updateArtifacts:proposal",
+      "operation_id": "e3656915fe64807d11d640062aed595339180ad8efd3826dd0f5e4f9302157d1:updateArtifacts:proposal",
+      "payload_hash": "ebe3bfa45a14e71fdd048d6ec5953adbd665fef1d4db88a059f7f5cc8144aa38",
+      "state_revision": 5,
+      "prior_revision": 7,
+      "new_revision": 8,
+      "committed_at": "2026-07-30T08:02:15.859Z"
+    },
+    {
+      "mutation_kind": "agreementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "0afb2225ff674e05c53ec9c8514d002acbbb5ddb4b2aec036c7a5e15f69dca84:updateArtifacts:agreement",
+      "operation_id": "0afb2225ff674e05c53ec9c8514d002acbbb5ddb4b2aec036c7a5e15f69dca84:updateArtifacts:agreement",
+      "payload_hash": "6bc5a131a46bc03dabdff8cdc3ff8d25a2b36762af3681f94db2aadeb0d34b1b",
+      "state_revision": 6,
+      "prior_revision": 8,
+      "new_revision": 9,
+      "committed_at": "2026-07-30T08:02:29.643Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 9,
+      "new_revision": 10,
+      "committed_at": "2026-07-30T17:21:31.744Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 10,
+      "new_revision": 11,
+      "committed_at": "2026-07-30T17:21:47.257Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "3755fea9ab586bb7536728d0d0f30459c0cfe56b607d00c62344303aecbcb10e:updateArtifacts:design",
+      "operation_id": "3755fea9ab586bb7536728d0d0f30459c0cfe56b607d00c62344303aecbcb10e:updateArtifacts:design",
+      "payload_hash": "98d6196d271f52cd61e020d723b77972ca9c6b0a3edb2328f687261632605e50",
+      "state_revision": 7,
+      "prior_revision": 11,
+      "new_revision": 12,
+      "committed_at": "2026-07-30T17:22:23.619Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 12,
+      "new_revision": 13,
+      "committed_at": "2026-07-30T17:31:04.741Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 13,
+      "new_revision": 14,
+      "committed_at": "2026-07-30T17:31:04.990Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "41900668129e5de7e84db68c4e77b520f99b5136dc0fcdbe9f4bcb65c73df4fa:updateArtifacts:design",
+      "operation_id": "41900668129e5de7e84db68c4e77b520f99b5136dc0fcdbe9f4bcb65c73df4fa:updateArtifacts:design",
+      "payload_hash": "eb2f26441ca9895185cb35d9e760d5b7e69dfc0bab94554130c80ef1c7737677",
+      "state_revision": 8,
+      "prior_revision": 14,
+      "new_revision": 15,
+      "committed_at": "2026-07-30T18:40:59.183Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 15,
+      "new_revision": 16,
+      "committed_at": "2026-07-30T18:41:11.636Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 16,
+      "new_revision": 17,
+      "committed_at": "2026-07-30T18:42:16.006Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 17,
+      "new_revision": 18,
+      "committed_at": "2026-07-30T18:42:16.209Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 18,
+      "new_revision": 19,
+      "committed_at": "2026-07-30T18:42:25.805Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 19,
+      "new_revision": 20,
+      "committed_at": "2026-07-30T18:42:35.068Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 20,
+      "new_revision": 21,
+      "committed_at": "2026-07-30T18:53:06.109Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 21,
+      "new_revision": 22,
+      "committed_at": "2026-07-30T18:53:47.979Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 22,
+      "new_revision": 23,
+      "committed_at": "2026-07-30T19:13:21.444Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 23,
+      "new_revision": 24,
+      "committed_at": "2026-07-30T19:14:09.022Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 24,
+      "new_revision": 25,
+      "committed_at": "2026-07-30T19:24:59.667Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 25,
+      "new_revision": 26,
+      "committed_at": "2026-07-30T19:24:59.897Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 26,
+      "new_revision": 27,
+      "committed_at": "2026-07-30T19:30:50.252Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 27,
+      "new_revision": 28,
+      "committed_at": "2026-07-30T19:30:50.558Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 28,
+      "new_revision": 29,
+      "committed_at": "2026-07-30T19:33:21.688Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 29,
+      "new_revision": 30,
+      "committed_at": "2026-07-30T19:33:22.120Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 30,
+      "new_revision": 31,
+      "committed_at": "2026-07-30T19:33:58.595Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 31,
+      "new_revision": 32,
+      "committed_at": "2026-07-30T19:34:35.324Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 32,
+      "new_revision": 33,
+      "committed_at": "2026-07-30T19:39:59.371Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 33,
+      "new_revision": 34,
+      "committed_at": "2026-07-30T19:40:21.191Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 34,
+      "new_revision": 35,
+      "committed_at": "2026-07-30T19:46:14.293Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 35,
+      "new_revision": 36,
+      "committed_at": "2026-07-30T19:46:14.597Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 36,
+      "new_revision": 37,
+      "committed_at": "2026-07-30T19:47:30.963Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785440898543_ij2nezxy",
+      "prior_revision": 37,
+      "new_revision": 38,
+      "committed_at": "2026-07-30T19:48:18.805Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "d9ca0940b297be5a57e4389f2877d611ac55dda70dcf903439b9f8e04562d6bf:updateArtifacts:executiveSummary",
+      "operation_id": "d9ca0940b297be5a57e4389f2877d611ac55dda70dcf903439b9f8e04562d6bf:updateArtifacts:executiveSummary",
+      "payload_hash": "933c97a93a9a5051df7525f92b8228a473f2cd75d741680840f67cba052e7b34",
+      "state_revision": 9,
+      "prior_revision": 38,
+      "new_revision": 39,
+      "committed_at": "2026-07-30T19:48:43.757Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 39,
+      "new_revision": 40,
+      "committed_at": "2026-07-30T20:28:43.105Z"
+    },
+    {
+      "mutation_kind": "verification_evidence_disposition",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785443340887_3jebvcto",
+      "prior_revision": 40,
+      "new_revision": 41,
+      "committed_at": "2026-07-30T20:29:01.186Z"
+    },
+    {
+      "mutation_kind": "verification_evidence_disposition",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785443347517_0lupn77t",
+      "prior_revision": 41,
+      "new_revision": 42,
+      "committed_at": "2026-07-30T20:29:07.935Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 42,
+      "new_revision": 43,
+      "committed_at": "2026-07-30T20:29:25.061Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 43,
+      "new_revision": 44,
+      "committed_at": "2026-07-30T20:29:40.438Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 44,
+      "new_revision": 45,
+      "committed_at": "2026-07-30T20:30:01.846Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 45,
+      "new_revision": 46,
+      "committed_at": "2026-07-30T20:30:12.274Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 46,
+      "new_revision": 47,
+      "committed_at": "2026-07-30T20:30:21.677Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785443442846_lcgvv56s",
+      "prior_revision": 47,
+      "new_revision": 48,
+      "committed_at": "2026-07-30T20:30:43.140Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 48,
+      "new_revision": 49,
+      "committed_at": "2026-07-30T20:30:57.733Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 49,
+      "new_revision": 50,
+      "committed_at": "2026-07-30T20:31:10.320Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 50,
+      "new_revision": 51,
+      "committed_at": "2026-07-30T20:31:24.181Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 51,
+      "new_revision": 52,
+      "committed_at": "2026-07-30T20:31:33.435Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785443513517_azxhjfap",
+      "prior_revision": 52,
+      "new_revision": 53,
+      "committed_at": "2026-07-30T20:31:53.862Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 53,
+      "new_revision": 54,
+      "committed_at": "2026-07-30T20:32:01.505Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "gateRemainingDestructiveMcp",
+      "prior_revision": 54,
+      "new_revision": 55,
+      "committed_at": "2026-07-30T20:32:31.366Z"
+    },
+    {
+      "mutation_kind": "releaseNotesSet",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "bfcee17fc506311b367c36c3968fe95751ae55e1f90da6a06f280c39b2e92ca0:releaseNotesSet",
+      "operation_id": "bfcee17fc506311b367c36c3968fe95751ae55e1f90da6a06f280c39b2e92ca0:releaseNotesSet",
+      "payload_hash": "914e4a46e4c04773b188b3fb242633655bd467d7cd9f6d17a1432ced254574aa",
+      "state_revision": 10,
+      "prior_revision": 55,
+      "new_revision": 56,
+      "committed_at": "2026-07-30T20:33:03.486Z"
+    }
+  ],
+  "state_revision": 10
+}

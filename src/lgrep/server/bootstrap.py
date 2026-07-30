@@ -8,6 +8,17 @@ import sys
 
 import structlog
 
+# Transport kind recorded by ``run_server`` and read lazily by the lifespan.
+# Kept as a module attribute rather than an environment variable so diagnostics
+# can report the actual startup transport without creating a side channel that
+# other code could mistake for configuration.
+_startup_transport: str | None = None
+
+
+def get_startup_transport() -> str | None:
+    """Return the transport kind recorded by ``run_server``, if any."""
+    return _startup_transport
+
 
 def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 6285) -> int:
     """Start the MCP server.
@@ -17,6 +28,8 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
         host: Host to bind to (only for HTTP transport).
         port: Port to bind to (only for HTTP transport).
     """
+    global _startup_transport
+
     # Import here to avoid circular imports at module load time
     from lgrep.server import mcp
 
@@ -39,10 +52,9 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
 
-    # Record the transport in the environment so the lifespan can
-    # populate LgrepContext.transport. Transport-aware safety checks
-    # (e.g. refusing destructive prune on shared HTTP) read this.
-    os.environ["LGREP_TRANSPORT"] = transport
+    # Preserve the startup transport for diagnostics without exposing it as an
+    # environment variable that other code could read or mutate.
+    _startup_transport = transport
 
     if transport == "streamable-http":
         mcp.settings.host = host
