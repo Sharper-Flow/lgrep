@@ -5,7 +5,7 @@
   "capabilities": [
     {
       "capability": "lgrep-dependency-integrity",
-      "base_version": "0.0.0",
+      "base_version": "1.0.0",
       "target_version": "1.0.0",
       "spec_sha256": "c99f012c78f534365202ba6595e7fe753211f213ed0b1bce14dea5ca7b04c402",
       "document_sha256": "3c45b98a2cd27721ac0ac154549805b53b3811f55898af2d271737af1ec43a4f",
@@ -16,7 +16,7 @@
         {
           "deltaId": "dl-mcpSdkBound01",
           "operation": "add",
-          "status": "missing",
+          "status": "identical",
           "targetId": "rq-mcpSdkBound01"
         }
       ]

@@ -499,7 +499,7 @@
     },
     "acceptance": {
       "status": "done",
-      "completed_at": "2026-07-30T02:46:47.847Z",
+      "completed_at": "2026-07-30T02:49:28.710Z",
       "completed_by": "agent",
       "approval_evidence": "Independent reviewer returned READY. Its one added assertion was rejected with evidence because it tested bound spelling rather than behavior and would have failed valid forms; the property check was broadened instead and re-verified. Review matrix has 14 rows and zero failures. Final state: 698 tests passed, ruff clean, clean-build probe advertises all 21 tools.",
       "started_at": "2026-07-30T02:45:57.608Z",
@@ -507,11 +507,21 @@
         "kind": "acceptance",
         "content_hash": "70cc1bf016ec1bb6d995feac1cd2791bd2b58d88f27a79d24f1c008d86de9dc9",
         "non_whitespace_chars": 1802,
-        "checked_at": "2026-07-30T02:21:48.426Z"
+        "checked_at": "2026-07-30T02:21:48.427Z"
       }
     },
     "release": {
-      "status": "pending"
+      "status": "stuck",
+      "stuck_reason": "WORKER_BUNDLE_PROVENANCE_DECLARATION_REQUIRED: Worker-bundle impact declaration is required before release readiness can be evaluated (rq-workerBundleReleaseProvenance01).",
+      "readiness_blockers": [
+        {
+          "code": "WORKER_BUNDLE_PROVENANCE_DECLARATION_REQUIRED",
+          "gateId": "release",
+          "message": "Worker-bundle impact declaration is required before release readiness can be evaluated (rq-workerBundleReleaseProvenance01).",
+          "remediation": "Declare worker_bundle_impact with kind 'required' or 'not_applicable' and a rationale."
+        }
+      ],
+      "started_at": "2026-07-30T03:01:16.912Z"
     }
   },
   "contract": {
@@ -823,7 +833,7 @@
   },
   "reentry_history": [],
   "same_project_dependencies": [],
-  "lastSignalAt": "2026-07-30T02:46:47.847Z",
+  "lastSignalAt": "2026-07-30T03:01:23.659Z",
   "fast_follow_of": {
     "parent_change_id": "testVisionLgrepIntegration",
     "linked_at": "2026-07-30T02:21:48.311Z"
@@ -843,8 +853,13 @@
       "dispositionedAt": "2026-07-30T02:46:39.696Z"
     }
   ],
+  "worker_bundle_impact": {
+    "kind": "not_applicable",
+    "rationale": "lgrep is a Python MCP server distributed as a uv tool and run as a local stdio or shared HTTP process. The repository has no worker-bundle build or replay-determinism pipeline, and this change touches only a dependency bound, a tool argument binding, tests, changelog, and version metadata.",
+    "confirmed_at": "2026-07-30T03:01:23.659Z"
+  },
   "creation_request_hash": "1556fd063e505933fca87f4fd2ae694e25507062fa86875e7caeda8c5b5c331d",
-  "projection_revision": 34,
+  "projection_revision": 36,
   "projection_commits": [
     {
       "mutation_kind": "problemStatementUpdated",
@@ -1144,6 +1159,22 @@
       "prior_revision": 33,
       "new_revision": 34,
       "committed_at": "2026-07-30T02:49:28.808Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 34,
+      "new_revision": 35,
+      "committed_at": "2026-07-30T03:01:05.690Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "pinMcpV1",
+      "prior_revision": 35,
+      "new_revision": 36,
+      "committed_at": "2026-07-30T03:01:23.856Z"
     }
   ],
   "state_revision": 9

@@ -3,7 +3,7 @@
 **Change ID:** pinMcpV1
 **Title:** Pin mcp to v1
 **Status:** archived
-**Generated:** 2026-07-30T03:01:06.098Z
+**Generated:** 2026-07-30T03:01:36.271Z
 
 ## Identity Anchors
 
@@ -24,7 +24,7 @@
 | planning | done |
 | execution | done |
 | acceptance | done |
-| release | pending |
+| release | stuck |
 
 ## Epic Context
 

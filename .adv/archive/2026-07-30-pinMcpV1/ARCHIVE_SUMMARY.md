@@ -1,7 +1,7 @@
 # Archive: Pin mcp to v1
 
 **Change ID:** pinMcpV1
-**Archived:** 2026-07-30T03:01:06.094Z
+**Archived:** 2026-07-30T03:01:36.252Z
 **Created:** 2026-07-30T02:21:48.325Z
 
 ## Tasks Completed
