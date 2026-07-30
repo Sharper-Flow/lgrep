@@ -70,9 +70,13 @@ def test_mcp_dependency_excludes_unmigrated_major():
     """
     requirement = _declared_requirement("mcp")
 
+    # Assert the property (does this requirement admit an unmigrated release?) rather
+    # than the spelling of the bound. Forms such as 'mcp~=1.28' and 'mcp==1.29.0'
+    # carry no '<' operator yet correctly exclude 2.x, so asserting on operators
+    # would reject valid declarations.
     incompatible = [
         version
-        for version in ("2.0.0", "2.1.0", "3.0.0")
+        for version in ("2.0.0", "2.0.0rc1", "2.1.0", "2.99.0", "3.0.0", "10.0.0")
         if requirement.specifier.contains(version, prereleases=True)
     ]
     assert not incompatible, (
