@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "id": "ws-McJr7j",
+      "type": "gotcha",
+      "content": "Destructive-tool transport guard is defeated by the Vision proxy. `_transport_is_local` in src/lgrep/server/tools_maintenance.py:57-81 treats transport 'stdio' as single-user because 'the caller is the same process tree as the server', and spec rq-7cT4wN1qJs requires non-stdio transports to coerce dry_run=True. Vision runs lgrep as a stdio subprocess but fronts it with a shared HTTP port (127.0.0.1:6278) that any local client can reach, and vision_status reports no bearer_token configured. Verified: lgrep_diagnostics called through the Vision HTTP session reports transport 'stdio'. Therefore prune_orphans and prune_symbols would accept dry_run=false from a shared unauthenticated surface, which is exactly what the guard intends to prevent. Not proven by executing deletion, deliberately. Severity high; disposition fix now in a follow-up change. The durable lesson: transport kind is not a proxy for caller trust once a multiplexing proxy fronts the pipe.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:29.139Z"
+    },
+    {
+      "id": "ws-cUmcli",
+      "type": "gotcha",
+      "content": "search_references usage_filter 'include_tests' is indistinguishable from 'production_first'. Managed-endpoint evidence run tr_ms6xojph_5cb7ac80 against a 128-occurrence fixture: production_first returned total_matches 133 with 100 rows and 0 test hits; include_tests returned total_matches 133 with 100 rows and 0 test hits; only tests_only differed, returning 5 test rows. production_first does not exclude tests from the total, it only orders production first, so once the 100-result cap truncates the response the test occurrences are never reachable through include_tests. The filter therefore has no observable effect at or above the cap. Severity high for usefulness; disposition follow-up. Fix direction: make include_tests interleave or guarantee test representation within the cap, or report the truncated-away test count explicitly.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:40.194Z"
+    },
+    {
+      "id": "ws-JLUOx1",
+      "type": "gotcha",
+      "content": "Stale occurrence data is served with no freshness signal. Evidence run tr_ms6xqzks_5095cd1f: after shifting every line of a fixture module down by ten without re-indexing, search_references returned 21 rows whose line_number and line_text no longer matched the file on disk, for example an indexed row claiming line 3 is 'from app.core import greet' when line 3 is now '# padding'. The response stayed bounded, schema-stable and fast, and carried only the generic candidate disclaimer; nothing indicated the index predates the file. An incremental re-index cleared all 21. Severity medium; disposition follow-up. Agents cannot distinguish a correct hit from a stale one, so line-anchored navigation can silently land in the wrong place. Fix direction: compare indexed file mtime or content hash at query time and surface a per-file staleness flag, since semantic search already has a staleness pre-flight.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:50.630Z"
+    },
+    {
+      "id": "ws-pIosyJ",
+      "type": "pattern",
+      "content": "Validate a managed MCP service through its real proxied endpoint, not only through the agent's tool catalog. Two false conclusions were avoided this way. First, an early probe reported the Vision endpoint as unreachable with HTTP 400 'no server available'; the actual cause was a missing 'Accept: application/json, text/event-stream' header, and once corrected the streamable-HTTP handshake succeeded and returned serverInfo vision-proxy-lgrep with all 21 tools. Second, an OpenCode session's Code Mode catalog keeps whatever tool list it built at session start, so after any Vision server restart existing sessions report the namespace as empty or unknown while the service is provably healthy. Neither symptom means the service is broken. Durable rule: classify an MCP failure as client-catalog versus service-registration by probing the endpoint or binary directly, and remember that agent sessions must be restarted after a Vision server restart.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:59.793Z"
+    },
+    {
+      "id": "ws-hS3NeI",
+      "type": "failure",
+      "content": "An unbounded dependency hid an entire uncollectable test suite, and the missing coverage hid a shipped feature that never worked. lgrep declared mcp>=1.0.0; once mcp 2.0.0 became stable it removed mcp.server.fastmcp, so the server failed at import. Because the server and CLI suites import the server, they could not even be collected, and that collection failure was repeatedly recorded during acceptance as a pre-existing environmental blocker rather than investigated. It was never environmental. Pinning mcp>=1.28,<2 made the suite collectable and immediately exposed that search_references raised TypeError on every MCP call, since its kind argument collided with RuntimeSupervisor.run_blocking's own kind parameter. The feature had shipped and been accepted without ever executing end to end. Durable rules: never accept 'tests cannot be collected' as environmental without tracing the cause; treat an uncollectable suite as a release blocker; and bind arguments with functools.partial before crossing a supervisor boundary that owns generic parameter names.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:12:09.888Z"
+    }
+  ],
+  "count": 5
+}
