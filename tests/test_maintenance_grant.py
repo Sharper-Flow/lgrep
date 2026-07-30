@@ -18,6 +18,7 @@ import pytest
 
 from lgrep.server import mcp
 from lgrep.storage import get_project_db_path, write_project_meta
+from lgrep.storage.index_store import IndexStore
 from lgrep.tools.index_folder import index_folder
 
 if TYPE_CHECKING:
@@ -267,6 +268,10 @@ class TestRemainingDestructiveGrants:
         monkeypatch.setattr("lgrep.storage.index_store.DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
         repo = tmp_path / "repo"
         repo.mkdir()
+        (repo / "file.py").write_text("def f(): pass\n")
+        index_folder(str(repo), storage_dir=tmp_path / "symbols")
+        index_file = IndexStore(tmp_path / "symbols")._index_path(str(repo))
+        assert index_file.is_file()
 
         result = await self._tool_fn("invalidate_cache")(path=str(repo))
 
@@ -279,8 +284,8 @@ class TestRemainingDestructiveGrants:
         assert "no cli equivalent" in reason.lower(), (
             "refusal must truthfully say no CLI equivalent"
         )
-        # No live symbol store was touched
-        assert not (tmp_path / "symbols").exists()
+        # The fixture's existing symbol-store entry was not touched.
+        assert index_file.is_file()
 
     @pytest.mark.asyncio
     async def test_invalidate_cache_honoured_with_grant(self, tmp_path, monkeypatch):
@@ -290,6 +295,8 @@ class TestRemainingDestructiveGrants:
         repo.mkdir()
         (repo / "file.py").write_text("def f(): pass\n")
         index_folder(str(repo), storage_dir=tmp_path / "symbols")
+        index_file = IndexStore(tmp_path / "symbols")._index_path(str(repo))
+        assert index_file.is_file()
 
         result = await self._tool_fn("invalidate_cache")(path=str(repo))
 
@@ -300,6 +307,7 @@ class TestRemainingDestructiveGrants:
         from lgrep.tools.list_repos import list_repos
 
         assert str(repo) not in list_repos(storage_dir=tmp_path / "symbols")["repos"]
+        assert not index_file.exists()
 
     @pytest.mark.asyncio
     async def test_invalidate_worktree_cache_refused_without_grant(self, tmp_path, monkeypatch):
