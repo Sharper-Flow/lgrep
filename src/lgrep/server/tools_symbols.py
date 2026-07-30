@@ -570,6 +570,7 @@ async def search_references(
         test_matches=result["test_matches"],
         returned_production=result["returned_production"],
         returned_tests=result["returned_tests"],
+        stale_file_count=result["stale_file_count"],
         results=result["results"],
         candidate_names=result["candidate_names"],
         disclaimer=result["disclaimer"],

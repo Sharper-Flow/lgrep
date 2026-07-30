@@ -7,16 +7,13 @@ non-exhaustive disclaimers. Supports production-first and test filtering.
 
 from __future__ import annotations
 
+import hashlib
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 _USAGE_FILTERS = frozenset({"production_first", "include_tests", "tests_only"})
 _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
@@ -31,6 +28,32 @@ TEST_RESERVE_RATIO = 0.2
 _DISCLAIMER = (
     "Candidate occurrences only; results are not compiler-accurate or exhaustive."
 )
+
+
+def _annotate_staleness(results: list[dict], root: Path, indexed_hashes: dict[str, str]) -> int:
+    """Mark each returned row stale when its backing file no longer matches the index.
+
+    The index already stores a per-file SHA-256 to skip unchanged files during
+    incremental indexing; that hash is reused here as the freshness oracle so no
+    new state is introduced. Work is bounded by the distinct files present in
+    the returned slice, never by repository size, and nothing is re-indexed:
+    freshness is reported, not repaired.
+    """
+    verdicts: dict[str, bool] = {}
+    for row in results:
+        rel_path = row.get("file_path", "")
+        if rel_path not in verdicts:
+            indexed_hash = indexed_hashes.get(rel_path)
+            try:
+                current = hashlib.sha256((root / rel_path).read_bytes()).hexdigest()
+            except OSError:
+                # Missing or unreadable backing file: stale, never an error.
+                verdicts[rel_path] = True
+            else:
+                verdicts[rel_path] = indexed_hash != current
+        row["is_stale"] = verdicts[rel_path]
+
+    return sum(1 for is_stale in verdicts.values() if is_stale)
 
 
 def search_references(
@@ -111,6 +134,7 @@ def search_references(
             "test_matches": 0,
             "returned_production": 0,
             "returned_tests": 0,
+            "stale_file_count": 0,
             "results": [],
             "candidate_names": [],
             "disclaimer": _DISCLAIMER,
@@ -160,6 +184,7 @@ def search_references(
 
     total_matches = len(matches)
     returned_tests = sum(1 for m in results if m.get("is_test_file"))
+    stale_file_count = _annotate_staleness(results, Path(repo_path), index.files)
 
     tokens_saved = estimate_savings(len(results))
     return {
@@ -170,6 +195,7 @@ def search_references(
         "test_matches": len(tests),
         "returned_production": len(results) - returned_tests,
         "returned_tests": returned_tests,
+        "stale_file_count": stale_file_count,
         "results": results,
         "candidate_names": candidate_names,
         "disclaimer": _DISCLAIMER,

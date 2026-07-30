@@ -243,6 +243,9 @@ class ReferenceCandidate(TypedDict):
     kind: str
     enclosing_symbol_id: str | None
     is_test_file: bool
+    # True when the backing file no longer matches the indexed content, so the
+    # line number and text below may point somewhere else in the current file.
+    is_stale: bool
 
 
 class _SearchReferencesResultRequired(TypedDict):
@@ -256,6 +259,8 @@ class _SearchReferencesResultRequired(TypedDict):
     test_matches: int
     returned_production: int
     returned_tests: int
+    # Distinct backing files among the returned rows whose content has drifted.
+    stale_file_count: int
     results: list[ReferenceCandidate]
     candidate_names: list[str]
     disclaimer: str
