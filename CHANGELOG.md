@@ -1,3 +1,5 @@
+## 2026-07-30 (v3.2.2)\n\n### Fixed\n- correct transport-safety drift and pin ruff to unbreak lint\n- stop staleness annotation leaking into cached index; confine freshness read\n\n### Changed\n- checkpoint tk-d93f0f72a3b7\n- checkpoint tk-ec6f446f6a1d\n- checkpoint tk-593a5819ec49\n- checkpoint tk-c149dd1461a8
+
 ## Unreleased (v3.2.2)
 
 ### Security
