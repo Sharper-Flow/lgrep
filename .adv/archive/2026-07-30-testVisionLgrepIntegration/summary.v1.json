@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-30T05:35:25.169Z",
+  "capabilities": [],
+  "change_hash": "bacbb2741bc7818a80889332eff29bb8bec29cf7c8fe764e89ad0703374e02e7",
+  "change_id": "testVisionLgrepIntegration",
+  "completed_tasks": 3,
+  "created_at": "2026-07-30T00:51:16.142Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-30T05:25:42.370Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "15bdaccfb57feff2e322ca8d3a23f58adf0dc0c6dd065b3b3d5949877ce37753",
+  "task_count": 3,
+  "title": "Test Vision lgrep integration",
+  "version": "1"
+}

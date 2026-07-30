@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "change_id": "testVisionLgrepIntegration",
+  "title": "Test Vision lgrep integration",
+  "release_notes": {
+    "audience": "internal",
+    "category": "changed",
+    "headline_internal": "Cut the shared lgrep service over to a released artifact and validated the managed MCP surface end to end, producing the defect backlog that became v3.2.2",
+    "highlights": [
+      "Shared lgrep service cut over to a released tag via the existing uv-tool install, with an explicit Vision restart (config reload alone does not replace a running subprocess).",
+      "Rollback proven rather than rehearsed: the first cutover shipped v3.2.0, failed on a removed MCP SDK module, was rolled back to the prior artifact, and the service was verified healthy before redeploying v3.2.1.",
+      "Managed MCP matrix exercised against the real proxied endpoint on port 6278 using isolated temporary fixtures: filters, ordering, result cap, candidate framing, malformed-input handling, client abort, and five concurrent lookups. Slowest request 0.038s against an 8s budget.",
+      "Produced five durable findings. Three were real defects — destructive authority inferred from transport kind, include_tests having no observable effect at the result cap, and stale rows served with no freshness signal — all fixed and released in v3.2.2.",
+      "Method lesson recorded: validate a managed service through its real endpoint. An apparent outage was a missing Accept header, and an apparently missing tool namespace was a client-side session cache, not a service fault."
+    ],
+    "area": "Vision-managed lgrep service",
+    "user_action_required": false,
+    "links": {
+      "pr": "https://github.com/Sharper-Flow/lgrep/pull/6"
+    }
+  }
+}

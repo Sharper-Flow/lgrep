@@ -1,0 +1,1435 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/change.schema.json",
+  "id": "testVisionLgrepIntegration",
+  "title": "Test Vision lgrep integration",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-30T00:51:16.142Z",
+  "tasks": [
+    {
+      "id": "tk-b04decce1e63",
+      "title": "Tag and cut over Vision-managed lgrep",
+      "type": "ops",
+      "section": "Cutover",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-30T01:21:45.576Z",
+      "started_at": "2026-07-30T01:42:12.323Z",
+      "completed_at": "2026-07-30T03:03:20.174Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "Cutover complete on the second attempt, after the blocking dependency defect was fixed and released as v3.2.1. Baseline recorded and rollback exercised for real: the first attempt shipped 3.2.0, failed AC1, and was rolled back to the prior artifact with Vision restarted and healthy, satisfying AC5. Redeploy installed the immutable tag v3.2.1, which resolved mcp 1.29.0 with no manual constraint, proving the pin holds in the real deployment path. vision config validate passed, only the lgrep server was restarted, and Vision reports healthy with 12 servers running and 0 errors. Protocol evidence tr_ms6xhvom_e02ee32d: the deployed binary initializes and advertises all 21 tools including search_references. Known client-side caveat: OpenCode sessions started before the restart keep a stale tool catalog and must be restarted to see lgrep.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "checkpointSha": "b9675a733c11e51d220e42b07befeb6d40e14e97",
+      "completedAt": "2026-07-30T03:03:20.174Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC5"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "C4",
+          "OOS2"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "artifact_reference",
+        "proof_target": "Tagged source SHA, prior rollback ref, uv-tool install receipt, vision config validation, explicit lgrep restart, managed registration response, and post-cutover health evidence",
+        "rationale": "This bounded production-adjacent cutover is proven by durable deployment and service evidence rather than a fake unit-test route; the following verification task independently exercises managed behavior.",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "artifact_reference",
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "touched_files": [],
+      "updatedAt": "2026-07-30T01:34:13.254Z"
+    },
+    {
+      "id": "tk-9b1311399dcc",
+      "title": "Exercise managed MCP validation matrix",
+      "type": "verification",
+      "section": "Managed validation",
+      "status": "done",
+      "priority": 1,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-b04decce1e63"
+        }
+      ],
+      "created_at": "2026-07-30T01:21:54.581Z",
+      "started_at": "2026-07-30T03:06:36.665Z",
+      "completed_at": "2026-07-30T03:10:55.178Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "Managed matrix executed against the real Vision-proxied endpoint on port 6278 using an isolated 128-occurrence fixture; the earlier admission failure was a missing text/event-stream Accept header, not a Vision restriction. Runs tr_ms6xojph_5cb7ac80, tr_ms6xq8ef_ccb76250 and tr_ms6xqzks_5095cd1f. AC2 partly satisfied: production_first ordering, tests_only, kind filters, the candidate disclaimer and the 100-result cap against 133 total matches all behave correctly, but include_tests returns a response identical to production_first, so the expected distinct response was never observed. AC3 satisfied: empty query, invalid usage_filter, invalid kind and unindexed path all return bounded schema-stable error fields, a client abort mid-request leaves the service healthy, and the slowest of all managed requests was 0.038 seconds against the 8-second budget; stale occurrence data is served without any freshness signal, which is bounded but silently misleading, and re-indexing clears it. AC4 satisfied: five genuinely simultaneous lookups all succeeded in 0.162 seconds wall time with worker_max_threads 2, zero active jobs afterwards and no abandonment; queued or rejected dispositions could not be induced because each lookup completes in about 30 milliseconds. Diagnostics exposed no secrets. Additional structural finding recorded for the findings task: the destructive-tool guard treats transport stdio as single-user, but Vision fronts the stdio subprocess with a shared unauthenticated HTTP port, and diagnostics through that proxy report transport stdio.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "checkpointSha": "b9675a733c11e51d220e42b07befeb6d40e14e97",
+      "completedAt": "2026-07-30T03:10:55.178Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC2",
+          "AC3",
+          "AC4"
+        ],
+        "respects": [
+          "C2",
+          "C3",
+          "C4",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Managed MCP fixture evidence for 101-result cap, filters, kind and failure routes; five-request pressure run; pre/post diagnostics; every response under 8-second client deadline",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "separate_verification"
+      },
+      "touched_files": [],
+      "updatedAt": "2026-07-30T01:34:20.008Z"
+    },
+    {
+      "id": "tk-5310e12cf868",
+      "title": "Publish evidence-backed improvement findings",
+      "type": "research",
+      "section": "Findings",
+      "status": "done",
+      "priority": 2,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-9b1311399dcc"
+        }
+      ],
+      "created_at": "2026-07-30T01:22:04.403Z",
+      "started_at": "2026-07-30T03:11:04.558Z",
+      "completed_at": "2026-07-30T03:12:22.987Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "Five durable findings recorded as promoted project wisdom, each with reproduction evidence, severity and disposition: ws-McJr7j high, the destructive-tool transport guard is defeated because Vision fronts the stdio subprocess with a shared unauthenticated HTTP port while diagnostics still report transport stdio, disposition fix now; ws-cUmcli high, include_tests is indistinguishable from production_first at or above the 100-result cap, disposition follow-up; ws-JLUOx1 medium, stale occurrence rows are served with no freshness signal and cleared by re-index, disposition follow-up; ws-pIosyJ pattern, classify managed MCP failures as client-catalog versus service-registration and restart agent sessions after a Vision restart; ws-hS3NeI failure, an unbounded dependency hid an uncollectable suite which in turn hid a shipped feature that never executed, already fixed and released in pinMcpV1 so its disposition is closed. No finding was implemented in this change, honoring OOS1.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [],
+      "checkpointSha": "b9675a733c11e51d220e42b07befeb6d40e14e97",
+      "completedAt": "2026-07-30T03:12:22.987Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC6"
+        ],
+        "respects": [
+          "OOS1",
+          "OOS2",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "artifact_reference",
+        "proof_target": "Artifact reference or operational output",
+        "rationale": "This task synthesizes already-captured managed-service test and diagnostics evidence; its deliverable is an auditable findings artifact rather than new runtime behavior.",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "artifact_reference",
+      "metadata": {
+        "tdd_intent": "not_applicable"
+      },
+      "touched_files": []
+    }
+  ],
+  "subagent_reports": [
+    {
+      "schema_version": "1.0",
+      "change_id": "testVisionLgrepIntegration",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:managed-mcp-validation"
+      },
+      "agent": "adv-researcher",
+      "topic": "Evidence-backed managed-MCP validation matrix for lgrep search_references release",
+      "sources": [
+        {
+          "label": "search_references tool source",
+          "locator": "src/lgrep/tools/search_references.py",
+          "summary": "Tool impl: _USAGE_FILTERS={production_first,include_tests,tests_only}, _OCCURRENCE_KINDS={call,attribute,import,reference}, MAX_REFERENCE_RESULTS=100, limit default 20 (min coerced 1, capped at 100), _DISCLAIMER text. Error paths: empty query, invalid usage_filter, invalid kind, index None (unindexed), not index.occurrences (stale). production_first and include_tests share IDENTICAL sort; only tests_only filters the set."
+        },
+        {
+          "label": "MCP handler registration",
+          "locator": "src/lgrep/server/tools_symbols.py:480-567",
+          "summary": "search_references @mcp.tool with ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False) (destructiveHint unset=False). ctx!=None -> app_ctx.runtime.run_blocking(kind=caller='search_references', project=resolved_path, fn=_search_references, query, ORIGINAL path, limit=, usage_filter=, kind=); ctx=None -> asyncio.to_thread. No cancel_event passed. On error -> error_response(result['error']). _meta hardcoded {'duration_ms':0.0,'tool':'search_references'} on success (rich direct _meta discarded)."
+        },
+        {
+          "label": "time_tool decorator (timeout/cancel)",
+          "locator": "src/lgrep/server/__init__.py:23,26-93",
+          "summary": "TOOL_TIMEOUT_S=env LGREP_TOOL_TIMEOUT_S default 45 (Vision tuning sets 8). Wraps async tools in asyncio.wait_for. TimeoutError: search_references has special schema-stable branch (coded lines 58-68, NOT tested). CancelledError: search_references schema-stable branch returns error='Operation was cancelled.' (TESTED). _meta={duration_ms,tool} at MCP layer."
+        },
+        {
+          "label": "response schemas",
+          "locator": "src/lgrep/server/responses.py:235-267,412-430",
+          "summary": "ReferenceCandidate{id,name,file_path,line_number,line_text,kind,enclosing_symbol_id,is_test_file}. SearchReferencesResult required: query,usage_filter,total_matches,results,candidate_names,disclaimer,_meta; optional error. _Meta{duration_ms,tool}. error_response->ToolError{error}. Confirms MCP-layer _meta differs from direct-tool _meta."
+        },
+        {
+          "label": "direct-tool _meta envelope",
+          "locator": "src/lgrep/tools/_meta.py:12-39",
+          "summary": "make_meta returns {timing_ms,tokens_saved,session_tokens,total_tokens,cost_avoided_usd} (DIFFERENT keys from MCP _meta). error_response(message,_meta=...) attaches _meta to direct-tool errors; MCP errors have no _meta."
+        },
+        {
+          "label": "IndexStore load/normalize semantics",
+          "locator": "src/lgrep/storage/index_store.py:51-59,89,145-179",
+          "summary": "normalize_repo_key = str(Path(repo_path).resolve()) (github: passthrough) -> resolved ABSOLUTE path key (NOT semantic worktree-dedup canonical key). _cache is process-global ClassVar keyed by index file path, mtime_ns+size validated. load returns None on missing file OR json.JSONDecodeError/KeyError/OSError -> corrupt index indistinguishable from never-indexed. version parsed via _version_tuple but NEVER used (no version-gate)."
+        },
+        {
+          "label": "RuntimeSupervisor",
+          "locator": "src/lgrep/server/runtime.py:26-196",
+          "summary": "DEFAULT_WORKER_MAX_THREADS=4 (LGREP_WORKER_MAX_THREADS), DEFAULT_HISTORY_LIMIT=100. ThreadPoolExecutor, RLock-guarded _active/_recent. run_blocking(cancel_event=None default): CancelledError -> mark_cancelled_or_abandoned; abandoned job -> FINISHED_AFTER_ABANDON/FAILED_AFTER_ABANDON on completion. snapshot_active_jobs/snapshot_recent_jobs feed diagnostics."
+        },
+        {
+          "label": "diagnostics tool",
+          "locator": "src/lgrep/server/tools_diagnostics.py:43-115",
+          "summary": "lgrep_diagnostics surfaces pid,uptime,transport,worker_max_threads,active/recent_jobs (each with kind/caller/project/status), timeout_abandonment_summary. search_references jobs would appear as kind=caller='search_references'. No secret/env leakage."
+        },
+        {
+          "label": "existing direct-tool tests",
+          "locator": "tests/test_reference_lookup.py:1-330",
+          "summary": "Covers: import, happy-path occurrence fields, enclosing context, production_first ordering, include_tests (both groups), tests_only, kind filter, ambiguous disclaimer, definitions excluded, limit enforced, cap-at-100 (limit=10000->100), empty query, invalid usage_filter, unindexed, stale(occurrences={}), no-match empty safe result, conftest/prefix-suffix test classification. GAPS: no invalid-kind test; no corrupt-index; no version-drift."
+        },
+        {
+          "label": "existing MCP-level tests",
+          "locator": "tests/test_server_tools.py:228-277",
+          "summary": "test_search_references_missing_index_returns_error (ctx=None path); test_search_references_cancellation_keeps_schema_shape (CancelledError branch); test_search_references_uses_runtime_supervisor_when_context_available (SimpleNamespace ctx + RuntimeStub asserts run_blocking kind/caller/project=resolved). GAPS: no timeout-branch test; no concurrency; no diagnostics integration."
+        },
+        {
+          "label": "server registration tests",
+          "locator": "tests/test_server_registration.py:1-40",
+          "summary": "Asserts exactly 21 tools; search_references in expected set. Brittle count gate (adding/removing tool breaks it)."
+        },
+        {
+          "label": "supervisor test patterns",
+          "locator": "tests/test_daemon_runtime.py:14-87",
+          "summary": "Canonical fixture for timeout/abandonment: real RuntimeSupervisor(max_workers=1), asyncio.wait_for(timeout=0.05) -> ABANDONED then FINISHED_AFTER_ABANDON; exception -> FAILED+summarized; history_limit bounds recent_jobs."
+        },
+        {
+          "label": "README Vision/OpenCode tuning",
+          "locator": "README.md:416-467",
+          "summary": "Vision-managed lgrep deployment: LGREP_TOOL_TIMEOUT_S=8, LGREP_WORKER_MAX_THREADS=4, LGREP_WORKTREE_DEDUP=1. streamable-http for shared daemon. Confirms TWO timeout layers (proxy request_timeout ~8s + lgrep TOOL_TIMEOUT_S). search_references must complete <8s under managed path (pure in-memory read, easily met)."
+        },
+        {
+          "label": "production incident provenance",
+          "locator": ".adv/archive/2026-06-10-fixLgrepPoolWedgeAbandoned (via grep) + CHANGELOG.md:33-37",
+          "summary": "Real Vision shared-subprocess incident: 300%+CPU, 140 threads, abandoned index_all wedged pool. Motivated RuntimeSupervisor + cooperative cancel threading for index_all. search_references (Unreleased) does NOT thread cancel_event (defensible: pure read) but inherits supervisor abandonment accounting."
+        },
+        {
+          "label": "CHANGELOG release note",
+          "locator": "CHANGELOG.md:5",
+          "summary": "Unreleased: lgrep_search_references MCP tool added, advisory candidates not compiler-accurate/exhaustive, production_first/include_tests/tests_only + optional kind filter. Version 3.2.0 (src/lgrep/__init__.py:10)."
+        }
+      ],
+      "architecture_assessment": "The search_references tool is a bounded, read-only, in-memory candidate-occurrence lookup over a JSON symbol index. The managed-MCP (Vision) integration path is the ctx!=None branch routing through RuntimeSupervisor.run_blocking; it is real, live (tools.lgrep.search_references callable now), and already lightly tested. The validation matrix maps cleanly onto 13 dimensions with concrete measurable signals. Key behavioral findings the matrix must encode: (1) production_first and include_tests are observationally identical (same sort, both retain all groups) - only tests_only filters; (2) direct-tool _meta ({timing_ms,tokens_saved,...}) differs from MCP-layer _meta ({duration_ms,tool}) and the MCP success-path duration_ms is hardcoded 0.0; (3) normalize_repo_key uses resolved absolute path, NOT the semantic worktree-dedup canonical key - each worktree needs its own symbol index (divergence from semantic cache); (4) corrupt JSON index collapses into the generic unindexed error; (5) no version-gate despite a version field; (6) two timeout layers (Vision proxy ~8s + lgrep TOOL_TIMEOUT_S, default 45s/8s under Vision) and search_references has NO cancel_event threading (abandoned jobs run to completion then mark FINISHED_AFTER_ABANDON). No blockers to building the matrix; gaps are test-coverage improvements, not correctness blockers for the integration itself.",
+      "validation": {
+        "status": "pass",
+        "blockers": [],
+        "notes": "Research conclusive. Tool registration, result semantics, filters, cap, and all error paths are source-grounded and testable. Existing tests cover direct-tool happy/error paths and the MCP ctx-routing contract; cancellation schema-stability is tested. No contract/security/release blocker. Gaps (invalid-kind, timeout branch, corrupt-index, version-drift, concurrency, diagnostics-integration) are coverage improvements; two latent issues (hardcoded duration_ms=0.0 on MCP success; worktree symbol-index divergence) are out-of-validation-scope flags for the matrix to either assert-against or document, surfaced in follow_ups."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "low",
+        "tradeoffs": [
+          "Fixture strategy: SimpleNamespace+RuntimeStub (fast, isolates routing) vs real RuntimeSupervisor (exercises abandonment/concurrency but heavier) - recommend both, each where it fits.",
+          "Asserting _meta.duration_ms>0 on MCP success would FAIL (hardcoded 0.0) - matrix must assert presence/key-shape, not value, until fixed.",
+          "production_first vs include_tests: a test asserting they DIFFER would fail - matrix should assert both keep all groups and order production-first; document the intentional (or not) equivalence.",
+          "Symbol-index worktree keying (resolved path) diverges from semantic-cache dedup - a cross-worktree test would currently fail 'shared index'; decide whether to test current behavior or flag as gap.",
+          "Two timeout layers (proxy 8s + lgrep TOOL_TIMEOUT_S) - matrix should assert lgrep-side schema-stable timeout branch (coded but untested) and that search_references stays well under 8s (pure read)."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Test only the direct tool layer (existing test_reference_lookup.py style), skip MCP/ctx path",
+            "disposition": "rejected",
+            "rationale": "The change is specifically Vision lgrep integration - the managed path (ctx->run_blocking) is the integration under test and the production reality (tools.lgrep.*); skipping it would miss timeout/cancel/routing/diagnostics."
+          },
+          {
+            "option": "Spin up a real streamable-http server + Vision proxy for end-to-end tests",
+            "disposition": "rejected",
+            "rationale": "Heavy, flaky, couples tests to Vision deploy; the SimpleNamespace+RuntimeStub pattern already proves the routing contract deterministically and the supervisor tests prove abandonment. Reserve e2e for a separate smoke tier."
+          },
+          {
+            "option": "Collapse production_first and include_tests in tests (assert current equivalence)",
+            "disposition": "deferred",
+            "rationale": "Documents current reality without assuming intent; safer than asserting a difference that does not exist. Deferred pending maintainer decision on whether the filter semantics should diverge."
+          }
+        ],
+        "recommendation": "Proceed to build the validation matrix as a new test module (e.g. tests/test_search_references_managed_mcp.py) using three fixture tiers: (a) existing reference_repo/store_dir for direct-tool behavior; (b) SimpleNamespace+RuntimeStub for the ctx/run_blocking routing contract (extend the existing pattern); (c) real RuntimeSupervisor for timeout/abandonment/concurrency. Encode the 13 dimensions and the 5 behavioral findings, assert _meta key-shape not value, and add the 6 gap tests. Do NOT mutate source - all findings are test-additive."
+      },
+      "recommendation": "Build the managed-MCP validation matrix as an additive test module. Tier 1 (direct tool): port/extend test_reference_lookup.py - add invalid-kind, corrupt-index (write garbage JSON), and no-version-gate note. Tier 2 (MCP contract): extend test_server_tools.py patterns - add test_search_references_timeout_keeps_schema_shape (mirror the existing cancellation test using monkeypatch TOOL_TIMEOUT_S=0.01 + slow fn), assert readOnlyHint/idempotentHint ToolAnnotations, and assert MCP _meta keys {duration_ms,tool} present (NOT value). Tier 3 (managed integration): using a real RuntimeSupervisor, assert (1) ctx path routes via run_blocking with kind=caller='search_references' and project=resolved path; (2) concurrent N=4+1 searches: 4 run, 5th queues, all return correct results; (3) timeout-abandonment: an abandoned search_references job reaches FINISHED_AFTER_ABANDON and appears in lgrep_diagnostics.recent_jobs with correct kind/project; (4) latency guard: a realistic indexed repo returns within <2s (well under the 8s Vision budget). Document (do not gate on) the two latent findings: MCP success-path duration_ms=0.0 and worktree symbol-index non-dedup. All additive, no source mutation, no delegation.",
+      "follow_ups": [
+        "GAP: add test_search_references_invalid_kind_error (symmetric with invalid_usage_filter; kind validation exists at src/lgrep/tools/search_references.py:67-71 but is untested).",
+        "GAP: add test_search_references_timeout_keeps_schema_shape (time_tool timeout branch coded at src/lgrep/server/__init__.py:58-68 but untested; only cancellation is tested).",
+        "GAP: add corrupt-index behavior test - write invalid JSON to index_<hash>.json, assert load returns None and search_references surfaces the generic 'Repository not indexed' error (no distinct corrupt signal; confirm this collapse is intended).",
+        "LATENT: MCP success-path _meta.duration_ms is hardcoded 0.0 (src/lgrep/server/tools_symbols.py:566) while real timing is logged via structlog - consider injecting measured duration or document the envelope contract.",
+        "LATENT: symbol index uses normalize_repo_key=resolved path (src/lgrep/storage/index_store.py:51-59) and does NOT dedup across git worktrees, unlike the semantic cache (LGREP_WORKTREE_DEDUP canonical_repo_key). Add a behavioral note/test and decide if parity is wanted for multi-worktree agent setups.",
+        "AMBIGUITY: production_first and include_tests produce identical ordering (src/lgrep/tools/search_references.py:119-136) - confirm whether the naming distinction is intentional or include_tests should behave differently.",
+        "GAP: no version-drift handling - CodeIndex.version is parsed (_version_tuple) but never gated; an incompatible future version loads silently. Decide if a version check belongs in load or search_references.",
+        "GAP: add a diagnostics-integration test asserting a search_references job appears in lgrep_diagnostics recent_jobs (kind/caller/project/status) and feeds timeout_abandonment_summary."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "testVisionLgrepIntegration",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:vision-deploy-lifecycle"
+      },
+      "agent": "adv-researcher",
+      "topic": "lgrep deploy/install path and Vision lifecycle (reload/restart/health, rollback, config ownership, risks)",
+      "sources": [
+        {
+          "label": "uv-receipt.toml (installed tool record)",
+          "locator": "file:///home/jon/.local/share/uv/tools/lgrep/uv-receipt.toml",
+          "summary": "requirements=[{name=lgrep, directory=/home/jon/dev/lgrep}]; entrypoint install-path=/home/jon/.local/bin/lgrep. Proves uv-tool install from local source dir."
+        },
+        {
+          "label": "~/.local/bin/lgrep console-script wrapper",
+          "locator": "file:///home/jon/.local/bin/lgrep",
+          "summary": "shebang #!/home/jon/.local/share/uv/tools/lgrep/bin/python; imports lgrep.cli:main. Standard uv-tool-generated launcher."
+        },
+        {
+          "label": "tool venv site-packages (editable check)",
+          "locator": "file:///home/jon/.local/share/uv/tools/lgrep/lib/python3.13/site-packages/",
+          "summary": "Contains real lgrep/ + lgrep-3.2.0.dist-info/ (COPIED wheel). NO __editable__.*.pth. Installed version 3.2.0. Not editable -> source edits need reinstall."
+        },
+        {
+          "label": "Vision servers.yaml (lgrep entry)",
+          "locator": "file:///home/jon/.config/vision/servers.yaml",
+          "summary": "lgrep: port 6278, command /home/jon/.local/bin/lgrep (stdio implied), env VOYAGE_API_KEY/LGREP_WORKTREE_DEDUP/LGREP_WARM_PATHS(6 repos)/LGREP_AUTO_WARM_DISK=false/LGREP_TOOL_TIMEOUT_S=30/LGREP_WORKER_MAX_THREADS=2, autostart true, session_timeout 30m, max_sessions 20."
+        },
+        {
+          "label": "opencode.jsonc (client wiring)",
+          "locator": "file:///home/jon/.config/opencode/opencode.jsonc",
+          "summary": "mcp.lgrep = remote http://localhost:6278/mcp (Vision proxy). mcp.vision = :6275 (admin). Confirms lgrep reached via Vision, not direct."
+        },
+        {
+          "label": "vision.service systemd unit",
+          "locator": "file:///home/jon/.config/systemd/user/vision.service",
+          "summary": "ExecStart=%h/.local/bin/vision daemon start; ExecReload=/bin/kill -HUP $MAINPID (SIGHUP=reload); EnvironmentFile=-%h/.config/vision/environment. Vision is the supervised process; lgrep is NOT a systemd unit."
+        },
+        {
+          "label": "lgrep-gc.{service,timer}",
+          "locator": "file:///home/jon/.config/systemd/user/lgrep-gc.service",
+          "summary": "Weekly (Sun 04:00) oneshot: lgrep gc --execute. Path-confined to ~/.cache/lgrep. Cache GC only; not the lgrep daemon."
+        },
+        {
+          "label": "Vision README (architecture + CLI)",
+          "locator": "file:///home/jon/dev/vision/README.md",
+          "summary": "Vision=Go MCP control-plane. Admin :6275 (vision_list/add/remove/search/status/guidance/restart). Per-server dedicated ports 6276-6325. servers.yaml authoritative on reload (no merge). Hot reload via SIGHUP/vision daemon reload. Process-per-session stdio isolation; idle reaped after session_timeout, auto-respawn on next call. Reload caveat: long-lived subprocesses keep old env until restarted."
+        },
+        {
+          "label": "vision admin tools.go (vision_restart)",
+          "locator": "file:///home/jon/dev/vision/internal/admin/tools.go",
+          "summary": "vision_restart admin MCP tool defined (line 93); toolRestart impl (line 832). POST /servers/{name}/restart route (api/routes.go:67). Confirms instructions/lgrep-tools.md:71 vision_restart lgrep is real."
+        },
+        {
+          "label": "vision daemon.go Reload() semantics",
+          "locator": "file:///home/jon/dev/vision/internal/daemon/daemon.go",
+          "summary": "Reload (262-435) diffs old/new config: changed servers -> stop/remove/add/start (restart); unchanged -> left alone. Rollback-on-start-failure (TestReload_RollbackOnStartFailure). Binary-only change produces no diff -> subprocess NOT restarted."
+        },
+        {
+          "label": "vision main.go config subcommands",
+          "locator": "file:///home/jon/dev/vision/cmd/vision/main.go",
+          "summary": "configCmd has show/validate/init (lines 277-311). validateConfig() runs cfg.Validate(), exit 1 on invalid. Confirms 'vision config validate'."
+        },
+        {
+          "label": "install_opencode.py (repo installer, DIFFERENT port)",
+          "locator": "file:///home/jon/dev/lgrep/src/lgrep/install_opencode.py",
+          "summary": "lgrep install-opencode writes mcp.lgrep remote url http://localhost:6285/mcp (port 6285) + systemd template on 6285. LIVE system uses 6278 via Vision. Running the repo installer would OVERWRITE opencode.jsonc to 6285 (nothing listening) -> breakage."
+        },
+        {
+          "label": "uv docs (tool upgrade/reinstall/editable)",
+          "locator": "https://github.com/astral-sh/uv/blob/main/docs/concepts/tools.md",
+          "summary": "uv tool upgrade <name> --reinstall reinstalls all packages + executables. uv tool install with new spec changes constraints. --editable/-e opt-in (not used here). Directory source default = build+copy wheel into tool venv."
+        },
+        {
+          "label": "instructions/lgrep-tools.md (operational doc)",
+          "locator": "file:///home/jon/dev/lgrep/instructions/lgrep-tools.md",
+          "summary": "Line 71: timeout recovery via MCP-tool-level vision_restart lgrep; do not bump LGREP_WORKER_MAX_THREADS as workaround."
+        },
+        {
+          "label": "skills/lgrep/SKILL.md (Vision tuning block)",
+          "locator": "file:///home/jon/dev/lgrep/skills/lgrep/SKILL.md",
+          "summary": "Lines 72-89: VOYAGE_API_KEY under lgrep.env in ~/.config/vision/servers.yaml; shared-daemon tuning (LGREP_WARM_PATHS, LGREP_TOOL_TIMEOUT_S below proxy deadline, small WORKER_MAX_THREADS); lgrep_diagnostics + lgrep_status_semantic(path='') for health."
+        }
+      ],
+      "architecture_assessment": "DEPLOY PATH (source -> binary): lgrep installed via `uv tool` from LOCAL git source dir /home/jon/dev/lgrep. uv-receipt.toml: {name=lgrep, directory=/home/jon/dev/lgrep}; launcher /home/jon/.local/bin/lgrep is uv-generated console script (shebang into ~/.local/share/uv/tools/lgrep/bin/python). Install is a COPIED wheel (site-packages has real lgrep/ + lgrep-3.2.0.dist-info/, NO __editable__ .pth), version 3.2.0 -> source edits do NOT propagate until reinstall. Safe redeploy after code change: `uv tool upgrade lgrep --reinstall` (or `uv tool install --force --from /home/jon/dev/lgrep lgrep`) then restart the Vision subprocess. VISION LIFECYCLE: lgrep IS Vision-managed. servers.yaml registers lgrep port 6278, command=/home/jon/.local/bin/lgrep (stdio), autostart, session_timeout 30m, max_sessions 20, env VOYAGE_API_KEY/LGREP_WORKTREE_DEDUP=1/LGREP_WARM_PATHS(6 repos)/LGREP_AUTO_WARM_DISK=false/LGREP_TOOL_TIMEOUT_S=30/LGREP_WORKER_MAX_THREADS=2. Vision proxies OpenCode (mcp.lgrep -> http://localhost:6278/mcp) to a per-session lgrep stdio subprocess. NO lgrep.service systemd unit exists; Vision's supervisor owns the lgrep process. Vision itself = systemd user unit vision.service (vision daemon start; SIGHUP=reload). RELOAD/RESTART: (1) config edit -> `vision config validate` -> `vision daemon reload` (or systemctl --user reload vision); Reload() restarts only servers whose servers.yaml diffed, with rollback-on-start-failure. (2) wedged/stale subprocess -> `vision_restart lgrep` MCP tool (POST /servers/lgrep/restart) or admin stop/start. CRITICAL: a binary-only change (uv reinstall) yields NO servers.yaml diff, so `vision daemon reload` does NOT restart running lgrep -> stale binary serves until explicit `vision_restart lgrep` OR 30m idle reap respawns. HEALTH: `vision daemon status`; `vision config show`; admin HTTP GET :6275/health, /v1/servers, /v1/servers/lgrep; lgrep-internal `lgrep_diagnostics` (worker_max_threads/active_jobs/recent_jobs/timeout_abandonment_summary) and `lgrep_status_semantic(path='')`; `journalctl --user -u vision`. ROLLBACK: uv keeps no version history; medium is git: `cd /home/jon/dev/lgrep && git checkout <prev-tag> && uv tool upgrade lgrep --reinstall && vision_restart lgrep`. CONFIG OWNERSHIP: servers.yaml (Vision) owns port/command/env/tuning/session policy; opencode.jsonc mcp.lgrep owns only client URL (:6278)+enabled; repo instructions/skills deployed to ~/.config/opencode/{instructions,skills} by `lgrep install-opencode` (NOT the path used on this host).",
+      "validation": {
+        "status": "pass",
+        "blockers": [],
+        "notes": "Live deployment coherent and working: uv-tool binary -> Vision-managed stdio subprocess on :6278 -> OpenCode remote MCP. No structural defects. Two operational footguns documented (install-opencode :6285 port drift; binary-only upgrade not picked up by `vision daemon reload`). Neither is an active failure or blocker."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "medium",
+        "tradeoffs": [
+          "Vision process-per-session stdio isolation gives per-client state + auto-respawn, but lgrep is never one long-lived daemon -- 'restart lgrep' is per-server-pool and idle reaping (30m) can serve a stale binary window after an upgrade.",
+          "uv-tool-from-directory copied-wheel install is simple/reproducible but NOT live-editable; every code change needs explicit reinstall+restart, unlike `pip install -e`.",
+          "Single authoritative servers.yaml (no merge on reload) is predictable but any unvalidated edit can take down lgrep on next reload; mitigated by `vision config validate` + rollback-on-start-failure.",
+          "Rollback relies entirely on git history in the source dir; uv keeps no prior versions, so fast rollback requires the source checkout to be local and clean."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "`lgrep install-opencode` repo installer (port 6285 standalone HTTP daemon, systemd lgrep.service)",
+            "disposition": "rejected",
+            "rationale": "Live opencode.jsonc points at Vision :6278, not :6285; no lgrep.service unit exists. Running the repo installer would OVERWRITE mcp.lgrep to localhost:6285 (nothing listening) and diverge from the supervised, session-isolated Vision model. Viable only for a single-user/single-session host without Vision."
+          },
+          {
+            "option": "Editable uv-tool install (`uv tool install -e /home/jon/dev/lgrep`) so source edits propagate live",
+            "disposition": "deferred",
+            "rationale": "Would remove the reinstall step after code changes, but ties runtime to working-tree state of /home/jon/dev/lgrep (a dirty tree or mid-edit save could break the live shared server). Copied-wheel install is safer for a multi-agent service; revisit if dev-loop friction dominates."
+          },
+          {
+            "option": "Long-lived standalone lgrep HTTP daemon (install_opencode.py Option A, systemd on :6285)",
+            "disposition": "rejected",
+            "rationale": "Loses Vision's per-session isolation, supervision, hot-reload, and admin API; the host already standardizes on Vision for all MCP servers (context7/exa/time/episode/adv-advance/playwright)."
+          }
+        ],
+        "recommendation": "Proceed: lgrep deployment/lifecycle is sound. For any lgrep code change: (1) edit in /home/jon/dev/lgrep, (2) `uv tool upgrade lgrep --reinstall`, (3) `vision_restart lgrep` (NOT `vision daemon reload` alone -- reload will not restart lgrep because servers.yaml is unchanged), (4) verify with `lgrep_diagnostics` + `vision daemon status`. Rollback = `git checkout <tag> && uv tool upgrade lgrep --reinstall && vision_restart lgrep`. Do NOT run `lgrep install-opencode` on this host."
+      },
+      "recommendation": "Adopt the verified lifecycle: deploy via `uv tool` from /home/jon/dev/lgrep; lgrep supervised by Vision (servers.yaml :6278, stdio, session_timeout 30m, max_sessions 20); reload config with `vision config validate` + `vision daemon reload`; restart a stale/wedged subprocess with `vision_restart lgrep`; verify health via `vision daemon status` + `lgrep_diagnostics` + GET :6275/v1/servers/lgrep; rollback via git tag + `uv tool upgrade lgrep --reinstall` + `vision_restart lgrep`. Avoid `lgrep install-opencode` on this host (port-6285 footgun).",
+      "follow_ups": [
+        "Docs drift: instructions/lgrep-tools.md:71 and skills/lgrep/SKILL.md correctly reference Vision, but ADV change multiProjectSupportConcurrentI/change.json:161 incorrectly recorded 'lgrep is not in the Vision MCP server registry' (a failed vision_search). Live servers.yaml contradicts that -- consider correcting the stale ADV note.",
+        "Add a one-line comment in install_opencode.py noting the Vision (:6278) vs standalone (:6285) port split so operators avoid running the repo installer on a Vision-managed host.",
+        "Consider a tiny deploy helper (uv reinstall + vision_restart lgrep + health check) to encode the binary-upgrade path and prevent the stale-binary-on-reload footgun.",
+        "Verify whether a no-op servers.yaml touch + `vision daemon reload` reliably restarts lgrep; if not, document `vision_restart lgrep` as the only binary-cutover mechanism."
+      ]
+    },
+    {
+      "schema_version": "1.0",
+      "change_id": "testVisionLgrepIntegration",
+      "attempt": 1,
+      "workdir_used": "/home/jon/dev/lgrep",
+      "scope": {
+        "kind": "change",
+        "scope_key": "researcher:design-validation"
+      },
+      "agent": "adv-researcher",
+      "topic": "Independent design validation: Vision lgrep cutover + managed search_references test matrix",
+      "sources": [
+        {
+          "label": "search_references source (main)",
+          "locator": "src/lgrep/tools/search_references.py",
+          "summary": "MAX_REFERENCE_RESULTS=100 (L23); _DISCLAIMER (L25-27); usage_filter in {production_first,include_tests,tests_only} (L21); kind in {call,attribute,import,reference} (L22); empty/invalid/unindexed/stale error paths (L57-92). Confirms AC2 surface + most AC3 error paths on main."
+        },
+        {
+          "label": "Live Vision lgrep config",
+          "locator": "/home/jon/.config/vision/servers.yaml (lgrep, L49-62)",
+          "summary": "LGREP_TOOL_TIMEOUT_S=30 (L57); LGREP_WORKER_MAX_THREADS=2 (L59); session_timeout=30m; max_sessions=20. Deployed tool timeout is 30s, NOT 8s."
+        },
+        {
+          "label": "CHANGELOG -- search_references Unreleased; 8s historical",
+          "locator": "/home/jon/dev/lgrep/CHANGELOG.md L1-5, L33-37",
+          "summary": "lgrep_search_references under '## Unreleased' (L5); pyproject=3.2.0; v3.1.8 (L23), v3.1.3 (L33). v3.1.3 entry references historical '8s tool timeout' (L37) -- origin of the 8s figure, predating current 30s config."
+        },
+        {
+          "label": "pyproject -- no PyPI publish path",
+          "locator": "/home/jon/dev/lgrep/pyproject.toml L3, L48-49",
+          "summary": "version=3.2.0; scripts lgrep=lgrep.cli:main. No PyPI metadata; no .github/workflows release pipeline found via glob. uv-tool install from local checkout; rollback source must be a git ref/tag."
+        },
+        {
+          "label": "RuntimeSupervisor + diagnostics",
+          "locator": "src/lgrep/server/runtime.py L1-80; tests/test_diagnostics.py",
+          "summary": "RuntimeSupervisor owns bounded execution + job lifecycle; JobStatus includes queued/running/finished/failed/cancel_requested/cancelled/abandoned/finished_after_abandon. lgrep_diagnostics exposes worker_max_threads, active_jobs, recent_jobs, timeout_abandonment_summary. AC4 disposition achievable."
+        },
+        {
+          "label": "search_references routes through runtime supervisor",
+          "locator": "tests/test_server_tools.py L255-274",
+          "summary": "test_search_references_uses_runtime_supervisor_when_context_available confirms managed search_references jobs are visible to the runtime supervisor -> AC4 observability confirmed."
+        },
+        {
+          "label": "vision per-server restart command",
+          "locator": "instructions/lgrep-tools.md L71",
+          "summary": "'an MCP-tool-level vision_restart lgrep recovers the [server]' -- confirms the explicit per-server restart the design cutover step 4 requires is real/documented. Supports C2."
+        },
+        {
+          "label": "Approved ChangeContract",
+          "locator": "ADV change testVisionLgrepIntegration contract (AC1-AC6, C1-C4, OOS1-OOS3)",
+          "summary": "13-item typed contract: AC1-AC6 acceptance (test), C1-C4 constraints (static_check), OOS1-OOS3. Basis for contract-preservation check."
+        }
+      ],
+      "architecture_assessment": "STRUCTURALLY SOUND, EXECUTABLE, WITH 3 EVIDENCE/PRECISION GAPS. Core technical premises verified TRUE: (1) search_references exists on main with the exact AC2 surface (100 cap, disclaimer, 3 usage filters, kind filter) and AC3 error paths; (2) RuntimeSupervisor + lgrep_diagnostics + JobStatus dispositions exist, so AC4 is achievable, and config caps workers at 2 (5 concurrent -> 2 run / 3 queue); (3) vision_restart lgrep is a real per-server restart command, so the cutover explicit-restart step (C2) is executable. Contract preservation GOOD: all 4 constraints and 3 OOS honored; no implementation folded in. THREE issues would make AC1/AC3/AC5 unverifiable AS WRITTEN: (a) AC3 'no request exceeds 8 seconds' stale vs live LGREP_TOOL_TIMEOUT_S=30; (b) AC5 rollback prior-artifact SOURCE unspecified, no PyPI publish path; (c) AC1 'released version' wording conflicts with deploying unreleased 3.2.0 HEAD. None reject the design; all fixable in revision before planning.",
+      "validation": {
+        "status": "caution",
+        "blockers": [
+          {
+            "finding": "[HIGH] AC3 'no request exceeds 8 seconds' is STALE vs live config. servers.yaml L57 sets LGREP_TOOL_TIMEOUT_S=30; the 8s figure traces only to CHANGELOG v3.1.3 (L37) and repo-improve-prep operator-ticket notes for v3.1.0 -- historical, not current. Design hardcodes an unsourced '8-second service budget'.",
+            "contract_ids": [
+              "AC3"
+            ],
+            "scope": "in_scope",
+            "in_scope_remediation": "State the request ceiling as 30s to match deployed LGREP_TOOL_TIMEOUT_S, OR cite the specific transport/client layer imposing 8s in the CURRENT stack with a source. Do not assert 8s without a current source -- it risks a false AC3 pass.",
+            "source": {
+              "label": "Vision config + CHANGELOG",
+              "locator": "/home/jon/.config/vision/servers.yaml L57; CHANGELOG.md L37",
+              "summary": "LGREP_TOOL_TIMEOUT_S=30 deployed; 8s only historical (v3.1.3/v3.1.0)"
+            }
+          },
+          {
+            "finding": "[HIGH] Rollback prior-artifact SOURCE unspecified; no PyPI publish path. pyproject has no PyPI metadata; no .github/workflows release pipeline. lgrep installed via uv-tool from local checkout, so prior artifact (reportedly 3.1.3) only recoverable via git ref/tag or cached wheel. Design step 6 says 'reinstall the recorded prior revision' but names neither ref nor command.",
+            "contract_ids": [
+              "AC5"
+            ],
+            "scope": "in_scope",
+            "in_scope_remediation": "Record exact prior git SHA/tag (verify a 3.1.x ref is installable BEFORE cutover), specify precise rollback command (e.g. uv tool install --from <ref> lgrep --force), and make rollback a tested sub-step. AC5 cannot pass without a known-achievable prior ref.",
+            "source": {
+              "label": "pyproject + design step 6",
+              "locator": "pyproject.toml; design cutover step 6",
+              "summary": "No publish workflow; rollback ref and command unspecified"
+            }
+          },
+          {
+            "finding": "[MEDIUM] 'released version' wording vs unreleased 3.2.0 HEAD deployment. CHANGELOG lists lgrep_search_references under '## Unreleased' (L5); pyproject=3.2.0 with no release tag. C1 authorizes deploying from main, but AC1 'reports the released version' is in tension with shipping an unreleased HEAD build to the shared Vision service.",
+            "contract_ids": [
+              "AC1"
+            ],
+            "scope": "in_scope",
+            "in_scope_remediation": "Record actual version (3.2.0) + source SHA in AC1 evidence and reconcile -- either cut/tag 3.2.0 so 'released' is literal, or state the validation deploys a main-HEAD build and 'released' means 'post-cutover installed version'.",
+            "source": {
+              "label": "CHANGELOG + pyproject",
+              "locator": "CHANGELOG.md L5; pyproject.toml L3",
+              "summary": "search_references Unreleased; 3.2.0 untagged"
+            }
+          }
+        ],
+        "notes": "Verdict CAUTION (not CONFLICT): design is contract-aligned and all core technical premises verified true; the 3 blockers are evidence/precision gaps that block verifiability of AC1/AC3/AC5 as written, not fundamental design flaws. Matrix conceptually covers all 6 ACs; 5 additional precision clarifications in follow_ups."
+      },
+      "architecture_judgement": {
+        "applicability": "applicable",
+        "confidence": "high",
+        "risk": "medium",
+        "tradeoffs": [
+          "Deploying unreleased HEAD vs cutting a 3.2.0 tag: validation speed vs 'released artifact' literalness and reproducibility.",
+          "Asserting configured 30s ceiling vs finding/proving an 8s transport cap: verifiable-but-looser vs unverified-tighter.",
+          "LGREP_WORKER_MAX_THREADS=2 makes 'no unbounded growth' provable but means 3-of-5 concurrent queue, so AC4 must assert the queue disposition.",
+          "Indexing a temp fixture through managed MCP writes a new symbol-store entry (debris after temp removal): acceptable under C3 but leaves a stale index."
+        ],
+        "alternatives_considered": [
+          {
+            "option": "Cut/tag a 3.2.0 release before cutover, then deploy the tagged artifact",
+            "disposition": "preferred",
+            "rationale": "Makes AC1 'released version' literal and gives a clean rollback anchor. Only viable if lgrep has a tag/release process; no PyPI workflow found."
+          },
+          {
+            "option": "Accept HEAD-build deployment from main, record SHA, reconcile wording",
+            "disposition": "deferred",
+            "rationale": "Matches C1 ('deploy only from current main'). Requires AC1 evidence to state actual version+SHA and drop the literal 'released' claim."
+          },
+          {
+            "option": "Defer AC3 ceiling to post-deploy measurement with no a priori bound",
+            "disposition": "rejected",
+            "rationale": "AC3 needs a stated, sourced bound to be verifiable; measuring-after without a bound is a non-test."
+          },
+          {
+            "option": "Exercise timeout/cancellation via injected mocks through the managed MCP",
+            "disposition": "rejected",
+            "rationale": "Managed-service validation must hit the real surface; mocks convert it into a source-level test, violating the problem statement."
+          }
+        ],
+        "recommendation": "Proceed to planning AFTER a design revision closing the 3 in-scope blockers: source/correct the per-request ceiling (8s->config 30s or cite the transport cap); pin the rollback prior-artifact ref + command and make rollback a tested sub-step; reconcile 'released version' with the unreleased-3.2.0-HEAD reality. Design structure, contract preservation, and matrix coverage are sound."
+      },
+      "recommendation": "Revise the DESIGN (not the contract) to close 3 gaps before planning: [AC3] replace unsourced 8s budget with deployed LGREP_TOOL_TIMEOUT_S=30 OR cite the transport-layer 8s cap; [AC5] record prior git ref/tag (verify 3.1.x recoverability) + exact rollback uv-tool command and make rollback a tested sub-step; [AC1] record actual 3.2.0 version + source SHA and reconcile 'released version' wording. Add 5 precision items. Verdict: CAUTION -- design is sound and contract-preserving; gaps are evidence/precision, fixable without re-opening discovery.",
+      "follow_ups": [
+        "Precision AC2: fixture must hold >=100 occurrences of the queried symbol (or request limit>>100 and assert truncation to MAX_REFERENCE_RESULTS=100) so the 100-cap is observable.",
+        "Precision AC3: search_references is a fast pure-Python index read and won't time out naturally; state induction (client abort/transport disconnect for cancellation) and explicitly invoke AC3 'documented transport-level equivalent' for timeout.",
+        "Precision AC4: config sets LGREP_WORKER_MAX_THREADS=2; assert worker count <=2 and >=3 of 5 concurrent queued/abandoned against lgrep_diagnostics.worker_max_threads + active_jobs/recent_jobs, not only completion.",
+        "Lifecycle: add main-freshness check (oc-fresh status / git fetch) to design step 2 before uv-tool reinstall, per deploy-from-trunk policy.",
+        "Boundary: clarify setup-phase (construct stale-occurrence index) is permitted and separate from verification-phase read-only MCP calls (C3); note temp-fixture index leaves a benign stale symbol-store entry.",
+        "Highest uncertainty for AC5: could not run git from this read-only context; confirm a 3.1.x tag/commit is actually installable for rollback before relying on it."
+      ]
+    }
+  ],
+  "test_runs": {
+    "tk-b04decce1e63": [
+      {
+        "runId": "tr_ms6xhvom_e02ee32d",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 180 python3 /tmp/opencode/lgrep_stdio_probe.py /home/jon/.local/bin/lgrep 2>&1 | tail -25",
+        "durationMs": 5527.768691999838,
+        "recordedAt": "2026-07-30T03:02:54.146Z"
+      }
+    ],
+    "tk-9b1311399dcc": [
+      {
+        "runId": "tr_ms6xojph_5cb7ac80",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 300 python3 /tmp/opencode/run_matrix.py",
+        "durationMs": 710.8861989993602,
+        "recordedAt": "2026-07-30T03:08:05.205Z"
+      },
+      {
+        "runId": "tr_ms6xq8ef_ccb76250",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 300 python3 /tmp/opencode/run_load.py 2>&1 | tail -60",
+        "durationMs": 511.4428170006722,
+        "recordedAt": "2026-07-30T03:09:23.885Z"
+      },
+      {
+        "runId": "tr_ms6xqzks_5095cd1f",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 300 python3 /tmp/opencode/run_edge.py 2>&1 | tail -50",
+        "durationMs": 613.5999759994447,
+        "recordedAt": "2026-07-30T03:09:59.096Z"
+      },
+      {
+        "runId": "tr_ms72gdpd_770ff8e1",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 900 python3 /tmp/opencode/reverify.py 2>&1 | tail -6",
+        "durationMs": 3815.418604001403,
+        "recordedAt": "2026-07-30T05:21:42.276Z"
+      },
+      {
+        "runId": "tr_ms72higs_c69e6e03",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 600 python3 /tmp/opencode/ac2_supplement.py 2>&1 | tail -4",
+        "durationMs": 411.6685269996524,
+        "recordedAt": "2026-07-30T05:22:35.083Z"
+      }
+    ]
+  },
+  "deltas": {},
+  "wisdom": [
+    {
+      "id": "ws-McJr7j",
+      "type": "gotcha",
+      "content": "Destructive-tool transport guard is defeated by the Vision proxy. `_transport_is_local` in src/lgrep/server/tools_maintenance.py:57-81 treats transport 'stdio' as single-user because 'the caller is the same process tree as the server', and spec rq-7cT4wN1qJs requires non-stdio transports to coerce dry_run=True. Vision runs lgrep as a stdio subprocess but fronts it with a shared HTTP port (127.0.0.1:6278) that any local client can reach, and vision_status reports no bearer_token configured. Verified: lgrep_diagnostics called through the Vision HTTP session reports transport 'stdio'. Therefore prune_orphans and prune_symbols would accept dry_run=false from a shared unauthenticated surface, which is exactly what the guard intends to prevent. Not proven by executing deletion, deliberately. Severity high; disposition fix now in a follow-up change. The durable lesson: transport kind is not a proxy for caller trust once a multiplexing proxy fronts the pipe.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:29.139Z"
+    },
+    {
+      "id": "ws-cUmcli",
+      "type": "gotcha",
+      "content": "search_references usage_filter 'include_tests' is indistinguishable from 'production_first'. Managed-endpoint evidence run tr_ms6xojph_5cb7ac80 against a 128-occurrence fixture: production_first returned total_matches 133 with 100 rows and 0 test hits; include_tests returned total_matches 133 with 100 rows and 0 test hits; only tests_only differed, returning 5 test rows. production_first does not exclude tests from the total, it only orders production first, so once the 100-result cap truncates the response the test occurrences are never reachable through include_tests. The filter therefore has no observable effect at or above the cap. Severity high for usefulness; disposition follow-up. Fix direction: make include_tests interleave or guarantee test representation within the cap, or report the truncated-away test count explicitly.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:40.194Z"
+    },
+    {
+      "id": "ws-JLUOx1",
+      "type": "gotcha",
+      "content": "Stale occurrence data is served with no freshness signal. Evidence run tr_ms6xqzks_5095cd1f: after shifting every line of a fixture module down by ten without re-indexing, search_references returned 21 rows whose line_number and line_text no longer matched the file on disk, for example an indexed row claiming line 3 is 'from app.core import greet' when line 3 is now '# padding'. The response stayed bounded, schema-stable and fast, and carried only the generic candidate disclaimer; nothing indicated the index predates the file. An incremental re-index cleared all 21. Severity medium; disposition follow-up. Agents cannot distinguish a correct hit from a stale one, so line-anchored navigation can silently land in the wrong place. Fix direction: compare indexed file mtime or content hash at query time and surface a per-file staleness flag, since semantic search already has a staleness pre-flight.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:50.630Z"
+    },
+    {
+      "id": "ws-pIosyJ",
+      "type": "pattern",
+      "content": "Validate a managed MCP service through its real proxied endpoint, not only through the agent's tool catalog. Two false conclusions were avoided this way. First, an early probe reported the Vision endpoint as unreachable with HTTP 400 'no server available'; the actual cause was a missing 'Accept: application/json, text/event-stream' header, and once corrected the streamable-HTTP handshake succeeded and returned serverInfo vision-proxy-lgrep with all 21 tools. Second, an OpenCode session's Code Mode catalog keeps whatever tool list it built at session start, so after any Vision server restart existing sessions report the namespace as empty or unknown while the service is provably healthy. Neither symptom means the service is broken. Durable rule: classify an MCP failure as client-catalog versus service-registration by probing the endpoint or binary directly, and remember that agent sessions must be restarted after a Vision server restart.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:11:59.793Z"
+    },
+    {
+      "id": "ws-hS3NeI",
+      "type": "failure",
+      "content": "An unbounded dependency hid an entire uncollectable test suite, and the missing coverage hid a shipped feature that never worked. lgrep declared mcp>=1.0.0; once mcp 2.0.0 became stable it removed mcp.server.fastmcp, so the server failed at import. Because the server and CLI suites import the server, they could not even be collected, and that collection failure was repeatedly recorded during acceptance as a pre-existing environmental blocker rather than investigated. It was never environmental. Pinning mcp>=1.28,<2 made the suite collectable and immediately exposed that search_references raised TypeError on every MCP call, since its kind argument collided with RuntimeSupervisor.run_blocking's own kind parameter. The feature had shipped and been accepted without ever executing end to end. Durable rules: never accept 'tests cannot be collected' as environmental without tracing the cause; treat an uncollectable suite as a release blocker; and bind arguments with functools.partial before crossing a supervisor boundary that owns generic parameter names.",
+      "source_task": "tk-5310e12cf868",
+      "recorded_at": "2026-07-30T03:12:09.888Z"
+    }
+  ],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-30T00:51:57.510Z",
+      "completed_by": "agent",
+      "approval_evidence": "User confirmed the problem statement: deploy the released lgrep artifact to Vision, verify the managed MCP surface broadly, and separate reproducible defects from improvement opportunities.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "1ec62e77048d7ace012c06b0598e231460dde78fb8be373242376a44ad3ed18f",
+        "non_whitespace_chars": 1121,
+        "checked_at": "2026-07-30T00:51:16.216Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-30T01:04:22.252Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved the validation agreement. Typed 13-item ChangeContract minted. Discovery traced the uv-tool artifact, Vision-managed subprocess lifecycle, explicit restart requirement after binary replacement, rollback, and managed-MCP validation matrix.",
+      "started_at": "2026-07-30T01:04:06.578Z",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "non_whitespace_chars": 2256,
+        "checked_at": "2026-07-30T00:51:16.217Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-30T01:21:32.683Z",
+      "completed_by": "agent",
+      "approval_evidence": "Independent design validator returned CAUTION, not conflict. Design now records the user-selected 3.2.0 tag-first rollout, immutable rollback target, explicit Vision restart, 30-second internal process ceiling, and 8-second managed-request deadline required by AC3.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "a89790b5bcc4f45232f79430adc872cbc73e8cddd812eb088d41afcce36a415b",
+        "non_whitespace_chars": 2595,
+        "checked_at": "2026-07-30T00:51:16.218Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-30T01:41:32.630Z",
+      "completed_by": "agent",
+      "approval_evidence": "User approved the prep contract. Strict validation passed with only NO_DELTAS warning; three sequential tasks cover all six acceptance criteria and constraints."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:12:33.365Z",
+      "completed_by": "agent",
+      "approval_evidence": "All three tasks checkpointed. Cutover, managed-matrix validation, and findings publication complete. Strict validation passes with only the NO_DELTAS warning, which is expected for a validation-only change."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-30T05:25:42.370Z",
+      "completed_by": "user",
+      "approval_evidence": "Acceptance approved by user (\"accept\") after being explicitly presented with the AC2 lineage judgment call. Contract review matrix persisted: 13/13 rows, 0 failing. AC2 recorded pass against deployed v3.2.2 (tr_ms72gdpd_770ff8e1, tr_ms72higs_c69e6e03) with the original v3.2.1 failure preserved verbatim in task verification, wisdom ws-cUmcli, and change fixLookupPruneDefects. C3 disclosure accepted: today's re-verify invokes prune tools with dry_run=false but they refuse on v3.2.2 and delete nothing. AC4 limitation accepted: no unbounded growth proven at 5 concurrent, saturation unproven. Two clarify findings closed without action — scope covered by agreement constraints/OOS, error handling covered by the agreement Rollback section which was proven by a real failed cutover.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "bfa00ba58d34a14185c823bcc7fd7dc86c1508d9b44a9e54aefab18885927192",
+        "non_whitespace_chars": 3633,
+        "checked_at": "2026-07-30T00:51:16.219Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+      "approvedAt": "2026-07-30T01:04:14.483Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "**AC1 — Installed artifact:** the Vision lgrep subprocess reports the released version and exposes `search_references`; evidence includes a post-restart managed-MCP tool catalog or successful real request.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "**AC2 — Core behavior:** against an isolated temporary Python fixture, managed MCP requests prove candidate disclaimer, production-first ordering, `include_tests`, `tests_only`, and a cap of 100 results; each expected response is observed once.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "**AC3 — Safe failures:** managed MCP requests for empty input, invalid filter/kind, absent index, stale occurrence data, timeout, and cancellation return bounded schema-stable outcomes or a documented transport-level equivalent; no request exceeds 8 seconds.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "**AC4 — Bounded load:** five simultaneous managed lookup requests complete with no unbounded worker growth; diagnostics show owned runtime jobs and an explicit queued/rejected/abandoned disposition when applicable.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "**AC5 — Release integrity:** deployment and restart leave Vision healthy, preserve its configured lgrep safety environment, and provide a tested rollback procedure to the prior artifact.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "**AC6 — Improvement output:** every proposed improvement has reproduction evidence, severity, user/operational impact, and a recommended disposition: fix now, follow-up, or reject.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Deploy only from current `main` through the existing uv-tool installation; do not use `lgrep install-opencode`, which targets a different port.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Validate `servers.yaml` before lifecycle actions; use explicit lgrep restart after binary replacement because config reload alone does not restart an unchanged server definition.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Use temporary fixtures and read-only MCP calls; do not modify real repository indexes or run destructive maintenance tools.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Preserve Vision environment values, session limits, and worker limits.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "Implementing improvement findings during this validation change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "Altering Vision topology, ports, or global config policy.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "Changing candidate lookup semantics without a separate approved change.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-30T05:23:58.460Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Protocol evidence tr_ms6xhvom_e02ee32d: the deployed Vision-managed binary initializes over real MCP and advertises all 21 tools including search_references. Re-confirmed today against the currently deployed artifact (v3.2.2) via tr_ms72gdpd_770ff8e1, check 'managed endpoint exposes search_references' = pass.",
+          "notes": "Satisfied twice on two different artifacts: v3.2.1 at the time of the change, and v3.2.2 as deployed now."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Verified today against the deployed managed endpoint on port 6278 across two runs. tr_ms72gdpd_770ff8e1: 'include_tests returns test rows' pass, 'three filters are distinct' pass (production_first 100 / include_tests 100 / tests_only 5), 'production_first unchanged (no test rows)' pass. tr_ms72higs_c69e6e03: 'candidate disclaimer present' pass ('Candidate occurrences only; results are not compiler-accurate or exhaustive.'), 'result cap enforced at 100 (limit=100)' pass (100 returned of 142 total matches), 'limit above MAX_REFERENCE_RESULTS is clamped to 100' pass (requested 500, returned 100). All five required behaviors observed.",
+          "notes": "IMPORTANT LINEAGE — this criterion FAILED when originally measured. On v3.2.1 (the artifact this change deployed), run tr_ms6xojph_5cb7ac80 showed include_tests returning a response identical to production_first: both 133 total matches, 100 rows, 0 test rows. The distinct response required by AC2 was never observed. That failure was the single most valuable output of this change: it was recorded as wisdom ws-cUmcli, promoted into change fixLookupPruneDefects, and fixed by reserved-slice selection released in v3.2.2. The pass recorded here is measured against v3.2.2, which is the artifact currently deployed to the managed service. The original failure is deliberately preserved in the task verification text, in ws-cUmcli, and in the fixLookupPruneDefects record; it is not being rewritten."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Runs tr_ms6xq8ef_ccb76250 and tr_ms6xqzks_5095cd1f: empty query, invalid usage_filter, invalid kind, and unindexed path all return bounded schema-stable error fields; a client abort mid-request leaves the service healthy; slowest managed request 0.038s against the 8s budget. Re-confirmed today: tr_ms72gdpd_770ff8e1 'all managed requests within 8s' pass at max 0.034s.",
+          "notes": "Stale occurrence data was bounded and schema-stable but carried no freshness signal at validation time. That was correctly classified as a finding (ws-JLUOx1) rather than an AC3 violation, since AC3 requires bounded schema-stable outcomes, which held. The gap is now closed in v3.2.2: tr_ms72gdpd_770ff8e1 shows 'edited file marks its rows stale', 'staleness is per-file, not global', and 're-index clears staleness' all passing."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Five genuinely simultaneous managed lookups completed in 0.162s wall time with LGREP_WORKER_MAX_THREADS=2, zero active jobs afterwards, and no abandonment. Diagnostics showed owned runtime jobs and exposed no secrets.",
+          "notes": "Queued/rejected dispositions could not be induced because each lookup completes in roughly 30ms. AC4 requires an explicit disposition 'when applicable'; it was not applicable at this load. Honest limitation: this validates absence of unbounded growth at five concurrent requests, not saturation behavior."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Rollback was exercised for real, not merely documented. The first cutover shipped v3.2.0, failed AC1 because mcp 2.0.0 removed mcp.server.fastmcp, and was rolled back to the prior artifact with Vision restarted and verified healthy. Redeploy then installed the immutable tag v3.2.1, which resolved mcp 1.29.0 with no manual constraint. `vision config validate` passed, only the lgrep server was restarted, and Vision reported healthy with 12 servers running and 0 errors.",
+          "notes": "Strongest evidence in the change: the rollback path was proven by an actual failed deployment rather than a rehearsal."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "artifact_reference",
+          "evidence": "Five durable findings recorded as promoted project wisdom, each carrying reproduction evidence, severity, impact, and disposition: ws-McJr7j (high, transport guard defeated by the Vision proxy, fix now), ws-cUmcli (high, include_tests indistinguishable from production_first at the cap, follow-up), ws-JLUOx1 (medium, stale rows served with no freshness signal, follow-up), ws-pIosyJ (pattern, classify managed MCP failures as client-catalog vs service-registration), ws-hS3NeI (failure, an unbounded dependency hid an uncollectable suite which hid a shipped feature that never executed, closed by pinMcpV1).",
+          "notes": "Downstream proof that the findings were actionable and correctly prioritized: the three defect findings became change fixLookupPruneDefects, which shipped as v3.2.2 and is now deployed and verified. ws-McJr7j additionally exposed a second-order gap now tracked as gateRemainingDestructiveMcp."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Deployment used the existing uv-tool installation against an immutable release tag. `lgrep install-opencode`, which targets a different port, was not invoked at any point."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "`vision config validate` returned 'Configuration is valid' before lifecycle actions, and an explicit lgrep server restart was issued after binary replacement rather than relying on config reload alone.",
+          "notes": "This constraint was independently re-confirmed today: a SIGHUP reload alone left the stale 3.2.1 subprocess serving requests, and only an explicit vision_restart of the lgrep server picked up the new binary. The constraint is correct and load-bearing."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "Validation used isolated temporary Python fixtures under a temp directory. No real repository index was modified. During the change's own execution the destructive guard finding was established by reading the transport diagnostic, explicitly recorded as 'Not proven by executing deletion, deliberately'.",
+          "notes": "Disclosure: today's re-verification recorded under tk-9b1311399dcc does invoke prune_orphans and prune_symbols with dry_run=false, but against the deployed v3.2.2 both refuse and return previews, so nothing was deleted and no real index was modified. The constraint holds. Separately and outside this change, an earlier fixLookupPruneDefects verification run against the then-deployed v3.2.1 did execute real deletion of orphaned cache dirs and stale symbol indexes; that was assessed as garbage-only with all 45 symbol indexes and 23 cache dirs intact, and is disclosed here for completeness rather than attributed to this change."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No edit was made to ~/.config/vision/servers.yaml. Environment values, session_timeout 30m, max_sessions 20, and LGREP_WORKER_MAX_THREADS=2 are unchanged; the AC4 run observed worker_max_threads 2 in effect."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No finding was implemented in this change. All three tasks report empty touched_files, and the change carries no spec deltas. Remediation was routed to a separate approved change (fixLookupPruneDefects)."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Vision topology, ports, and global config policy were not altered. Only the lgrep server process was restarted, on its existing port 6278."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Candidate lookup semantics were not changed by this change. The later semantic change to include_tests was made under the separately approved fixLookupPruneDefects, honoring this boundary."
+        }
+      ]
+    },
+    "amendments": []
+  },
+  "acceptanceCriteria": [
+    "**AC1 — Installed artifact:** the Vision lgrep subprocess reports the released version and exposes `search_references`; evidence includes a post-restart managed-MCP tool catalog or successful real request.",
+    "**AC2 — Core behavior:** against an isolated temporary Python fixture, managed MCP requests prove candidate disclaimer, production-first ordering, `include_tests`, `tests_only`, and a cap of 100 results; each expected response is observed once.",
+    "**AC3 — Safe failures:** managed MCP requests for empty input, invalid filter/kind, absent index, stale occurrence data, timeout, and cancellation return bounded schema-stable outcomes or a documented transport-level equivalent; no request exceeds 8 seconds.",
+    "**AC4 — Bounded load:** five simultaneous managed lookup requests complete with no unbounded worker growth; diagnostics show owned runtime jobs and an explicit queued/rejected/abandoned disposition when applicable.",
+    "**AC5 — Release integrity:** deployment and restart leave Vision healthy, preserve its configured lgrep safety environment, and provide a tested rollback procedure to the prior artifact.",
+    "**AC6 — Improvement output:** every proposed improvement has reproduction evidence, severity, user/operational impact, and a recommended disposition: fix now, follow-up, or reject."
+  ],
+  "documents": {
+    "proposal": "# Test Vision lgrep integration\n\n## Problem\n\nThe lgrep source release is present on `main`, while Vision still runs the older installed binary and a long-lived managed service. This leaves the real agent-facing MCP surface unverified and missing the released lookup capability.\n\n## Proposed outcome\n\nDeploy the current `main` artifact through the repository-supported process, restart or reload Vision only through its supported lifecycle, then exercise the managed lgrep MCP surface across registration, reference lookup, indexing, filtering, limits, errors, concurrency, and diagnostics. Persist evidence-backed improvement opportunities separately from verified defects.\n\n## Boundaries\n\n- Validate the Vision-managed service, not only direct source execution.\n- Preserve configured safety limits and avoid production-destructive operations.\n- Do not change Vision configuration or lgrep behavior without evidence and an approved follow-up scope.\n\n## Initial acceptance signals\n\n- Vision reports a lgrep service that exposes `search_references`.\n- Managed-service tests cover successful lookup, test filters, caps, structured error paths, and bounded concurrent use.\n- Findings distinguish deployment/configuration faults, regressions, and improvement opportunities with reproducible evidence.",
+    "problemStatement": "The released `addReferenceLookup` source is on `main`, but Vision executes `/home/jon/.local/bin/lgrep` version 3.1.3 and its long-running lgrep service does not expose the new reference-lookup capability. We need to deploy the released artifact through the repository-supported path, validate Vision’s real MCP surface and behavior broadly, and identify evidence-backed improvements without treating local source tests as a substitute for managed-service verification.",
+    "agreement": "# Agreement — Vision lgrep integration validation\n\n## Objective\n\nSafely cut Vision over to the released lgrep artifact, prove the real managed MCP service exposes and correctly executes `search_references`, and produce a prioritized, evidence-backed improvement backlog.\n\n## Acceptance criteria\n\n- **AC1 — Installed artifact:** the Vision lgrep subprocess reports the released version and exposes `search_references`; evidence includes a post-restart managed-MCP tool catalog or successful real request.\n- **AC2 — Core behavior:** against an isolated temporary Python fixture, managed MCP requests prove candidate disclaimer, production-first ordering, `include_tests`, `tests_only`, and a cap of 100 results; each expected response is observed once.\n- **AC3 — Safe failures:** managed MCP requests for empty input, invalid filter/kind, absent index, stale occurrence data, timeout, and cancellation return bounded schema-stable outcomes or a documented transport-level equivalent; no request exceeds 8 seconds.\n- **AC4 — Bounded load:** five simultaneous managed lookup requests complete with no unbounded worker growth; diagnostics show owned runtime jobs and an explicit queued/rejected/abandoned disposition when applicable.\n- **AC5 — Release integrity:** deployment and restart leave Vision healthy, preserve its configured lgrep safety environment, and provide a tested rollback procedure to the prior artifact.\n- **AC6 — Improvement output:** every proposed improvement has reproduction evidence, severity, user/operational impact, and a recommended disposition: fix now, follow-up, or reject.\n\n## Constraints\n\n- Deploy only from current `main` through the existing uv-tool installation; do not use `lgrep install-opencode`, which targets a different port.\n- Validate `servers.yaml` before lifecycle actions; use explicit lgrep restart after binary replacement because config reload alone does not restart an unchanged server definition.\n- Use temporary fixtures and read-only MCP calls; do not modify real repository indexes or run destructive maintenance tools.\n- Preserve Vision environment values, session limits, and worker limits.\n\n## Rollback\n\nIf health, registration, or a managed validation fails, reinstall the previously recorded source revision through the uv tool and explicitly restart lgrep through Vision; verify the prior managed service version and health before ending the run.\n\n## Out of scope\n\n- Implementing improvement findings during this validation change.\n- Altering Vision topology, ports, or global config policy.\n- Changing candidate lookup semantics without a separate approved change.",
+    "design": "# Design — Vision-managed lgrep validation\n\n## Release source and rollback\n\nCreate and deploy a 3.2.0 release tag from the current verified `main` SHA before any Vision cutover. Record the previous installed artifact’s source revision and retain it as the rollback target. If post-cutover health or an AC1–AC5 scenario fails, reinstall that recorded prior revision through the uv tool, explicitly restart lgrep through Vision, and re-check the prior managed version and health.\n\n## Cutover path\n\n1. Verify clean, current `main`; record source SHA, existing installed artifact/version, Vision lgrep health, configured timeout (30 seconds), worker limit (2), and previous rollback ref.\n2. Create/push the 3.2.0 release tag from the verified `main` SHA.\n3. Reinstall the uv tool from that immutable tag.\n4. Run `vision config validate` without changing configuration.\n5. Explicitly restart the `lgrep` server through Vision. A daemon reload is insufficient when `servers.yaml` is unchanged.\n6. Prove the managed MCP session advertises and executes `search_references`.\n\n## Validation harness\n\nUse a temporary Python repository created solely for this run. Index it through managed MCP, then execute a deterministic matrix:\n\n- registration/version and candidate disclaimer;\n- production-first, include-tests, tests-only, kind filter, and 100-result cap with at least 101 fixture occurrences;\n- empty input, invalid filters/kind, absent index, stale occurrence data, timeout, and client-abort cancellation, accepting documented transport-level equivalents;\n- five concurrent requests with worker cap ≤2 and at least three explicit queued/rejected/abandoned dispositions where pressure is induced;\n- diagnostics inspection plus post-run Vision health and environment comparison.\n\nEach scenario records request, response shape, elapsed time, and diagnostics evidence. The harness must use read-only lookup calls after setup and must not touch existing repository indexes.\n\n## Decision rules\n\n- A failed AC1–AC5 triggers rollback before further test tiers.\n- A managed/direct behavior mismatch is a deployment or configuration defect.\n- A reproducible behavior issue without agreement breach becomes an AC6 improvement candidate.\n- No implementation is folded into this validation change; create a follow-up only for an approved fix.\n\n## Safety and observability\n\nRetain configured Vision worker/session/time limits. The deployed lgrep process has a 30-second internal ceiling, while every managed validation request has an 8-second client-side deadline to satisfy AC3. Record whichever layer terminates a timeout. Capture lgrep diagnostics before and after concurrency and classify queued, abandoned, timeout, or finished-after-abandon jobs explicitly.\n\n## Deliverables\n\n- Tag/deployment receipt with source SHA, previous artifact ref, Vision restart evidence, health result, and rollback evidence if invoked.\n- Managed-MCP test evidence table mapped to AC1–AC5.\n- Improvement backlog mapped to AC6 with reproduction and disposition.",
+    "executiveSummary": "# Executive Summary — Vision lgrep integration validation\n\n## Outcome\n\nThe shared lgrep service was cut over to a released artifact and then genuinely stress-tested through its real managed endpoint rather than through the convenient path. It worked, and more importantly it found things.\n\nThe validation proved the managed service exposes and correctly executes reference lookup: candidate framing, ordering, filters, the result cap, bounded failure handling for malformed and impossible requests, and five simultaneous requests completing without runaway workers. The slowest request across the entire matrix was 0.038 seconds against an eight-second budget.\n\n## Why it matters\n\nThis change is best judged by what it caught, not by whether everything passed. It found five durable problems, three of them real defects in shipped code:\n\n- **A security exposure.** The guard preventing deletion through the shared service decided authority by looking at the connection type, treating a local-looking connection as a trusted single user. The shared proxy invalidates that assumption: it runs the service as a local subprocess but republishes it on an unauthenticated port, so the connection still looks local no matter who is calling. Anyone reaching the port could delete indexed data.\n- **A filter that did nothing.** Asking to include test occurrences returned none, because production occurrences filled the result cap before any test occurrence was considered. The option existed and had no observable effect.\n- **Results that lied about their freshness.** Occurrences from files edited since indexing came back with stale line numbers and text, with nothing to distinguish them from current results.\n\nAll three were fixed and released as v3.2.2, which is now deployed and independently re-verified through the same managed endpoint.\n\nTwo further lessons were recorded. One is a method: validate a managed service through its real endpoint, because two false conclusions were only avoided that way — an apparent outage that was actually a missing request header, and an apparently missing tool namespace that was actually a client-side cache. The other is a warning: an unbounded dependency had made an entire test suite uncollectable, that failure had been repeatedly waved through as environmental, and it was concealing a shipped feature that had never once executed end to end.\n\n## Verification\n\n- Managed matrix executed against the real proxied endpoint using isolated temporary fixtures, never real repository data.\n- Rollback was proven rather than rehearsed: the first cutover failed, was rolled back to the prior artifact, and the service was verified healthy before redeploying a corrected release.\n- Re-verified today against the currently deployed artifact: all behaviors pass, slowest request 0.034 seconds.\n- Contract review: 13 of 13 items satisfied, none failing.\n\n## An honest note on the criterion that failed\n\nThe core-behavior criterion did not pass when it was first measured. On the artifact this change deployed, the test-inclusion filter was indistinguishable from the default, so the distinct behavior the criterion required was never observed. It is recorded here as satisfied because it has now been demonstrated against the artifact currently in service, following the fix that this very finding produced.\n\nThe original failure has been left intact in the task record, in the recorded findings, and in the remediation change. It is not being reinterpreted. A validation exercise that surfaces a real defect has done its job; the criterion is marked satisfied because the service now behaves correctly, not because the earlier result was reconsidered.\n\n## Risks and follow-ups\n\n- Load behavior was validated at five concurrent requests. Because each completes in about thirty milliseconds, queueing and rejection paths could not be triggered, so saturation behavior remains unproven.\n- The follow-on review found that the deletion guard was extended to only two of the four tools that actually delete. That gap is tracked separately and is not closed by this change.\n- Client sessions cache the tool catalog at startup, so any restart of the shared service leaves existing sessions reporting the tools as missing until they restart. This is expected and documented, not a fault.\n",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-30T05:23:58.460Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | **AC1 — Installed artifact:** the Vision lgrep subprocess reports the released version and exposes `search_references`; evidence includes a post-restart managed-MCP tool catalog or successful real request. | pass | Protocol evidence tr_ms6xhvom_e02ee32d: the deployed Vision-managed binary initializes over real MCP and advertises all 21 tools including search_references. Re-confirmed today against the currently deployed artifact (v3.2.2) via tr_ms72gdpd_770ff8e1, check 'managed endpoint exposes search_references' = pass. |\n| AC2 | acceptance_criterion | **AC2 — Core behavior:** against an isolated temporary Python fixture, managed MCP requests prove candidate disclaimer, production-first ordering, `include_tests`, `tests_only`, and a cap of 100 results; each expected response is observed once. | pass | Verified today against the deployed managed endpoint on port 6278 across two runs. tr_ms72gdpd_770ff8e1: 'include_tests returns test rows' pass, 'three filters are distinct' pass (production_first 100 / include_tests 100 / tests_only 5), 'production_first unchanged (no test rows)' pass. tr_ms72higs_c69e6e03: 'candidate disclaimer present' pass ('Candidate occurrences only; results are not compiler-accurate or exhaustive.'), 'result cap enforced at 100 (limit=100)' pass (100 returned of 142 total matches), 'limit above MAX_REFERENCE_RESULTS is clamped to 100' pass (requested 500, returned 100). All five required behaviors observed. |\n| AC3 | acceptance_criterion | **AC3 — Safe failures:** managed MCP requests for empty input, invalid filter/kind, absent index, stale occurrence data, timeout, and cancellation return bounded schema-stable outcomes or a documented transport-level equivalent; no request exceeds 8 seconds. | pass | Runs tr_ms6xq8ef_ccb76250 and tr_ms6xqzks_5095cd1f: empty query, invalid usage_filter, invalid kind, and unindexed path all return bounded schema-stable error fields; a client abort mid-request leaves the service healthy; slowest managed request 0.038s against the 8s budget. Re-confirmed today: tr_ms72gdpd_770ff8e1 'all managed requests within 8s' pass at max 0.034s. |\n| AC4 | acceptance_criterion | **AC4 — Bounded load:** five simultaneous managed lookup requests complete with no unbounded worker growth; diagnostics show owned runtime jobs and an explicit queued/rejected/abandoned disposition when applicable. | pass | Five genuinely simultaneous managed lookups completed in 0.162s wall time with LGREP_WORKER_MAX_THREADS=2, zero active jobs afterwards, and no abandonment. Diagnostics showed owned runtime jobs and exposed no secrets. |\n| AC5 | acceptance_criterion | **AC5 — Release integrity:** deployment and restart leave Vision healthy, preserve its configured lgrep safety environment, and provide a tested rollback procedure to the prior artifact. | pass | Rollback was exercised for real, not merely documented. The first cutover shipped v3.2.0, failed AC1 because mcp 2.0.0 removed mcp.server.fastmcp, and was rolled back to the prior artifact with Vision restarted and verified healthy. Redeploy then installed the immutable tag v3.2.1, which resolved mcp 1.29.0 with no manual constraint. `vision config validate` passed, only the lgrep server was restarted, and Vision reported healthy with 12 servers running and 0 errors. |\n| AC6 | acceptance_criterion | **AC6 — Improvement output:** every proposed improvement has reproduction evidence, severity, user/operational impact, and a recommended disposition: fix now, follow-up, or reject. | pass | Five durable findings recorded as promoted project wisdom, each carrying reproduction evidence, severity, impact, and disposition: ws-McJr7j (high, transport guard defeated by the Vision proxy, fix now), ws-cUmcli (high, include_tests indistinguishable from production_first at the cap, follow-up), ws-JLUOx1 (medium, stale rows served with no freshness signal, follow-up), ws-pIosyJ (pattern, classify managed MCP failures as client-catalog vs service-registration), ws-hS3NeI (failure, an unbounded dependency hid an uncollectable suite which hid a shipped feature that never executed, closed by pinMcpV1). |\n| C1 | constraint | Deploy only from current `main` through the existing uv-tool installation; do not use `lgrep install-opencode`, which targets a different port. | respected | Deployment used the existing uv-tool installation against an immutable release tag. `lgrep install-opencode`, which targets a different port, was not invoked at any point. |\n| C2 | constraint | Validate `servers.yaml` before lifecycle actions; use explicit lgrep restart after binary replacement because config reload alone does not restart an unchanged server definition. | respected | `vision config validate` returned 'Configuration is valid' before lifecycle actions, and an explicit lgrep server restart was issued after binary replacement rather than relying on config reload alone. |\n| C3 | constraint | Use temporary fixtures and read-only MCP calls; do not modify real repository indexes or run destructive maintenance tools. | respected | Validation used isolated temporary Python fixtures under a temp directory. No real repository index was modified. During the change's own execution the destructive guard finding was established by reading the transport diagnostic, explicitly recorded as 'Not proven by executing deletion, deliberately'. |\n| C4 | constraint | Preserve Vision environment values, session limits, and worker limits. | respected | No edit was made to ~/.config/vision/servers.yaml. Environment values, session_timeout 30m, max_sessions 20, and LGREP_WORKER_MAX_THREADS=2 are unchanged; the AC4 run observed worker_max_threads 2 in effect. |\n| OOS1 | out_of_scope | Implementing improvement findings during this validation change. | not_applicable | No finding was implemented in this change. All three tasks report empty touched_files, and the change carries no spec deltas. Remediation was routed to a separate approved change (fixLookupPruneDefects). |\n| OOS2 | out_of_scope | Altering Vision topology, ports, or global config policy. | not_applicable | Vision topology, ports, and global config policy were not altered. Only the lgrep server process was restarted, on its existing port 6278. |\n| OOS3 | out_of_scope | Changing candidate lookup semantics without a separate approved change. | not_applicable | Candidate lookup semantics were not changed by this change. The later semantic change to include_tests was made under the separately approved fixLookupPruneDefects, honoring this boundary. |\n\n"
+  },
+  "artifacts": {
+    "proposal": {
+      "updatedAt": "2026-07-30T00:51:16.258Z",
+      "contentHash": "1ec62e77048d7ace012c06b0598e231460dde78fb8be373242376a44ad3ed18f",
+      "source": "temporal",
+      "readable": false
+    },
+    "problemStatement": {
+      "updatedAt": "2026-07-30T00:51:16.258Z",
+      "contentHash": "bbdb74296d6824b93127754721ca053120f31666612e1583b9775f744c4fbc0e",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-30T01:03:20.164Z",
+      "contentHash": "aa4f368efe4c360246ce111f74d670fb738b93a46d9bb0566d79dc2d429c942c",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-30T01:21:24.910Z",
+      "contentHash": "a89790b5bcc4f45232f79430adc872cbc73e8cddd812eb088d41afcce36a415b",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-30T05:24:23.712Z",
+      "contentHash": "bfa00ba58d34a14185c823bcc7fd7dc86c1508d9b44a9e54aefab18885927192",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_UNCLEAR_SCOPE",
+      "severity": "warning",
+      "message": "Proposal has no Scope section. What files and modules will be affected?",
+      "recorded_at": "2026-07-30T00:51:47.685Z"
+    },
+    {
+      "code": "CLARIFY_MISSING_ERROR_HANDLING",
+      "severity": "warning",
+      "message": "Proposal describes behavior that could fail but doesn't mention error handling or rollback. What happens when things go wrong?",
+      "recorded_at": "2026-07-30T00:51:47.685Z"
+    }
+  ],
+  "reentry_history": [],
+  "same_project_dependencies": [],
+  "lastSignalAt": "2026-07-30T05:26:48.099Z",
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true,
+  "release_notes": {
+    "audience": "internal",
+    "category": "changed",
+    "headline_internal": "Cut the shared lgrep service over to a released artifact and validated the managed MCP surface end to end, producing the defect backlog that became v3.2.2",
+    "highlights": [
+      "Shared lgrep service cut over to a released tag via the existing uv-tool install, with an explicit Vision restart (config reload alone does not replace a running subprocess).",
+      "Rollback proven rather than rehearsed: the first cutover shipped v3.2.0, failed on a removed MCP SDK module, was rolled back to the prior artifact, and the service was verified healthy before redeploying v3.2.1.",
+      "Managed MCP matrix exercised against the real proxied endpoint on port 6278 using isolated temporary fixtures: filters, ordering, result cap, candidate framing, malformed-input handling, client abort, and five concurrent lookups. Slowest request 0.038s against an 8s budget.",
+      "Produced five durable findings. Three were real defects — destructive authority inferred from transport kind, include_tests having no observable effect at the result cap, and stale rows served with no freshness signal — all fixed and released in v3.2.2.",
+      "Method lesson recorded: validate a managed service through its real endpoint. An apparent outage was a missing Accept header, and an apparently missing tool namespace was a client-side session cache, not a service fault."
+    ],
+    "area": "Vision-managed lgrep service",
+    "user_action_required": false,
+    "links": {
+      "pr": "https://github.com/Sharper-Flow/lgrep/pull/6"
+    }
+  },
+  "worker_bundle_impact": {
+    "kind": "not_applicable",
+    "rationale": "Validation-only change in a Python MCP server/CLI repository. No ADV Temporal worker bundle, workflow code, or replay-determinism surface exists here, and this change touched no files at all — all three tasks report empty touched_files and the change carries no spec deltas.",
+    "confirmed_at": "2026-07-30T05:25:49.018Z"
+  },
+  "creation_request_hash": "1b735075d264112f5d0df80be1832b87f761bb59621e8be4612c0cbd8ba10a75",
+  "projection_revision": 43,
+  "projection_commits": [
+    {
+      "mutation_kind": "proposalUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "0a1408cf73226e63cf469c8d2489394507f51f58859fdad5bd40fe79900580d6:createArtifacts:proposal",
+      "operation_id": "0a1408cf73226e63cf469c8d2489394507f51f58859fdad5bd40fe79900580d6:createArtifacts:proposal",
+      "payload_hash": "aa0d41a81ca0fe53a0f4d4fa183a35d30dd084470c085f5b38a513300a286c21",
+      "state_revision": 1,
+      "prior_revision": 0,
+      "new_revision": 1,
+      "committed_at": "2026-07-30T00:51:16.549Z"
+    },
+    {
+      "mutation_kind": "problemStatementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "0a1408cf73226e63cf469c8d2489394507f51f58859fdad5bd40fe79900580d6:createArtifacts:problemStatement",
+      "operation_id": "0a1408cf73226e63cf469c8d2489394507f51f58859fdad5bd40fe79900580d6:createArtifacts:problemStatement",
+      "payload_hash": "72dae2cffea080e5d02780d52c77d0ec6f52526afc8a1fd72498dbb5db0ca9f1",
+      "state_revision": 2,
+      "prior_revision": 1,
+      "new_revision": 2,
+      "committed_at": "2026-07-30T00:51:16.862Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 2,
+      "new_revision": 3,
+      "committed_at": "2026-07-30T00:51:57.755Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 3,
+      "new_revision": 4,
+      "committed_at": "2026-07-30T00:57:04.980Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 4,
+      "new_revision": 5,
+      "committed_at": "2026-07-30T00:57:05.190Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 5,
+      "new_revision": 6,
+      "committed_at": "2026-07-30T01:02:41.487Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 6,
+      "new_revision": 7,
+      "committed_at": "2026-07-30T01:02:41.612Z"
+    },
+    {
+      "mutation_kind": "agreementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "4e17696d8ebfbff3c09b0712fa6afbcf44d8a64d0f51432ad56734359ae9c6bd:updateArtifacts:agreement",
+      "operation_id": "4e17696d8ebfbff3c09b0712fa6afbcf44d8a64d0f51432ad56734359ae9c6bd:updateArtifacts:agreement",
+      "payload_hash": "865413f4c66def8bd85c9d6e0936d6019064768c04002e7a2a8f39957f21627a",
+      "state_revision": 3,
+      "prior_revision": 7,
+      "new_revision": 8,
+      "committed_at": "2026-07-30T01:03:20.285Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 8,
+      "new_revision": 9,
+      "committed_at": "2026-07-30T01:04:06.719Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 9,
+      "new_revision": 10,
+      "committed_at": "2026-07-30T01:04:14.640Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 10,
+      "new_revision": 11,
+      "committed_at": "2026-07-30T01:04:22.464Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "236db691b760805e38236df82cb4a720766fb8ac9a7581927af38d6425f115cd:updateArtifacts:design",
+      "operation_id": "236db691b760805e38236df82cb4a720766fb8ac9a7581927af38d6425f115cd:updateArtifacts:design",
+      "payload_hash": "20031d7db59f5828febdee4166dbfcc75c0bd38dbe79453cc36a3d182c3d6d96",
+      "state_revision": 4,
+      "prior_revision": 11,
+      "new_revision": 12,
+      "committed_at": "2026-07-30T01:04:34.356Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 12,
+      "new_revision": 13,
+      "committed_at": "2026-07-30T01:12:37.862Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 13,
+      "new_revision": 14,
+      "committed_at": "2026-07-30T01:12:37.999Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "b00d0fe29d77a6b48662533380a5c8cdf1a2bc30706c5fd680a9c4482535fd81:updateArtifacts:design",
+      "operation_id": "b00d0fe29d77a6b48662533380a5c8cdf1a2bc30706c5fd680a9c4482535fd81:updateArtifacts:design",
+      "payload_hash": "a22f15f802ecd93987827b73551be19a391bc660d7876292b4aa7807ccb29e81",
+      "state_revision": 5,
+      "prior_revision": 14,
+      "new_revision": 15,
+      "committed_at": "2026-07-30T01:21:01.776Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "ad848b433393eb0903c337ba91eecd59dbc74f586c552f3d7257e2a5883ffb87:updateArtifacts:design",
+      "operation_id": "ad848b433393eb0903c337ba91eecd59dbc74f586c552f3d7257e2a5883ffb87:updateArtifacts:design",
+      "payload_hash": "d12a5f5e36dd472c3d86934c511a250137ea5fbbe16d4d458ca5cbffbca4a5a8",
+      "state_revision": 6,
+      "prior_revision": 15,
+      "new_revision": 16,
+      "committed_at": "2026-07-30T01:21:25.188Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 16,
+      "new_revision": 17,
+      "committed_at": "2026-07-30T01:21:32.923Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 17,
+      "new_revision": 18,
+      "committed_at": "2026-07-30T01:21:45.381Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 18,
+      "new_revision": 19,
+      "committed_at": "2026-07-30T01:21:45.749Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 19,
+      "new_revision": 20,
+      "committed_at": "2026-07-30T01:21:54.805Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 20,
+      "new_revision": 21,
+      "committed_at": "2026-07-30T01:22:04.664Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 21,
+      "new_revision": 22,
+      "committed_at": "2026-07-30T01:34:13.469Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 22,
+      "new_revision": 23,
+      "committed_at": "2026-07-30T01:34:20.272Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 23,
+      "new_revision": 24,
+      "committed_at": "2026-07-30T01:41:32.756Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 24,
+      "new_revision": 25,
+      "committed_at": "2026-07-30T01:42:12.611Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 25,
+      "new_revision": 26,
+      "committed_at": "2026-07-30T03:02:20.975Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 26,
+      "new_revision": 27,
+      "committed_at": "2026-07-30T03:03:20.319Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 27,
+      "new_revision": 28,
+      "committed_at": "2026-07-30T03:06:36.865Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 28,
+      "new_revision": 29,
+      "committed_at": "2026-07-30T03:10:55.282Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 29,
+      "new_revision": 30,
+      "committed_at": "2026-07-30T03:11:04.706Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 30,
+      "new_revision": 31,
+      "committed_at": "2026-07-30T03:11:29.449Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 31,
+      "new_revision": 32,
+      "committed_at": "2026-07-30T03:11:40.294Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 32,
+      "new_revision": 33,
+      "committed_at": "2026-07-30T03:11:50.769Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 33,
+      "new_revision": 34,
+      "committed_at": "2026-07-30T03:11:59.907Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 34,
+      "new_revision": 35,
+      "committed_at": "2026-07-30T03:12:09.990Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 35,
+      "new_revision": 36,
+      "committed_at": "2026-07-30T03:12:23.138Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 36,
+      "new_revision": 37,
+      "committed_at": "2026-07-30T03:12:33.523Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785389038513_rnhfs6xd",
+      "prior_revision": 37,
+      "new_revision": 38,
+      "committed_at": "2026-07-30T05:23:58.644Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "85d9982827e7ddc7a2ad7840b124ec1caa10a7c04179bc3af318c1bf56a76276:updateArtifacts:executiveSummary",
+      "operation_id": "85d9982827e7ddc7a2ad7840b124ec1caa10a7c04179bc3af318c1bf56a76276:updateArtifacts:executiveSummary",
+      "payload_hash": "b3906ae5ea0df4c768dd41f9ecd40496e4b4f4f7ed19e76c89880f6178e0ad68",
+      "state_revision": 7,
+      "prior_revision": 38,
+      "new_revision": 39,
+      "committed_at": "2026-07-30T05:24:23.962Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 39,
+      "new_revision": 40,
+      "committed_at": "2026-07-30T05:25:42.535Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 40,
+      "new_revision": 41,
+      "committed_at": "2026-07-30T05:25:49.138Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "testVisionLgrepIntegration",
+      "prior_revision": 41,
+      "new_revision": 42,
+      "committed_at": "2026-07-30T05:26:28.080Z"
+    },
+    {
+      "mutation_kind": "releaseNotesSet",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "f839440390b5df8b3b7dae0a0e7c55937ff77d03949b71549a5d49f9b8c5a29a:releaseNotesSet",
+      "operation_id": "f839440390b5df8b3b7dae0a0e7c55937ff77d03949b71549a5d49f9b8c5a29a:releaseNotesSet",
+      "payload_hash": "cad81900f0f955795102672be8e3c6d8aef67fa7b48b2b021881a49c2d38240a",
+      "state_revision": 8,
+      "prior_revision": 42,
+      "new_revision": 43,
+      "committed_at": "2026-07-30T05:26:48.248Z"
+    }
+  ],
+  "state_revision": 8
+}
