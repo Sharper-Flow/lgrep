@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/spec.schema.json",
+  "name": "lgrep-candidate-reference-lookup",
+  "title": "Lgrep Candidate Reference Lookup",
+  "purpose": "Capability: Lgrep Candidate Reference Lookup",
+  "version": "1.0.0",
+  "updated_at": "2026-07-30T04:34:46.100Z",
+  "requirements": [
+    {
+      "id": "rq-lookupHonesty01",
+      "title": "Candidate lookup reports distinct filters, visible truncation, and result freshness",
+      "body": "Candidate reference lookup MUST make its declared usage filters observably distinct. A filter that promises to include test occurrences MUST return test occurrences when they exist, even when production occurrences alone would exceed the result cap. Responses MUST report how many production and test occurrences matched and how many of each were returned, so truncation is visible rather than inferred. Each returned occurrence MUST carry a freshness indicator derived from comparing the backing file's current content against the indexed content, and the response MUST summarise how many backing files were stale. A backing file that no longer exists MUST be reported as stale rather than raising an error. Freshness is reported, never repaired: lookup MUST NOT re-index as a side effect. Freshness work MUST be bounded by the returned result slice, not by repository size.",
+      "priority": "must",
+      "tags": [
+        "correctness",
+        "observability",
+        "freshness",
+        "search",
+        "candidate-semantics"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-lookupHonesty01.1",
+          "title": "Include-tests surfaces tests beyond the cap",
+          "given": [
+            "A symbol has more production occurrences than the result cap",
+            "The same symbol has at least one test occurrence"
+          ],
+          "when": "The caller requests the include-tests filter",
+          "then": [
+            "The response contains at least one test occurrence",
+            "The response differs from the production-first response for the same query"
+          ]
+        },
+        {
+          "id": "rq-lookupHonesty01.2",
+          "title": "Truncation is reported",
+          "given": [
+            "Matching occurrences exceed the result cap"
+          ],
+          "when": "The caller runs a lookup",
+          "then": [
+            "The response reports the number of matching production and test occurrences",
+            "The response reports how many of each were returned"
+          ]
+        },
+        {
+          "id": "rq-lookupHonesty01.3",
+          "title": "Stale occurrences are flagged and recoverable",
+          "given": [
+            "A file is indexed",
+            "The file is then modified so its content no longer matches the index"
+          ],
+          "when": "The caller runs a lookup returning occurrences from that file",
+          "then": [
+            "Those results are marked stale",
+            "The response summarises the count of stale backing files",
+            "Re-indexing the repository clears the stale marks"
+          ]
+        }
+      ]
+    }
+  ]
+}

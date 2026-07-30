@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "change_id": "fixLookupPruneDefects",
+  "title": "Fix lookup and prune defects",
+  "release_notes": {
+    "audience": "both",
+    "category": "fixed",
+    "headline_internal": "Replace transport-inference destructive authority with LGREP_ALLOW_DESTRUCTIVE_MCP grant; add reserved-slice include_tests, match/return counts, and per-result staleness",
+    "headline_external": "Deleting through the shared lgrep service now requires an explicit opt-in, and reference lookup reports truncation and staleness",
+    "highlights": [
+      "Destructive MCP maintenance (prune_orphans, prune_symbols) now defaults to preview-only and deletes only when LGREP_ALLOW_DESTRUCTIVE_MCP is set on the server. Transport kind no longer grants authority — a proxy can front a local stdio pipe with a shared port. Refused calls return refused_reason naming the grant and the CLI equivalent.",
+      "The CLI --execute path is unchanged.",
+      "include_tests now returns test occurrences: a fifth of the result cap is reserved for them, with unused reserve handed back to production.",
+      "Reference responses report production_matches, test_matches, returned_production, and returned_tests, so truncation is visible rather than inferred.",
+      "Each result carries is_stale, and responses carry stale_file_count, computed from the per-file SHA-256 the index already stores. A deleted backing file is reported stale rather than raising."
+    ],
+    "area": "lgrep MCP server",
+    "user_action_required": true,
+    "breaking": {
+      "description": "Destructive MCP prune calls that previously succeeded over a stdio transport now return a preview instead of deleting.",
+      "migration": "Set LGREP_ALLOW_DESTRUCTIVE_MCP in the server environment to restore destructive MCP behaviour, or use the CLI equivalents (lgrep prune-orphans --execute, lgrep prune-symbols --execute), which are unaffected."
+    }
+  }
+}

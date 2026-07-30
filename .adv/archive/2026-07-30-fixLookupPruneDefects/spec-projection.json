@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "change_id": "fixLookupPruneDefects",
+  "delta_set_sha256": "4f453af716df87215b507760600fb8b68674cc62bf56637e82ff93f248d228b8",
+  "capabilities": [
+    {
+      "capability": "lgrep-daemon-operational-safety",
+      "base_version": "0.0.0",
+      "target_version": "1.0.0",
+      "spec_sha256": "a8848823d8510ace5fbae4755f9526274c0d2e2131afee234d6441dc3cd61030",
+      "document_sha256": "234ad3fd006155fbf7c1a15d5894730a4fe781be27801e52e6659aef7b3fd147",
+      "requirement_sha256": {
+        "rq-destructiveGrant01": "faf96a6ce4116a56204ab2530ba2089f5240803ae2c77f1d747c44d767637bd9"
+      },
+      "dispositions": [
+        {
+          "deltaId": "dl-destructiveGrant02",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-destructiveGrant01"
+        }
+      ]
+    },
+    {
+      "capability": "lgrep-candidate-reference-lookup",
+      "base_version": "0.0.0",
+      "target_version": "1.0.0",
+      "spec_sha256": "7c806630f26ff44408f8dffbf5f442bd3d2051c20a7ee8dfd3911cfc4cf31e1b",
+      "document_sha256": "14adebcea86ac97421c0076b68da1d56c80cfbbc46a7619770d3fd564043a34c",
+      "requirement_sha256": {
+        "rq-lookupHonesty01": "1bcc56ecdcbfc3fb1451d041717c616b0ac3e9fe15530f0c68bdc1516f4d28cf"
+      },
+      "dispositions": [
+        {
+          "deltaId": "dl-lookupHonesty01",
+          "operation": "add",
+          "status": "missing",
+          "targetId": "rq-lookupHonesty01"
+        }
+      ]
+    }
+  ]
+}

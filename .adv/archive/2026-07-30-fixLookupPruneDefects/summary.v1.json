@@ -1,0 +1,23 @@
+{
+  "archived_at": "2026-07-30T04:34:46.100Z",
+  "capabilities": [
+    "lgrep-candidate-reference-lookup",
+    "lgrep-daemon-operational-safety"
+  ],
+  "change_hash": "303092b3e0f0cb81fb6ba8cc6ae3b0ad1964579f8514c8918f3be772b66c0a3f",
+  "change_id": "fixLookupPruneDefects",
+  "completed_tasks": 4,
+  "created_at": "2026-07-30T03:14:25.215Z",
+  "current_gate": "release",
+  "fast_follow_of": {
+    "linked_at": "2026-07-30T03:14:25.202Z",
+    "parent_change_id": "testVisionLgrepIntegration"
+  },
+  "last_activity_at": "2026-07-30T04:14:24.574Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "1864272618339c43c60fb338f64a8bc75c366008d56f84143ef57b80c2d7349d",
+  "task_count": 4,
+  "title": "Fix lookup and prune defects",
+  "version": "1"
+}

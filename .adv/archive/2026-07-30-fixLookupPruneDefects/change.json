@@ -1,0 +1,1301 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/change.schema.json",
+  "id": "fixLookupPruneDefects",
+  "title": "Fix lookup and prune defects",
+  "status": "archived",
+  "lifecycleState": "open",
+  "created_at": "2026-07-30T03:14:25.215Z",
+  "tasks": [
+    {
+      "id": "tk-c149dd1461a8",
+      "title": "Require an explicit grant for destructive MCP maintenance",
+      "type": "code",
+      "section": "Security",
+      "status": "done",
+      "priority": 0,
+      "created_at": "2026-07-30T03:19:19.820Z",
+      "started_at": "2026-07-30T03:20:48.372Z",
+      "completed_at": "2026-07-30T03:27:22.517Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED tr_ms6y6hvo_b0b0ca82 failed all seven new guard tests against the transport-trust implementation. GREEN tr_ms6y8mpr_cc0c8ecc passed all seven after replacing the inference with the explicit LGREP_ALLOW_DESTRUCTIVE_MCP grant, defaulting to off, and returning a refused_reason that names both the grant and the CLI equivalent. Full verification tr_ms6yd4is_6df1938a: 706 passed, ruff clean. One pre-existing test asserted the defective contract, that stdio alone authorizes deletion; it was rewritten to the new contract and a companion test now covers the granted path. Tool descriptions were corrected because they still advertised transport-based refusal.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server_tools.py"
+      ],
+      "checkpointSha": "d77f89dd5f23124e10817c8d533f0dbb701b13aa",
+      "completedAt": "2026-07-30T03:27:22.517Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC1",
+          "AC2"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "OOS2"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "touched_files": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_maintenance.py",
+        "tests/test_maintenance_grant.py",
+        "tests/test_server_tools.py"
+      ]
+    },
+    {
+      "id": "tk-593a5819ec49",
+      "title": "Make usage filters distinct and truncation visible",
+      "type": "code",
+      "section": "Lookup",
+      "status": "done",
+      "priority": 1,
+      "created_at": "2026-07-30T03:19:34.063Z",
+      "started_at": "2026-07-30T03:27:29.468Z",
+      "completed_at": "2026-07-30T03:31:13.836Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED tr_ms6yewtd_ab63d886 against a fixture with 125 production and 5 test occurrences: the four defect tests failed, proving include_tests returned no test rows, was identical to production_first, and carried no counts, while the two back-compat tests already passed. GREEN tr_ms6yh7ma_b2c4c5f0 after giving include_tests a 20 percent reserved slice with unused reserve handed back so the cap stays full, and adding production_matches, test_matches, returned_production and returned_tests. Full verification tr_ms6yi3xo_775ac00a: 712 passed, ruff clean. production_first ordering and tests_only are unchanged, and existing response fields were only added to.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_symbols.py",
+        "src/lgrep/tools/search_references.py",
+        "tests/test_reference_filters.py"
+      ],
+      "checkpointSha": "617598b0503db44cdac2f89bab0274184caa0084",
+      "completedAt": "2026-07-30T03:31:13.836Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC3",
+          "AC4"
+        ],
+        "respects": [
+          "C4",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "touched_files": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_symbols.py",
+        "src/lgrep/tools/search_references.py",
+        "tests/test_reference_filters.py"
+      ]
+    },
+    {
+      "id": "tk-ec6f446f6a1d",
+      "title": "Signal staleness on returned occurrences",
+      "type": "code",
+      "section": "Lookup",
+      "status": "done",
+      "priority": 2,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-593a5819ec49"
+        }
+      ],
+      "created_at": "2026-07-30T03:19:43.522Z",
+      "started_at": "2026-07-30T03:31:19.438Z",
+      "completed_at": "2026-07-30T03:35:00.647Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "RED tr_ms6yjc4q_3918953c failed all five staleness tests. GREEN tr_ms6ykp8b_d9fbe4b2 passed all five after adding a query-time freshness check that reuses the per-file SHA-256 the index already stores for incremental skip. Coverage includes fresh rows unmarked, per-file staleness so an edited file does not taint its neighbours, staleness cleared by re-index, a deleted backing file reported stale rather than raising, and proof that lookup does not re-index as a side effect. Work is bounded by the distinct files in the returned slice rather than repository size. Full verification tr_ms6ymzh8_69615b1a: 717 passed, ruff clean.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_symbols.py",
+        "src/lgrep/tools/search_references.py",
+        "tests/test_reference_staleness.py"
+      ],
+      "checkpointSha": "05390e41e8d93906a27fede148033a08ae5aa2b6",
+      "completedAt": "2026-07-30T03:35:00.647Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC5",
+          "AC6"
+        ],
+        "respects": [
+          "C3",
+          "C4",
+          "OOS1",
+          "OOS3"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "inline",
+        "delegation_hint": "inline_required"
+      },
+      "touched_files": [
+        "src/lgrep/server/responses.py",
+        "src/lgrep/server/tools_symbols.py",
+        "src/lgrep/tools/search_references.py",
+        "tests/test_reference_staleness.py"
+      ]
+    },
+    {
+      "id": "tk-d93f0f72a3b7",
+      "title": "Re-prove the three fixes through the managed endpoint",
+      "type": "verification",
+      "section": "Verification",
+      "status": "done",
+      "priority": 3,
+      "deps": [
+        {
+          "type": "blocked_by",
+          "target": "tk-c149dd1461a8"
+        },
+        {
+          "type": "blocked_by",
+          "target": "tk-ec6f446f6a1d"
+        }
+      ],
+      "created_at": "2026-07-30T03:19:55.291Z",
+      "started_at": "2026-07-30T03:35:07.343Z",
+      "completed_at": "2026-07-30T03:38:17.291Z",
+      "implementation_summary": "Task checkpoint completed",
+      "verification": "tr_ms6yowhz_248ffd95: all ten scenario checks pass against an ephemeral build of this change over the real MCP protocol. include_tests now returns 5 test rows where it previously returned none, the three filters produce three distinct result sets, production_first still returns no test rows, and counts report 128 production and 5 test matches with 95 plus 5 returned. An edited file flags 1 stale backing file and 21 stale rows while 79 rows stay fresh, proving per-file granularity, and re-index clears it. Both prune tools refuse a destructive request and name the grant. Slowest request 0.032 seconds against the 8-second budget. Deployment to the shared Vision service was deliberately not performed here: the artifact must be built from merged trunk, so managed re-verification happens after merge. Release record added: version 3.2.2, changelog entries for all three defects, and the new grant documented in the README environment table. Full suite tr_ms6yr227_6fe39fd0: 717 passed, ruff clean.",
+      "summary": "Task checkpoint completed",
+      "filesTouched": [
+        "CHANGELOG.md",
+        "README.md",
+        "pyproject.toml",
+        "src/lgrep/__init__.py"
+      ],
+      "checkpointSha": "87dee51cfe72369fe701a0a8693793c049f88522",
+      "completedAt": "2026-07-30T03:38:17.291Z",
+      "assignedTo": "agent",
+      "contract_refs": {
+        "implements": [
+          "AC7"
+        ],
+        "respects": [
+          "C1",
+          "C2",
+          "OOS2"
+        ]
+      },
+      "evidence_plan": {
+        "policy": "test",
+        "proof_target": "Automated red/green tests evidenced by adv_run_test",
+        "provenance": "new",
+        "stage": "stage-v2"
+      },
+      "evidence_policy": "test",
+      "metadata": {
+        "tdd_intent": "separate_verification",
+        "delegation_hint": "inline_required"
+      },
+      "touched_files": [
+        "CHANGELOG.md",
+        "README.md",
+        "pyproject.toml",
+        "src/lgrep/__init__.py"
+      ]
+    }
+  ],
+  "subagent_reports": [],
+  "test_runs": {
+    "tk-c149dd1461a8": [
+      {
+        "runId": "tr_ms6y6hvo_b0b0ca82",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_maintenance_grant.py -q 2>&1 | tail -20",
+        "durationMs": 9956.739637998864,
+        "recordedAt": "2026-07-30T03:22:02.664Z"
+      },
+      {
+        "runId": "tr_ms6y7x4i_a87c09c2",
+        "phase": "green",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_maintenance_grant.py -q 2>&1 | tail -20",
+        "durationMs": 4927.771897001192,
+        "recordedAt": "2026-07-30T03:23:09.055Z"
+      },
+      {
+        "runId": "tr_ms6y8mpr_cc0c8ecc",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_maintenance_grant.py -q 2>&1 | tail -20",
+        "durationMs": 16536.195095999166,
+        "recordedAt": "2026-07-30T03:23:42.222Z"
+      },
+      {
+        "runId": "tr_ms6yadgq_ba24da45",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -12 && uv run --extra dev ruff check src tests",
+        "durationMs": 38818.7677570004,
+        "recordedAt": "2026-07-30T03:25:03.561Z"
+      },
+      {
+        "runId": "tr_ms6yc1ts_f48b628a",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -4 && uv run --extra dev ruff check src tests",
+        "durationMs": 34528.048201998696,
+        "recordedAt": "2026-07-30T03:26:21.772Z"
+      },
+      {
+        "runId": "tr_ms6yd4is_6df1938a",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev ruff check src tests",
+        "durationMs": 36450.63954100013,
+        "recordedAt": "2026-07-30T03:27:11.925Z"
+      }
+    ],
+    "tk-593a5819ec49": [
+      {
+        "runId": "tr_ms6ye9xw_e34ce20c",
+        "phase": "red",
+        "exitCode": 2,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_filters.py -q 2>&1 | tail -15",
+        "durationMs": 3890.373297000304,
+        "recordedAt": "2026-07-30T03:28:05.601Z"
+      },
+      {
+        "runId": "tr_ms6yewtd_ab63d886",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_filters.py -q 2>&1 | tail -15",
+        "durationMs": 4114.238885000348,
+        "recordedAt": "2026-07-30T03:28:35.261Z"
+      },
+      {
+        "runId": "tr_ms6ygj6k_8b8fb2c9",
+        "phase": "green",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_filters.py tests/test_reference_lookup.py -q 2>&1 | tail -15",
+        "durationMs": 4209.439491998404,
+        "recordedAt": "2026-07-30T03:29:50.891Z"
+      },
+      {
+        "runId": "tr_ms6yh7ma_b2c4c5f0",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_filters.py tests/test_reference_lookup.py -q 2>&1 | tail -8",
+        "durationMs": 4027.1019049994648,
+        "recordedAt": "2026-07-30T03:30:22.561Z"
+      },
+      {
+        "runId": "tr_ms6yi3xo_775ac00a",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -4 && uv run --extra dev ruff check src tests",
+        "durationMs": 35706.58261600137,
+        "recordedAt": "2026-07-30T03:31:04.446Z"
+      }
+    ],
+    "tk-ec6f446f6a1d": [
+      {
+        "runId": "tr_ms6yjc4q_3918953c",
+        "phase": "red",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_staleness.py -q 2>&1 | tail -10",
+        "durationMs": 3566.3344960007817,
+        "recordedAt": "2026-07-30T03:32:01.719Z"
+      },
+      {
+        "runId": "tr_ms6ykp8b_d9fbe4b2",
+        "phase": "green",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_staleness.py -q 2>&1 | tail -10",
+        "durationMs": 3793.2128650005907,
+        "recordedAt": "2026-07-30T03:33:05.353Z"
+      },
+      {
+        "runId": "tr_ms6ylnga_b613f5e8",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -4 && uv run --extra dev ruff check src tests",
+        "durationMs": 36891.82146199979,
+        "recordedAt": "2026-07-30T03:33:49.765Z"
+      },
+      {
+        "runId": "tr_ms6ymzh8_69615b1a",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev ruff check src tests",
+        "durationMs": 36437.10773700103,
+        "recordedAt": "2026-07-30T03:34:51.946Z"
+      },
+      {
+        "runId": "tr_ms6zsph7_51191a99",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_staleness.py tests/test_reference_filters.py tests/test_reference_lookup.py -q 2>&1 | tail -18",
+        "durationMs": 3975.857888000086,
+        "recordedAt": "2026-07-30T04:07:18.538Z"
+      },
+      {
+        "runId": "tr_ms6zt69s_389f162b",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest tests/test_reference_staleness.py -q 2>&1 | tail -12",
+        "durationMs": 3227.5270530004054,
+        "recordedAt": "2026-07-30T04:07:40.300Z"
+      }
+    ],
+    "tk-d93f0f72a3b7": [
+      {
+        "runId": "tr_ms6yowhz_248ffd95",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 900 python3 /tmp/opencode/reverify.py --stdio uvx --no-cache --from /home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLookupPruneDefects lgrep 2>&1 | tail -70",
+        "durationMs": 15544.610362999141,
+        "recordedAt": "2026-07-30T03:36:21.396Z"
+      },
+      {
+        "runId": "tr_ms6yr227_6fe39fd0",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev ruff check src tests",
+        "durationMs": 35034.4405659996,
+        "recordedAt": "2026-07-30T03:38:01.919Z"
+      },
+      {
+        "runId": "tr_ms6zwalc_0f197251",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -4 && uv run --extra dev ruff check src tests",
+        "durationMs": 30756.889716001227,
+        "recordedAt": "2026-07-30T04:10:05.870Z"
+      },
+      {
+        "runId": "tr_ms6zwqdr_9adcc1e2",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 900 python3 /tmp/opencode/reverify.py --stdio uvx --no-cache --from /home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLookupPruneDefects lgrep 2>&1 | tail -12",
+        "durationMs": 13833.229646001011,
+        "recordedAt": "2026-07-30T04:10:26.330Z"
+      },
+      {
+        "runId": "tr_ms704mvk_bf68923c",
+        "phase": "verify",
+        "exitCode": 1,
+        "classification": "failed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev ruff check src tests && uv run --extra dev ruff format --check src tests 2>&1 | tail -2",
+        "durationMs": 32017.032423000783,
+        "recordedAt": "2026-07-30T04:16:35.037Z"
+      },
+      {
+        "runId": "tr_ms70d707_ce7e0f3f",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "uv run --extra dev python -m pytest -q 2>&1 | tail -3 && uv run --extra dev python -m ruff check . && uv run --extra dev python -m ruff format --check . 2>&1 | tail -1",
+        "durationMs": 31472.020193999633,
+        "recordedAt": "2026-07-30T04:23:14.377Z"
+      },
+      {
+        "runId": "tr_ms70dl9s_562911bf",
+        "phase": "verify",
+        "exitCode": 0,
+        "classification": "passed",
+        "command": "timeout 900 python3 /tmp/opencode/reverify.py --stdio uvx --no-cache --from /home/jon/.local/share/opencode/worktree/6f85aebf461c84fa97e1d1570b32ec83fa191248/change/fixLookupPruneDefects lgrep 2>&1 | tail -3",
+        "durationMs": 13539.588281000033,
+        "recordedAt": "2026-07-30T04:23:32.864Z"
+      }
+    ]
+  },
+  "deltas": {
+    "lgrep-daemon-operational-safety": [
+      {
+        "id": "dl-destructiveGrant02",
+        "operation": "add",
+        "requirement": {
+          "id": "rq-destructiveGrant01",
+          "title": "Destructive maintenance over MCP requires an explicit capability grant",
+          "body": "Destructive maintenance tools exposed over MCP default to preview-only. They perform destructive work in exactly one condition: an explicit out-of-band capability grant is present in the server environment. Transport kind is excluded from the authority decision, because a proxy can front a local stdio pipe with a shared network surface, so a transport reported as local is uninformative about caller identity. When the grant is absent, the tool returns a preview result whose message names the required grant and the equivalent command-line invocation. The command-line entry point applies its own caller's arguments directly, since that caller already holds local shell authority.",
+          "priority": "must",
+          "tags": [
+            "security",
+            "maintenance",
+            "mcp",
+            "structural-correctness",
+            "least-privilege"
+          ],
+          "scenarios": [
+            {
+              "id": "rq-destructiveGrant01.1",
+              "title": "Proxied local transport yields a preview-only run",
+              "given": [
+                "A destructive maintenance tool is exposed over MCP",
+                "The server runs as a stdio subprocess behind a shared proxy",
+                "The capability grant is absent"
+              ],
+              "when": "A client requests a destructive run",
+              "then": [
+                "The tool performs a preview-only run",
+                "The response reports that the destructive run was refused",
+                "The response names the required grant and the command-line equivalent"
+              ]
+            },
+            {
+              "id": "rq-destructiveGrant01.2",
+              "title": "Explicit grant authorizes the destructive run",
+              "given": [
+                "The capability grant is present in the server environment"
+              ],
+              "when": "A client requests a destructive run",
+              "then": [
+                "The tool applies the caller's requested mode",
+                "The response reports the work actually performed"
+              ]
+            },
+            {
+              "id": "rq-destructiveGrant01.3",
+              "title": "Command-line path stays independent of the grant",
+              "given": [
+                "The capability grant is absent"
+              ],
+              "when": "An operator runs the destructive command-line invocation with the execute flag",
+              "then": [
+                "The command performs the deletion",
+                "The reported outcome matches the operator's requested mode"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "lgrep-candidate-reference-lookup": [
+      {
+        "id": "dl-lookupHonesty01",
+        "operation": "add",
+        "requirement": {
+          "id": "rq-lookupHonesty01",
+          "title": "Candidate lookup reports distinct filters, visible truncation, and result freshness",
+          "body": "Candidate reference lookup MUST make its declared usage filters observably distinct. A filter that promises to include test occurrences MUST return test occurrences when they exist, even when production occurrences alone would exceed the result cap. Responses MUST report how many production and test occurrences matched and how many of each were returned, so truncation is visible rather than inferred. Each returned occurrence MUST carry a freshness indicator derived from comparing the backing file's current content against the indexed content, and the response MUST summarise how many backing files were stale. A backing file that no longer exists MUST be reported as stale rather than raising an error. Freshness is reported, never repaired: lookup MUST NOT re-index as a side effect. Freshness work MUST be bounded by the returned result slice, not by repository size.",
+          "priority": "must",
+          "tags": [
+            "correctness",
+            "observability",
+            "freshness",
+            "search",
+            "candidate-semantics"
+          ],
+          "scenarios": [
+            {
+              "id": "rq-lookupHonesty01.1",
+              "title": "Include-tests surfaces tests beyond the cap",
+              "given": [
+                "A symbol has more production occurrences than the result cap",
+                "The same symbol has at least one test occurrence"
+              ],
+              "when": "The caller requests the include-tests filter",
+              "then": [
+                "The response contains at least one test occurrence",
+                "The response differs from the production-first response for the same query"
+              ]
+            },
+            {
+              "id": "rq-lookupHonesty01.2",
+              "title": "Truncation is reported",
+              "given": [
+                "Matching occurrences exceed the result cap"
+              ],
+              "when": "The caller runs a lookup",
+              "then": [
+                "The response reports the number of matching production and test occurrences",
+                "The response reports how many of each were returned"
+              ]
+            },
+            {
+              "id": "rq-lookupHonesty01.3",
+              "title": "Stale occurrences are flagged and recoverable",
+              "given": [
+                "A file is indexed",
+                "The file is then modified so its content no longer matches the index"
+              ],
+              "when": "The caller runs a lookup returning occurrences from that file",
+              "then": [
+                "Those results are marked stale",
+                "The response summarises the count of stale backing files",
+                "Re-indexing the repository clears the stale marks"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "wisdom": [],
+  "gates": {
+    "proposal": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:14:54.501Z",
+      "completed_by": "user",
+      "approval_evidence": "User directed: \"Fix all of those defects\", referring to the three defects proven by managed-endpoint validation. Root cause for each is traced to a specific source location.",
+      "artifact_evidence": {
+        "kind": "proposal",
+        "content_hash": "b4d62c8bd885d0347f76c5f44e9b312fc8d3f0cbe0314f1be9e969ac9f0b0660",
+        "non_whitespace_chars": 2637,
+        "checked_at": "2026-07-30T03:14:25.250Z"
+      }
+    },
+    "discovery": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:18:59.365Z",
+      "completed_by": "agent",
+      "approval_evidence": "All three root causes traced to exact source locations and reproduced through the managed endpoint. Spec-law impact is Add: rq-destructiveGrant01 under lgrep-daemon-operational-safety and rq-lookupHonesty01 under lgrep-candidate-reference-lookup. Typed 14-item contract minted.",
+      "artifact_evidence": {
+        "kind": "agreement",
+        "content_hash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "non_whitespace_chars": 1884,
+        "checked_at": "2026-07-30T03:14:25.251Z"
+      }
+    },
+    "design": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:19:09.876Z",
+      "completed_by": "agent",
+      "approval_evidence": "Design fixed by user decision: reserved-slice semantics for include_tests, preserving production_first behavior. Destructive rights move from transport inference to explicit fail-closed grant. Freshness reuses the existing per-file SHA-256 already stored for incremental indexing, bounded to the returned slice.",
+      "artifact_evidence": {
+        "kind": "design",
+        "content_hash": "244be2fa9ae9c9b4882ceb0244f8199114d6c2f62ad16ad4a9059f774c5c576b",
+        "non_whitespace_chars": 2206,
+        "checked_at": "2026-07-30T03:14:25.252Z"
+      }
+    },
+    "planning": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:20:33.151Z",
+      "completed_by": "user",
+      "approval_evidence": "User directed \"Fix all of those defects\" and then \"You decide, keep going\". Strict validation clean with smells resolved; four tasks cover all seven acceptance criteria."
+    },
+    "execution": {
+      "status": "done",
+      "completed_at": "2026-07-30T03:38:26.151Z",
+      "completed_by": "agent",
+      "approval_evidence": "All four tasks checkpointed with recorded red-then-green evidence. 717 tests pass, ruff clean, and all ten scenario checks pass over the real MCP protocol against an ephemeral build."
+    },
+    "acceptance": {
+      "status": "done",
+      "completed_at": "2026-07-30T04:14:24.574Z",
+      "completed_by": "user",
+      "approval_evidence": "Acceptance approved by user (\"approve, continue\") on the review summary: APPROVED, 9 findings, 0 blockers, 6 remediations applied. Contract review matrix persisted with 14/14 rows, 0 failing. 719 tests pass, ruff clean (tr_ms6zwalc_0f197251); 10/10 protocol scenarios pass over real MCP against a clean build (tr_ms6zwqdr_9adcc1e2), max latency 0.023s vs 8s budget.",
+      "artifact_evidence": {
+        "kind": "acceptance",
+        "content_hash": "387395fc2d09d9420292c60ad1b09523d12b88443b65721ea3a4791c3f3fb0a2",
+        "non_whitespace_chars": 3445,
+        "checked_at": "2026-07-30T03:14:25.253Z"
+      }
+    },
+    "release": {
+      "status": "pending"
+    }
+  },
+  "contract": {
+    "version": 1,
+    "rigor": "standard",
+    "source": {
+      "artifact": "agreement",
+      "contentHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+      "approvedAt": "2026-07-30T03:18:26.680Z"
+    },
+    "items": [
+      {
+        "id": "AC1",
+        "kind": "acceptance_criterion",
+        "text": "**AC1 — Destructive rights require explicit grant:** transport kind alone never authorizes destructive maintenance through MCP. Without an explicit opt-in the destructive tools coerce a preview-only run and say why, including when the transport reports itself as local.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC2",
+        "kind": "acceptance_criterion",
+        "text": "**AC2 — Opt-in and CLI still work:** with the explicit opt-in present, destructive MCP calls perform real work, and the local CLI destructive path is unchanged.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC3",
+        "kind": "acceptance_criterion",
+        "text": "**AC3 — Filters are observably distinct:** for one query over a corpus whose test occurrences fall beyond the result cap, the three usage filters return three different result sets, and asking to include tests actually returns test occurrences.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC4",
+        "kind": "acceptance_criterion",
+        "text": "**AC4 — Truncation is visible:** responses report how many production and test occurrences matched and how many were returned, so a caller can tell that results were cut off.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC5",
+        "kind": "acceptance_criterion",
+        "text": "**AC5 — Staleness is signalled:** when a returned occurrence comes from a file whose current content no longer matches the indexed content, the response marks that result stale and summarises how many files were stale; re-indexing clears the marks; a deleted file is treated as stale rather than as an error.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC6",
+        "kind": "acceptance_criterion",
+        "text": "**AC6 — Contract and budget preserved:** results remain explicitly candidate-only, and a capped query against a fixture with stale files stays well inside the existing per-request time budget.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "AC7",
+        "kind": "acceptance_criterion",
+        "text": "**AC7 — Proven end to end:** the full test suite and lint pass, and the three fixed behaviors are reproduced through the real Vision-managed endpoint.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "test",
+        "status": "approved"
+      },
+      {
+        "id": "C1",
+        "kind": "constraint",
+        "text": "Do not migrate the MCP SDK and do not upgrade unrelated dependencies.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C2",
+        "kind": "constraint",
+        "text": "Do not modify Vision configuration, topology, or ports.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C3",
+        "kind": "constraint",
+        "text": "Keep freshness checking bounded to the files actually returned.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "C4",
+        "kind": "constraint",
+        "text": "Preserve the existing response fields that callers already depend on; additions only.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": true,
+        "evidencePolicy": "static_check",
+        "status": "approved"
+      },
+      {
+        "id": "OOS1",
+        "kind": "out_of_scope",
+        "text": "Automatic re-indexing on detected staleness.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS2",
+        "kind": "out_of_scope",
+        "text": "Authentication for the Vision proxy itself.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      },
+      {
+        "id": "OOS3",
+        "kind": "out_of_scope",
+        "text": "Extending reference lookup beyond Python or beyond candidate semantics.",
+        "sourceArtifact": "agreement",
+        "sourceHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+        "verificationRequired": false,
+        "evidencePolicy": "not_applicable",
+        "status": "approved",
+        "notRequiredReason": "Out-of-scope contract item"
+      }
+    ],
+    "reviewMatrix": {
+      "reviewedAt": "2026-07-30T04:13:41.946Z",
+      "rows": [
+        {
+          "contractId": "AC1",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_maintenance_grant.py — grant absent coerces dry_run=True with refused_reason on stdio for both prune_orphans and prune_symbols; _destructive_grant_present() reads only LGREP_ALLOW_DESTRUCTIVE_MCP, transport excluded (src/lgrep/server/tools_maintenance.py). Wire-level: reverify.py scenario over real stdio MCP, run tr_ms6zwqdr_9adcc1e2.",
+          "notes": "Transport-inference code path removed entirely, not merely bypassed."
+        },
+        {
+          "contractId": "AC2",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_maintenance_grant.py — with LGREP_ALLOW_DESTRUCTIVE_MCP set, dry_run=False is honoured and deletion occurs, refused_reason absent. CLI --execute path untouched; existing CLI prune tests unchanged and green in the 719-test suite (tr_ms6zwalc_0f197251)."
+        },
+        {
+          "contractId": "AC3",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_reference_filters.py — over a corpus whose test occurrences fall beyond the cap, production_only / include_tests / tests_only return three distinct result sets and include_tests returns actual test occurrences via the 20% reserved slice (TEST_RESERVE_RATIO, src/lgrep/tools/search_references.py).",
+          "notes": "Reserved-slice semantics chosen by user decision; production_first ordering preserved."
+        },
+        {
+          "contractId": "AC4",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_reference_filters.py asserts production_matches, test_matches, returned_production, returned_tests on truncated and untruncated responses; invariant returned_production + returned_tests == len(results) holds on every path (src/lgrep/server/responses.py)."
+        },
+        {
+          "contractId": "AC5",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "tests/test_reference_staleness.py (7 passed, tr_ms6zt69s_389f162b) — edited backing file marks is_stale and increments stale_file_count; re-indexing clears; deleted file reports stale rather than raising. Comparison uses the per-file SHA-256 the index already stores."
+        },
+        {
+          "contractId": "AC6",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Candidate-only framing unchanged in response contract and tool descriptions. Latency: max 0.023s across all ten protocol scenarios against the 8s per-request budget (tr_ms6zwqdr_9adcc1e2)."
+        },
+        {
+          "contractId": "AC7",
+          "kind": "acceptance_criterion",
+          "status": "pass",
+          "evidencePolicy": "test",
+          "evidence": "Full suite 719 passed, ruff clean (tr_ms6zwalc_0f197251). All ten scenario checks pass over real JSON-RPC initialize -> tools/call against a clean ephemeral uvx build of the change branch (tr_ms6zwqdr_9adcc1e2, ALL_PASS: True).",
+          "notes": "Vision daemon is stopped this session, so the wire proof runs over the same stdio MCP subprocess Vision itself spawns rather than through the proxy port. Deploy policy forbids pointing the shared Vision service at an unmerged worktree build; managed re-verify is a post-merge step."
+        },
+        {
+          "contractId": "C1",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "git diff main...HEAD touches no dependency manifest constraints: pyproject.toml diff is the version bump 3.2.1 -> 3.2.2 only; no lockfile or MCP SDK change."
+        },
+        {
+          "contractId": "C2",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "No file under ~/.config/vision/ modified; diff is confined to the lgrep repository. Vision topology and ports untouched."
+        },
+        {
+          "contractId": "C3",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "_annotate_staleness iterates only the returned rows (src/lgrep/tools/search_references.py), never the index or repository tree; cost is bounded by the result cap, plus a MAX_FILE_SIZE_BYTES read cap and repository-root path confinement added during review remediation."
+        },
+        {
+          "contractId": "C4",
+          "kind": "constraint",
+          "status": "respected",
+          "evidencePolicy": "static_check",
+          "evidence": "All new response fields are additive: is_stale, production_matches, test_matches, returned_production, returned_tests, stale_file_count, and refused_reason (NotRequired). No existing field removed, renamed, or retyped in src/lgrep/server/responses.py."
+        },
+        {
+          "contractId": "OOS1",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No automatic re-indexing added. Review caught and fixed a violation of this boundary: _annotate_staleness was mutating the cached index rows in place, which would have persisted lookup verdicts into indexed state on the next save. Now returns copies (commit da2777f)."
+        },
+        {
+          "contractId": "OOS2",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "No authentication mechanism added for the Vision proxy. The grant is a server-side capability flag, not a caller-identity scheme."
+        },
+        {
+          "contractId": "OOS3",
+          "kind": "out_of_scope",
+          "status": "not_applicable",
+          "evidencePolicy": "not_applicable",
+          "evidence": "Reference lookup remains Python-only and candidate-only; no language extension or semantic-resolution work in the diff."
+        }
+      ]
+    },
+    "amendments": []
+  },
+  "acceptanceCriteria": [
+    "**AC1 — Destructive rights require explicit grant:** transport kind alone never authorizes destructive maintenance through MCP. Without an explicit opt-in the destructive tools coerce a preview-only run and say why, including when the transport reports itself as local.",
+    "**AC2 — Opt-in and CLI still work:** with the explicit opt-in present, destructive MCP calls perform real work, and the local CLI destructive path is unchanged.",
+    "**AC3 — Filters are observably distinct:** for one query over a corpus whose test occurrences fall beyond the result cap, the three usage filters return three different result sets, and asking to include tests actually returns test occurrences.",
+    "**AC4 — Truncation is visible:** responses report how many production and test occurrences matched and how many were returned, so a caller can tell that results were cut off.",
+    "**AC5 — Staleness is signalled:** when a returned occurrence comes from a file whose current content no longer matches the indexed content, the response marks that result stale and summarises how many files were stale; re-indexing clears the marks; a deleted file is treated as stale rather than as an error.",
+    "**AC6 — Contract and budget preserved:** results remain explicitly candidate-only, and a capped query against a fixture with stale files stays well inside the existing per-request time budget.",
+    "**AC7 — Proven end to end:** the full test suite and lint pass, and the three fixed behaviors are reproduced through the real Vision-managed endpoint."
+  ],
+  "documents": {
+    "proposal": "# Fix lookup and prune defects\n\n## Intent\n\nClose the three defects that managed-endpoint validation proved reach agents: an ineffective destructive-tool guard, a usage filter that does nothing, and silently stale results.\n\n## Root Cause Analysis\n\n### Defect 1 — destructive prune guard is defeated by proxy deployment\n\n`_transport_is_local` in `src/lgrep/server/tools_maintenance.py:57-81` returns true when the transport string is `stdio`, on the stated assumption that stdio is \"single-user and inherently access-controlled (the caller is the same process tree as the server)\". Vision runs lgrep as a stdio subprocess but publishes it on a shared HTTP port that any local client can reach, and no bearer token is configured. Diagnostics requested through that HTTP session report `transport: \"stdio\"`, so the guard grants full destructive rights to a shared surface. The root cause is that transport kind was used as a proxy for caller trust; that inference breaks the moment a multiplexing proxy fronts the pipe.\n\n### Defect 2 — `include_tests` is a dead branch\n\nIn `src/lgrep/tools/search_references.py:119-136` the `production_first` and `include_tests` branches apply byte-identical sort keys and neither filters. Both therefore return the same ordering and the same total. Because production occurrences sort first and the response is capped, test occurrences fall past the cap and are unreachable through `include_tests`. Empirically both filters returned 133 total matches, 100 rows, and zero test hits, while `tests_only` returned 5 test rows. The root cause is that the filter was specified as three modes but implemented as two, with no test covering the difference between them.\n\n### Defect 3 — stale occurrences carry no freshness signal\n\n`search_references` reads persisted occurrence rows and returns their stored `line_number` and `line_text` without comparing them to the file on disk. After shifting a fixture module's lines without re-indexing, 21 returned rows pointed at wrong lines while the response remained well-formed and carried only the generic candidate disclaimer. The root cause is a missing freshness check at query time even though the index already stores a per-file SHA-256 hash, used today only to skip unchanged files during incremental indexing.\n\n## Scope\n\n`src/lgrep/server/tools_maintenance.py`, `src/lgrep/tools/search_references.py`, the occurrence response model in `src/lgrep/server/responses.py`, and their tests. Documentation and changelog accompany the behavior changes.\n\n## User outcomes\n\n- Destructive maintenance cannot be triggered from a shared proxied surface without deliberate, explicit opt-in.\n- Asking for test usages actually returns test usages.\n- A result that may be out of date says so, instead of looking authoritative.\n\n## Constraints\n\n- Preserve the candidate-only contract: results stay advisory, never claimed exhaustive or compiler-accurate.\n- Keep the local CLI able to perform real deletions.\n- Keep query latency well inside the existing per-request budget.\n- No migration of the MCP SDK and no unrelated dependency upgrades.",
+    "problemStatement": "Managed-endpoint validation of lgrep found three defects that reach agents directly. Destructive prune tools are reachable without their intended guard because the guard trusts the stdio transport while Vision fronts that same stdio subprocess with a shared unauthenticated HTTP port. The `include_tests` usage filter returns results identical to `production_first`, so it cannot surface test occurrences once the result cap truncates the response. Candidate occurrences from an outdated index are returned with correct-looking line numbers and text and no freshness signal, so agents cannot tell a current hit from a stale one.</problemStatement>\n<parameter name=\"proposal\">t",
+    "agreement": "# Agreement — Fix lookup and prune defects\n\n## Objective\n\nMake destructive maintenance safe on shared deployments, make the usage filters mean what their names say, and stop presenting stale occurrences as current.\n\n## Acceptance criteria\n\n- **AC1 — Destructive rights require explicit grant:** transport kind alone never authorizes destructive maintenance through MCP. Without an explicit opt-in the destructive tools coerce a preview-only run and say why, including when the transport reports itself as local.\n- **AC2 — Opt-in and CLI still work:** with the explicit opt-in present, destructive MCP calls perform real work, and the local CLI destructive path is unchanged.\n- **AC3 — Filters are observably distinct:** for one query over a corpus whose test occurrences fall beyond the result cap, the three usage filters return three different result sets, and asking to include tests actually returns test occurrences.\n- **AC4 — Truncation is visible:** responses report how many production and test occurrences matched and how many were returned, so a caller can tell that results were cut off.\n- **AC5 — Staleness is signalled:** when a returned occurrence comes from a file whose current content no longer matches the indexed content, the response marks that result stale and summarises how many files were stale; re-indexing clears the marks; a deleted file is treated as stale rather than as an error.\n- **AC6 — Contract and budget preserved:** results remain explicitly candidate-only, and a capped query against a fixture with stale files stays well inside the existing per-request time budget.\n- **AC7 — Proven end to end:** the full test suite and lint pass, and the three fixed behaviors are reproduced through the real Vision-managed endpoint.\n\n## Constraints\n\n- Do not migrate the MCP SDK and do not upgrade unrelated dependencies.\n- Do not modify Vision configuration, topology, or ports.\n- Keep freshness checking bounded to the files actually returned.\n- Preserve the existing response fields that callers already depend on; additions only.\n\n## Out of scope\n\n- Automatic re-indexing on detected staleness.\n- Authentication for the Vision proxy itself.\n- Extending reference lookup beyond Python or beyond candidate semantics.",
+    "design": "# Design — Fix lookup and prune defects\n\n## 1. Destructive rights become an explicit capability\n\nDelete the transport-trust inference. A transport string cannot prove who the caller is once a proxy multiplexes the pipe, which is exactly how Vision runs lgrep.\n\nReplace it with an explicit environment opt-in, defaulting to off. When the opt-in is absent, destructive maintenance tools force preview mode and return a reason naming the opt-in and the CLI alternative. When present, they honour the caller's argument. The CLI path does not consult the opt-in, because the CLI caller already has local shell authority.\n\nThis is deliberately fail-closed: the previous behavior granted destructive rights by default in the one deployment that most needed protection.\n\n## 2. Usage filters get distinct, honest semantics\n\nKeep `production_first` exactly as it behaves today so existing callers are unaffected: production occurrences first, tests after, truncated at the cap.\n\nGive `include_tests` a reserved slice. Compute the test-occurrence set separately, reserve up to a fixed minority share of the cap for test rows when tests exist, fill the remainder with production rows, then present production first. When there are fewer tests than the reserve, the unused reserve returns to production, so no capacity is wasted.\n\nAdd explicit counts to every response: how many production and test occurrences matched, and how many of each were returned. Truncation becomes visible rather than inferred, which is what made the original defect invisible.\n\n`tests_only` is unchanged.\n\n## 3. Staleness is computed at query time\n\nThe symbol index already stores a per-file SHA-256 used to skip unchanged files during incremental indexing. Reuse it as the freshness oracle instead of adding new state.\n\nAfter the result slice is chosen, hash the distinct files backing those results and compare against the stored hashes. Mark each result from a mismatched file as stale, and summarise the count on the response. A file that no longer exists is stale, not an error. Work is bounded by the number of returned rows, never by repository size, which keeps the check inside the request budget.\n\nFreshness is reported, never repaired. Automatic re-indexing stays out of scope so a read-only lookup keeps no write side effects.\n\n## Verification\n\nDrive each defect with a failing test first, since all three were invisible precisely because no test distinguished the behaviors. Then re-run the managed-endpoint matrix used to find them and confirm the three responses now differ, stale rows are flagged, and the destructive tools refuse without the opt-in.",
+    "executiveSummary": "# Executive Summary — Fix lookup and prune defects\n\n## Outcome\n\nThree defects found by managed-endpoint validation of the previous change are fixed and proven over the real MCP protocol.\n\n**Deleting through the shared service now requires an explicit grant.** The two destructive maintenance tools decided whether a caller was allowed to delete by looking at the transport kind, treating `stdio` as proof of a single trusted local user. That inference was wrong in exactly the deployment that most needed protection: the shared service runs lgrep as a local subprocess but republishes it on an unauthenticated port, and the subprocess still reports `stdio` — so any client that could reach the port could delete indexed data. Authority is now an explicit server-side opt-in that defaults to off. Without it the tools return a preview and state which grant or which command-line equivalent would be needed. The command-line path, whose caller already holds local shell authority, is unchanged.\n\n**The reference-lookup filters now mean what their names say.** Asking to include test occurrences returned none, because production occurrences alone filled the result cap before any test occurrence was considered. A fifth of the cap is now held for test occurrences, with unused capacity handed back to the other group, so the three filter modes produce three genuinely different result sets.\n\n**Truncated and stale results now say so.** Responses report how many production and test occurrences matched versus how many were returned, so a caller can tell results were cut off instead of inferring it. Each result is marked stale when its source file has changed since indexing, with a per-response count of stale files; a deleted file is reported as stale rather than raising an error. Freshness reuses a fingerprint the index already stores, so no re-reading of the repository is involved and the check costs nothing beyond the rows actually returned.\n\n## Why it matters\n\nThe first fix closes a data-loss exposure on a shared service. The other two close a subtler failure: the tool was answering confidently with results that were incomplete or out of date, and gave the caller no way to notice. Silent wrongness is more expensive than visible wrongness, because it is acted on.\n\n## Verification\n\n- Full test suite: **719 passed**; lint and format checks clean across the whole repository.\n- All four tasks followed a failing-test-first cycle with recorded red and green runs.\n- Ten behavioural scenarios exercised over real JSON-RPC against a clean build of the change branch: **all pass**, slowest request 0.023s against an 8-second budget.\n- Independent review across security, correctness, and contract traceability. Contract coverage 100% — all 14 items traced, every diff hunk attributable.\n\n## Release Readiness Summary\n\nHardening found documentation drift and a pre-existing continuous-integration failure, both now fixed.\n\n**Documentation contradicted the shipped behaviour.** Two specification documents and the README still instructed readers that the transport kind decides deletion rights — the exact rule this change removes. A dated audit document had also recorded that rule as a *positive* security finding. The specs and README are rewritten; the audit entry is annotated as superseded rather than edited, because the mistaken finding is itself the lesson: it verified that a guard existed without checking what the guard actually discriminated on, and that false reassurance delayed discovery.\n\n**Continuous integration was already failing before this change.** The lint job had been red on the main branch, caused by an unpinned formatter dependency: the build installed a newer version than contributors run, which changed its formatting choices and additionally began formatting code examples embedded in Markdown. The formatter is now pinned to a compatible range so the build and local development cannot silently diverge again, Advance's own state directory is excluded from formatting, prose files are excluded so hand-wrapped examples survive, and the affected source files are formatted. This repair was outside the change's contract and was approved by the user before being applied.\n\n## Risks and follow-ups\n\n- **Managed re-verification is a post-merge step.** The shared service must run an artifact built from the merged main branch, so pre-merge proof was taken over the same local subprocess channel the service itself spawns. Re-running the scenario matrix through the managed endpoint after merge is the confirming step.\n- **The prior change remains parked at acceptance** with one criterion recorded as failed — the very defects this change fixes. It needs a decision once this merges.\n- The grant is a capability flag, not caller authentication. Anyone who can set the service's environment can enable deletion. Authenticating the proxy itself was explicitly out of scope.\n\n## Review findings\n\nNine findings, no blockers; six fixes applied during remediation. The substantive one: the staleness annotation was writing its verdicts into the shared cached index rather than into copies, which would have leaked read-only query state into indexed data on the next save — a violation of this change's own scope boundary that the original tests did not catch. Also fixed: the freshness read was not confined to the repository root and could follow an absolute path outside it; a malformed path would have raised an uncaught error type and failed the whole lookup; and two specification documents still mandated the transport rule this change removes.\n",
+    "acceptance": "# Acceptance\n\nReviewed at: 2026-07-30T04:13:41.946Z\n\n## Contract Review Matrix\n\n| ID | Kind | Requirement | Status | Evidence |\n|---|---|---|---|---|\n| AC1 | acceptance_criterion | **AC1 — Destructive rights require explicit grant:** transport kind alone never authorizes destructive maintenance through MCP. Without an explicit opt-in the destructive tools coerce a preview-only run and say why, including when the transport reports itself as local. | pass | tests/test_maintenance_grant.py — grant absent coerces dry_run=True with refused_reason on stdio for both prune_orphans and prune_symbols; _destructive_grant_present() reads only LGREP_ALLOW_DESTRUCTIVE_MCP, transport excluded (src/lgrep/server/tools_maintenance.py). Wire-level: reverify.py scenario over real stdio MCP, run tr_ms6zwqdr_9adcc1e2. |\n| AC2 | acceptance_criterion | **AC2 — Opt-in and CLI still work:** with the explicit opt-in present, destructive MCP calls perform real work, and the local CLI destructive path is unchanged. | pass | tests/test_maintenance_grant.py — with LGREP_ALLOW_DESTRUCTIVE_MCP set, dry_run=False is honoured and deletion occurs, refused_reason absent. CLI --execute path untouched; existing CLI prune tests unchanged and green in the 719-test suite (tr_ms6zwalc_0f197251). |\n| AC3 | acceptance_criterion | **AC3 — Filters are observably distinct:** for one query over a corpus whose test occurrences fall beyond the result cap, the three usage filters return three different result sets, and asking to include tests actually returns test occurrences. | pass | tests/test_reference_filters.py — over a corpus whose test occurrences fall beyond the cap, production_only / include_tests / tests_only return three distinct result sets and include_tests returns actual test occurrences via the 20% reserved slice (TEST_RESERVE_RATIO, src/lgrep/tools/search_references.py). |\n| AC4 | acceptance_criterion | **AC4 — Truncation is visible:** responses report how many production and test occurrences matched and how many were returned, so a caller can tell that results were cut off. | pass | tests/test_reference_filters.py asserts production_matches, test_matches, returned_production, returned_tests on truncated and untruncated responses; invariant returned_production + returned_tests == len(results) holds on every path (src/lgrep/server/responses.py). |\n| AC5 | acceptance_criterion | **AC5 — Staleness is signalled:** when a returned occurrence comes from a file whose current content no longer matches the indexed content, the response marks that result stale and summarises how many files were stale; re-indexing clears the marks; a deleted file is treated as stale rather than as an error. | pass | tests/test_reference_staleness.py (7 passed, tr_ms6zt69s_389f162b) — edited backing file marks is_stale and increments stale_file_count; re-indexing clears; deleted file reports stale rather than raising. Comparison uses the per-file SHA-256 the index already stores. |\n| AC6 | acceptance_criterion | **AC6 — Contract and budget preserved:** results remain explicitly candidate-only, and a capped query against a fixture with stale files stays well inside the existing per-request time budget. | pass | Candidate-only framing unchanged in response contract and tool descriptions. Latency: max 0.023s across all ten protocol scenarios against the 8s per-request budget (tr_ms6zwqdr_9adcc1e2). |\n| AC7 | acceptance_criterion | **AC7 — Proven end to end:** the full test suite and lint pass, and the three fixed behaviors are reproduced through the real Vision-managed endpoint. | pass | Full suite 719 passed, ruff clean (tr_ms6zwalc_0f197251). All ten scenario checks pass over real JSON-RPC initialize -> tools/call against a clean ephemeral uvx build of the change branch (tr_ms6zwqdr_9adcc1e2, ALL_PASS: True). |\n| C1 | constraint | Do not migrate the MCP SDK and do not upgrade unrelated dependencies. | respected | git diff main...HEAD touches no dependency manifest constraints: pyproject.toml diff is the version bump 3.2.1 -> 3.2.2 only; no lockfile or MCP SDK change. |\n| C2 | constraint | Do not modify Vision configuration, topology, or ports. | respected | No file under ~/.config/vision/ modified; diff is confined to the lgrep repository. Vision topology and ports untouched. |\n| C3 | constraint | Keep freshness checking bounded to the files actually returned. | respected | _annotate_staleness iterates only the returned rows (src/lgrep/tools/search_references.py), never the index or repository tree; cost is bounded by the result cap, plus a MAX_FILE_SIZE_BYTES read cap and repository-root path confinement added during review remediation. |\n| C4 | constraint | Preserve the existing response fields that callers already depend on; additions only. | respected | All new response fields are additive: is_stale, production_matches, test_matches, returned_production, returned_tests, stale_file_count, and refused_reason (NotRequired). No existing field removed, renamed, or retyped in src/lgrep/server/responses.py. |\n| OOS1 | out_of_scope | Automatic re-indexing on detected staleness. | not_applicable | No automatic re-indexing added. Review caught and fixed a violation of this boundary: _annotate_staleness was mutating the cached index rows in place, which would have persisted lookup verdicts into indexed state on the next save. Now returns copies (commit da2777f). |\n| OOS2 | out_of_scope | Authentication for the Vision proxy itself. | not_applicable | No authentication mechanism added for the Vision proxy. The grant is a server-side capability flag, not a caller-identity scheme. |\n| OOS3 | out_of_scope | Extending reference lookup beyond Python or beyond candidate semantics. | not_applicable | Reference lookup remains Python-only and candidate-only; no language extension or semantic-resolution work in the diff. |\n\n"
+  },
+  "artifacts": {
+    "problemStatement": {
+      "updatedAt": "2026-07-30T03:14:25.305Z",
+      "contentHash": "d7ff37cf5ca002efe04cba9bc04e62723376c7a35bc59970648df09b5f167106",
+      "source": "temporal",
+      "readable": false
+    },
+    "proposal": {
+      "updatedAt": "2026-07-30T03:14:48.175Z",
+      "contentHash": "b4d62c8bd885d0347f76c5f44e9b312fc8d3f0cbe0314f1be9e969ac9f0b0660",
+      "source": "temporal",
+      "readable": false
+    },
+    "agreement": {
+      "updatedAt": "2026-07-30T03:18:16.900Z",
+      "contentHash": "48ec48de7134e600a5b0f123971ba708b41cc4b26a1eca8a363ba4b3d471aa40",
+      "source": "temporal",
+      "readable": false
+    },
+    "design": {
+      "updatedAt": "2026-07-30T03:18:16.900Z",
+      "contentHash": "244be2fa9ae9c9b4882ceb0244f8199114d6c2f62ad16ad4a9059f774c5c576b",
+      "source": "temporal",
+      "readable": false
+    },
+    "executiveSummary": {
+      "updatedAt": "2026-07-30T04:24:06.136Z",
+      "contentHash": "034b20249fdccf7968083685db7aaeabd910e3b1acd7e34f17976b18a77c5f49",
+      "source": "temporal",
+      "readable": false
+    }
+  },
+  "clarify_findings": [
+    {
+      "code": "CLARIFY_MISSING_ERROR_HANDLING",
+      "severity": "warning",
+      "message": "Proposal describes behavior that could fail but doesn't mention error handling or rollback. What happens when things go wrong?",
+      "recorded_at": "2026-07-30T03:47:01.274Z"
+    }
+  ],
+  "reentry_history": [],
+  "same_project_dependencies": [],
+  "lastSignalAt": "2026-07-30T04:24:06.136Z",
+  "fast_follow_of": {
+    "parent_change_id": "testVisionLgrepIntegration",
+    "linked_at": "2026-07-30T03:14:25.202Z"
+  },
+  "origin": {
+    "kind": "discovery",
+    "source_artifact": "testVisionLgrepIntegration findings ws-McJr7j, ws-cUmcli, ws-JLUOx1"
+  },
+  "adv_project_id": "6f85aebf461c84fa97e1d1570b32ec83fa191248",
+  "worktree_auto_managed": true,
+  "release_notes": {
+    "audience": "both",
+    "category": "fixed",
+    "headline_internal": "Replace transport-inference destructive authority with LGREP_ALLOW_DESTRUCTIVE_MCP grant; add reserved-slice include_tests, match/return counts, and per-result staleness",
+    "headline_external": "Deleting through the shared lgrep service now requires an explicit opt-in, and reference lookup reports truncation and staleness",
+    "highlights": [
+      "Destructive MCP maintenance (prune_orphans, prune_symbols) now defaults to preview-only and deletes only when LGREP_ALLOW_DESTRUCTIVE_MCP is set on the server. Transport kind no longer grants authority — a proxy can front a local stdio pipe with a shared port. Refused calls return refused_reason naming the grant and the CLI equivalent.",
+      "The CLI --execute path is unchanged.",
+      "include_tests now returns test occurrences: a fifth of the result cap is reserved for them, with unused reserve handed back to production.",
+      "Reference responses report production_matches, test_matches, returned_production, and returned_tests, so truncation is visible rather than inferred.",
+      "Each result carries is_stale, and responses carry stale_file_count, computed from the per-file SHA-256 the index already stores. A deleted backing file is reported stale rather than raising."
+    ],
+    "area": "lgrep MCP server",
+    "user_action_required": true,
+    "breaking": {
+      "description": "Destructive MCP prune calls that previously succeeded over a stdio transport now return a preview instead of deleting.",
+      "migration": "Set LGREP_ALLOW_DESTRUCTIVE_MCP in the server environment to restore destructive MCP behaviour, or use the CLI equivalents (lgrep prune-orphans --execute, lgrep prune-symbols --execute), which are unaffected."
+    }
+  },
+  "worker_bundle_impact": {
+    "kind": "not_applicable",
+    "rationale": "lgrep is a Python MCP server and CLI. The repository contains no ADV Temporal worker bundle, no workflow code, and no replay-determinism surface. The diff is confined to src/lgrep/, tests/, docs/specs/, CHANGELOG.md, README.md, and pyproject.toml.",
+    "confirmed_at": "2026-07-30T04:14:39.156Z"
+  },
+  "creation_request_hash": "1d1920e819f149051c3db45596dcf853aba001a4bb725122de9a13d17094816b",
+  "projection_revision": 33,
+  "projection_commits": [
+    {
+      "mutation_kind": "problemStatementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "56ed01787fc85c1437fae2fe7cbd049602fa3aeb87c02640424f895eea85dcd3:createArtifacts:problemStatement",
+      "operation_id": "56ed01787fc85c1437fae2fe7cbd049602fa3aeb87c02640424f895eea85dcd3:createArtifacts:problemStatement",
+      "payload_hash": "eacdab65fdb2a334a6e04869be0e0a7ac7578df8b6539c1b613b9933775358c5",
+      "state_revision": 1,
+      "prior_revision": 0,
+      "new_revision": 1,
+      "committed_at": "2026-07-30T03:14:25.490Z"
+    },
+    {
+      "mutation_kind": "proposalUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "82ec83034cb66f533ad454687538b6e9c2d94bc13b4b4d73c635288824c3b709:updateArtifacts:proposal",
+      "operation_id": "82ec83034cb66f533ad454687538b6e9c2d94bc13b4b4d73c635288824c3b709:updateArtifacts:proposal",
+      "payload_hash": "78815fb5df6f76bdd6db3c9124bd65a6845eaa21764b28352f673de450421215",
+      "state_revision": 2,
+      "prior_revision": 1,
+      "new_revision": 2,
+      "committed_at": "2026-07-30T03:14:48.362Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 2,
+      "new_revision": 3,
+      "committed_at": "2026-07-30T03:14:54.649Z"
+    },
+    {
+      "mutation_kind": "agreementUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "64acea636c0179e7ff3137fd7afd0091eda839435047dd0d2d68c68cf1d97869:updateArtifacts:agreement",
+      "operation_id": "64acea636c0179e7ff3137fd7afd0091eda839435047dd0d2d68c68cf1d97869:updateArtifacts:agreement",
+      "payload_hash": "11a87648ed4ab6066b45647543d3914e4b8d620091c6ca87da682014ff6d7bff",
+      "state_revision": 3,
+      "prior_revision": 3,
+      "new_revision": 4,
+      "committed_at": "2026-07-30T03:18:17.024Z"
+    },
+    {
+      "mutation_kind": "designUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "64acea636c0179e7ff3137fd7afd0091eda839435047dd0d2d68c68cf1d97869:updateArtifacts:design",
+      "operation_id": "64acea636c0179e7ff3137fd7afd0091eda839435047dd0d2d68c68cf1d97869:updateArtifacts:design",
+      "payload_hash": "d2935ca86e0397aa57115bad7e2a2f41306f6362fc02dfb593f2d358181f5e1b",
+      "state_revision": 4,
+      "prior_revision": 4,
+      "new_revision": 5,
+      "committed_at": "2026-07-30T03:18:17.246Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 5,
+      "new_revision": 6,
+      "committed_at": "2026-07-30T03:18:26.842Z"
+    },
+    {
+      "mutation_kind": "specDeltaAdded",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "0f336310bb00355fc457498845ac6e91521b991ea0f429ad980b5dbd73d797f6:specDeltaAdded",
+      "operation_id": "0f336310bb00355fc457498845ac6e91521b991ea0f429ad980b5dbd73d797f6:specDeltaAdded",
+      "payload_hash": "320637bedc33eb0997b85964a277f5d5a55059ddd12c8c26852d63048c34f699",
+      "state_revision": 5,
+      "prior_revision": 6,
+      "new_revision": 7,
+      "committed_at": "2026-07-30T03:18:39.444Z"
+    },
+    {
+      "mutation_kind": "specDeltaAdded",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "b69e013c85aa21d4360ebef3831382aae89baf72e3611b66d8fd1d5a7bf91365:specDeltaAdded",
+      "operation_id": "b69e013c85aa21d4360ebef3831382aae89baf72e3611b66d8fd1d5a7bf91365:specDeltaAdded",
+      "payload_hash": "774fb38ad3fbc5b69200bb24a40e62aa9609a1320909a177fa3a0eec38b06ccb",
+      "state_revision": 6,
+      "prior_revision": 7,
+      "new_revision": 8,
+      "committed_at": "2026-07-30T03:18:53.715Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 8,
+      "new_revision": 9,
+      "committed_at": "2026-07-30T03:18:59.480Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 9,
+      "new_revision": 10,
+      "committed_at": "2026-07-30T03:19:10.030Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 10,
+      "new_revision": 11,
+      "committed_at": "2026-07-30T03:19:19.772Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 11,
+      "new_revision": 12,
+      "committed_at": "2026-07-30T03:19:19.966Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 12,
+      "new_revision": 13,
+      "committed_at": "2026-07-30T03:19:34.185Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 13,
+      "new_revision": 14,
+      "committed_at": "2026-07-30T03:19:43.655Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 14,
+      "new_revision": 15,
+      "committed_at": "2026-07-30T03:19:55.461Z"
+    },
+    {
+      "mutation_kind": "specDeltaRetracted",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "5e5658c4a9cf0f359d799cdce7100fc36bd71afe9b080837e3ad92baec558272:specDeltaRetracted",
+      "operation_id": "5e5658c4a9cf0f359d799cdce7100fc36bd71afe9b080837e3ad92baec558272:specDeltaRetracted",
+      "payload_hash": "ebbabdbbdd15f69d3506c5f3dba2e9c9951b8901df908250816e5d338aa7aac0",
+      "state_revision": 7,
+      "prior_revision": 15,
+      "new_revision": 16,
+      "committed_at": "2026-07-30T03:20:08.014Z"
+    },
+    {
+      "mutation_kind": "specDeltaAdded",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fa60f19418e132949b2dd4ba4d215ad9ffc70325d5be2174c3f2fd91ba517ddd:specDeltaAdded",
+      "operation_id": "fa60f19418e132949b2dd4ba4d215ad9ffc70325d5be2174c3f2fd91ba517ddd:specDeltaAdded",
+      "payload_hash": "99bef77c80606592a065bb54d5e883079a8f4181f337446c0969adc1cd0cc319",
+      "state_revision": 8,
+      "prior_revision": 16,
+      "new_revision": 17,
+      "committed_at": "2026-07-30T03:20:20.177Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 17,
+      "new_revision": 18,
+      "committed_at": "2026-07-30T03:20:33.297Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 18,
+      "new_revision": 19,
+      "committed_at": "2026-07-30T03:20:48.502Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 19,
+      "new_revision": 20,
+      "committed_at": "2026-07-30T03:27:22.639Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 20,
+      "new_revision": 21,
+      "committed_at": "2026-07-30T03:27:29.642Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 21,
+      "new_revision": 22,
+      "committed_at": "2026-07-30T03:31:13.961Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 22,
+      "new_revision": 23,
+      "committed_at": "2026-07-30T03:31:19.553Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 23,
+      "new_revision": 24,
+      "committed_at": "2026-07-30T03:35:00.796Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 24,
+      "new_revision": 25,
+      "committed_at": "2026-07-30T03:35:07.466Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 25,
+      "new_revision": 26,
+      "committed_at": "2026-07-30T03:38:17.388Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 26,
+      "new_revision": 27,
+      "committed_at": "2026-07-30T03:38:26.265Z"
+    },
+    {
+      "mutation_kind": "contract_review_matrix_set",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "mrec_1785384821961_jdux8hv6",
+      "prior_revision": 27,
+      "new_revision": 28,
+      "committed_at": "2026-07-30T04:13:42.065Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "cf64cea1c05be6ef3ccb6ab60f2ef992757dd738629c8fd4d14035c79b792d5b:updateArtifacts:executiveSummary",
+      "operation_id": "cf64cea1c05be6ef3ccb6ab60f2ef992757dd738629c8fd4d14035c79b792d5b:updateArtifacts:executiveSummary",
+      "payload_hash": "43782e1f06fd9928762e52a0644065e5ff48cbaa2090877a18210a9a87935ec1",
+      "state_revision": 9,
+      "prior_revision": 28,
+      "new_revision": 29,
+      "committed_at": "2026-07-30T04:14:05.213Z"
+    },
+    {
+      "mutation_kind": "releaseNotesSet",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "afd8f5d1dac33ee349b92e30304fdbbd87a9c14bfc2e30446e5a8a04308c7c99:releaseNotesSet",
+      "operation_id": "afd8f5d1dac33ee349b92e30304fdbbd87a9c14bfc2e30446e5a8a04308c7c99:releaseNotesSet",
+      "payload_hash": "c1791ccacc0f9a2db92bd0d06388c02224cf8c7ec3a0846caa48371725e132dc",
+      "state_revision": 10,
+      "prior_revision": 29,
+      "new_revision": 30,
+      "committed_at": "2026-07-30T04:14:16.428Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 30,
+      "new_revision": 31,
+      "committed_at": "2026-07-30T04:14:24.700Z"
+    },
+    {
+      "mutation_kind": "temporal_dual_write_projection",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "fixLookupPruneDefects",
+      "prior_revision": 31,
+      "new_revision": 32,
+      "committed_at": "2026-07-30T04:14:39.369Z"
+    },
+    {
+      "mutation_kind": "executiveSummaryUpdated",
+      "authority_kind": "temporal",
+      "mutation_receipt_id": "4a313c1847ec11a38469f6ec595b6de2c3439bba750bea112b35bc8611faf500:updateArtifacts:executiveSummary",
+      "operation_id": "4a313c1847ec11a38469f6ec595b6de2c3439bba750bea112b35bc8611faf500:updateArtifacts:executiveSummary",
+      "payload_hash": "aa18b0e2989db995fd24751d3969ba7e2ce9905f16e7b1195a87a0a5857bf589",
+      "state_revision": 11,
+      "prior_revision": 32,
+      "new_revision": 33,
+      "committed_at": "2026-07-30T04:24:06.290Z"
+    }
+  ],
+  "state_revision": 11
+}

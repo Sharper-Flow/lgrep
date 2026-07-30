@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sharper-Flow/Advance/trunk/plugin/schemas/spec.schema.json",
+  "name": "lgrep-daemon-operational-safety",
+  "title": "Lgrep Daemon Operational Safety",
+  "purpose": "Capability: Lgrep Daemon Operational Safety",
+  "version": "1.0.0",
+  "updated_at": "2026-07-30T04:34:46.100Z",
+  "requirements": [
+    {
+      "id": "rq-destructiveGrant01",
+      "title": "Destructive maintenance over MCP requires an explicit capability grant",
+      "body": "Destructive maintenance tools exposed over MCP default to preview-only. They perform destructive work in exactly one condition: an explicit out-of-band capability grant is present in the server environment. Transport kind is excluded from the authority decision, because a proxy can front a local stdio pipe with a shared network surface, so a transport reported as local is uninformative about caller identity. When the grant is absent, the tool returns a preview result whose message names the required grant and the equivalent command-line invocation. The command-line entry point applies its own caller's arguments directly, since that caller already holds local shell authority.",
+      "priority": "must",
+      "tags": [
+        "security",
+        "maintenance",
+        "mcp",
+        "structural-correctness",
+        "least-privilege"
+      ],
+      "scenarios": [
+        {
+          "id": "rq-destructiveGrant01.1",
+          "title": "Proxied local transport yields a preview-only run",
+          "given": [
+            "A destructive maintenance tool is exposed over MCP",
+            "The server runs as a stdio subprocess behind a shared proxy",
+            "The capability grant is absent"
+          ],
+          "when": "A client requests a destructive run",
+          "then": [
+            "The tool performs a preview-only run",
+            "The response reports that the destructive run was refused",
+            "The response names the required grant and the command-line equivalent"
+          ]
+        },
+        {
+          "id": "rq-destructiveGrant01.2",
+          "title": "Explicit grant authorizes the destructive run",
+          "given": [
+            "The capability grant is present in the server environment"
+          ],
+          "when": "A client requests a destructive run",
+          "then": [
+            "The tool applies the caller's requested mode",
+            "The response reports the work actually performed"
+          ]
+        },
+        {
+          "id": "rq-destructiveGrant01.3",
+          "title": "Command-line path stays independent of the grant",
+          "given": [
+            "The capability grant is absent"
+          ],
+          "when": "An operator runs the destructive command-line invocation with the execute flag",
+          "then": [
+            "The command performs the deletion",
+            "The reported outcome matches the operator's requested mode"
+          ]
+        }
+      ]
+    }
+  ]
+}
