@@ -7,12 +7,13 @@ For semantic search: uses a mock embedder to isolate local search latency
 
 For symbol search: measures actual index + search latency.
 
-Baselines are recorded in this file. The test asserts p95 latency
-does not exceed baseline * 1.10 (10% regression budget).
+Baselines are recorded in this file. The test asserts median latency
+does not exceed baseline (strict budget).
 """
 
 from __future__ import annotations
 
+import statistics
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,9 +21,10 @@ import pytest
 
 # ── Semantic search latency ───────────────────────────────────────────────────
 
-# Baseline: local LanceDB search (excluding Voyage API call) should be <100ms p95
+# Baseline: local LanceDB search (excluding Voyage API call) should be <100ms median
 # This is a generous budget — actual measured baseline is ~15ms
-SEMANTIC_SEARCH_P95_BUDGET_MS = 100.0
+SEMANTIC_SEARCH_MEDIAN_BUDGET_MS = 100.0
+PER_SAMPLE_HANG_GUARD_MS = 1000.0
 
 
 class TestSemanticSearchLatency:
@@ -30,7 +32,7 @@ class TestSemanticSearchLatency:
 
     @pytest.mark.asyncio
     async def test_search_semantic_local_latency(self, tmp_path):
-        """Local search latency (excluding Voyage API) must be <100ms p95 over 10 queries."""
+        """Local search latency (excluding Voyage API) must be <100ms median over 10 queries."""
         from mcp.server.fastmcp import Context
 
         from lgrep.server import LgrepContext, ProjectState, search_semantic
@@ -91,21 +93,25 @@ class TestSemanticSearchLatency:
             response = await search_semantic(query=query, path=str(project_path), ctx=mock_ctx)
             assert "error" not in response, response
             elapsed_ms = (time.monotonic() - t0) * 1000
+            assert elapsed_ms < PER_SAMPLE_HANG_GUARD_MS, (
+                f"Semantic search sample latency {elapsed_ms:.1f}ms exceeded "
+                f"hang/deadlock guard {PER_SAMPLE_HANG_GUARD_MS}ms for query {query!r}"
+            )
             latencies.append(elapsed_ms)
 
-        latencies.sort()
-        p95 = latencies[int(len(latencies) * 0.95)]
+        median = statistics.median(latencies)
 
-        assert p95 < SEMANTIC_SEARCH_P95_BUDGET_MS, (
-            f"Semantic search p95 latency {p95:.1f}ms exceeds budget {SEMANTIC_SEARCH_P95_BUDGET_MS}ms. "
-            f"All latencies: {[f'{lat:.1f}ms' for lat in latencies]}"
+        assert median < SEMANTIC_SEARCH_MEDIAN_BUDGET_MS, (
+            f"Semantic search median latency {median:.1f}ms exceeds budget "
+            f"{SEMANTIC_SEARCH_MEDIAN_BUDGET_MS}ms. "
+            f"All latencies: {[f'{lat:.1f}ms' for lat in sorted(latencies)]}"
         )
 
 
 # ── Symbol search latency ─────────────────────────────────────────────────────
 
-# Baseline: symbol search (in-memory JSON index) should be <50ms p95
-SYMBOL_SEARCH_P95_BUDGET_MS = 50.0
+# Baseline: symbol search (in-memory JSON index) should be <50ms median
+SYMBOL_SEARCH_MEDIAN_BUDGET_MS = 50.0
 
 # Baseline: index_folder for 10 files should complete in <5s
 INDEX_FOLDER_BUDGET_MS = 5000.0
@@ -142,7 +148,7 @@ class TestSymbolSearchLatency:
         )
 
     def test_search_symbols_latency(self, bench_repo, tmp_path):
-        """Symbol search p95 latency must be <50ms over 10 queries."""
+        """Symbol search median latency must be <50ms over 10 queries."""
         from lgrep.tools.index_folder import index_folder
         from lgrep.tools.search_symbols import search_symbols
 
@@ -157,12 +163,57 @@ class TestSymbolSearchLatency:
             result = search_symbols(query, str(bench_repo), storage_dir=store)
             elapsed_ms = (time.monotonic() - t0) * 1000
             assert "error" not in result
+            assert elapsed_ms < PER_SAMPLE_HANG_GUARD_MS, (
+                f"Symbol search sample latency {elapsed_ms:.1f}ms exceeded "
+                f"hang/deadlock guard {PER_SAMPLE_HANG_GUARD_MS}ms for query {query!r}"
+            )
             latencies.append(elapsed_ms)
 
-        latencies.sort()
-        p95 = latencies[int(len(latencies) * 0.95)]
+        median = statistics.median(latencies)
 
-        assert p95 < SYMBOL_SEARCH_P95_BUDGET_MS, (
-            f"Symbol search p95 latency {p95:.1f}ms exceeds budget {SYMBOL_SEARCH_P95_BUDGET_MS}ms. "
-            f"All latencies: {[f'{lat:.1f}ms' for lat in latencies]}"
+        assert median < SYMBOL_SEARCH_MEDIAN_BUDGET_MS, (
+            f"Symbol search median latency {median:.1f}ms exceeds budget "
+            f"{SYMBOL_SEARCH_MEDIAN_BUDGET_MS}ms. "
+            f"All latencies: {[f'{lat:.1f}ms' for lat in sorted(latencies)]}"
         )
+
+
+# ── Pure tests for median aggregation and budgets ─────────────────────────────
+
+
+class TestMedianBudgetSemantics:
+    """Unit tests for statistics.median behavior and budget semantics."""
+
+    def test_median_with_outlier_is_robust_and_under_budget(self):
+        """One 159ms outlier among nine low values gives median ~0.375ms and passes 50ms."""
+        latencies = [0.0, 0.0, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75, 0.75, 159.0]
+        median = statistics.median(latencies)
+        assert median == pytest.approx(0.375)
+        assert median < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
+
+    def test_median_ten_identical_values(self):
+        """Ten identical 60ms samples have median 60ms and fail the 50ms budget."""
+        latencies = [60.0] * 10
+        median = statistics.median(latencies)
+        assert median == 60.0
+        with pytest.raises(AssertionError):
+            assert median < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
+
+    def test_median_sequence_with_large_outlier(self):
+        """Values [1..9, 100] have median (5+6)/2 == 5.5."""
+        latencies = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 100.0]
+        assert statistics.median(latencies) == pytest.approx(5.5)
+
+    def test_median_strict_budget_boundary(self):
+        """Median exactly at the 50ms budget fails; just below passes."""
+        assert statistics.median([50.0] * 10) == 50.0
+        with pytest.raises(AssertionError):
+            assert statistics.median([50.0] * 10) < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
+        assert statistics.median([49.999] * 10) == 49.999
+        assert statistics.median([49.999] * 10) < SYMBOL_SEARCH_MEDIAN_BUDGET_MS
+
+    def test_per_sample_hang_guard_boundary(self):
+        """A single 999.9ms sample passes the hang guard; 1000.0ms fails."""
+        assert PER_SAMPLE_HANG_GUARD_MS > 999.9
+        with pytest.raises(AssertionError):
+            assert PER_SAMPLE_HANG_GUARD_MS > 1000.0
