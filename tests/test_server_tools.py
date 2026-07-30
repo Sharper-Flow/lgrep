@@ -232,6 +232,26 @@ class TestSymbolToolResponses:
         assert "error" in data
 
     @pytest.mark.asyncio
+    async def test_search_references_cancellation_keeps_schema_shape(self):
+        import lgrep.server as server_mod
+
+        @server_mod.time_tool
+        async def search_references(query="greet", usage_filter="production_first"):
+            raise asyncio.CancelledError
+
+        result = await search_references(query="greet", usage_filter="tests_only")
+
+        assert result["query"] == "greet"
+        assert result["usage_filter"] == "tests_only"
+        assert result["total_matches"] == 0
+        assert result["results"] == []
+        assert result["candidate_names"] == []
+        assert result["disclaimer"] == ""
+        assert result["_meta"]["tool"] == "search_references"
+        assert result["_meta"]["duration_ms"] >= 0
+        assert result["error"] == "Operation was cancelled."
+
+    @pytest.mark.asyncio
     async def test_search_references_uses_runtime_supervisor_when_context_available(self, tmp_path):
         fn = self._get_tool_fn("search_references")
         calls = []

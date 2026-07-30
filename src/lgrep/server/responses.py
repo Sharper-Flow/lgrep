@@ -18,25 +18,9 @@ Response convention:
 
 from __future__ import annotations
 
-import asyncio
-import functools
-import os
-import time
-from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar
+from typing import Any
 
-import structlog
 from typing_extensions import TypedDict
-
-log: structlog.BoundLogger = structlog.get_logger("lgrep.server")
-
-
-# --------------------------------------------------------------------------- #
-# Constants (mirrored from server.py — canonical location)
-# --------------------------------------------------------------------------- #
-
-TOOL_TIMEOUT_S = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
-
 
 # --------------------------------------------------------------------------- #
 # TypedDict definitions
@@ -444,64 +428,3 @@ def error_response(message: str) -> ToolError:
     ``json.dumps({"error": message})`` string.
     """
     return ToolError(error=message)
-
-
-# --------------------------------------------------------------------------- #
-# Decorators
-# --------------------------------------------------------------------------- #
-
-F = TypeVar("F", bound=Callable[..., Coroutine[Any, Any, Any]])
-
-
-def time_tool(func: F) -> F:
-    """Decorator to time tool execution, log results, and enforce a server-side timeout.
-
-    Wraps tool calls in asyncio.wait_for() so the server returns a structured
-    error before the MCP client's transport-level timeout fires.
-
-    The wrapped coroutine may return either a TypedDict response or a
-    ``ToolError`` (from ``error_response()``). This decorator does not
-    convert types — it only handles timeout injection.
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        start = time.perf_counter()
-        tool_name = func.__name__
-        try:
-            result = await asyncio.wait_for(func(*args, **kwargs), timeout=TOOL_TIMEOUT_S)
-            duration = round((time.perf_counter() - start) * 1000, 2)
-            log.info(f"{tool_name}_completed", duration_ms=duration)
-            return result
-        except TimeoutError:
-            duration = round((time.perf_counter() - start) * 1000, 2)
-            log.error(
-                f"{tool_name}_timeout",
-                duration_ms=duration,
-                timeout_s=TOOL_TIMEOUT_S,
-            )
-            if tool_name == "search_references":
-                return {
-                    "query": kwargs.get("query", ""),
-                    "usage_filter": kwargs.get("usage_filter", "production_first"),
-                    "total_matches": 0,
-                    "results": [],
-                    "candidate_names": [],
-                    "disclaimer": "",
-                    "_meta": {"duration_ms": duration, "tool": tool_name},
-                    "error": (
-                        f"Operation timed out after {TOOL_TIMEOUT_S}s. "
-                        "The project may need re-indexing. Try again or use a non-semantic search tool."
-                    ),
-                }
-            return error_response(
-                f"Operation timed out after {TOOL_TIMEOUT_S}s. "
-                "The project may need re-indexing or the Voyage API may be slow. "
-                "Try again or use a non-semantic search tool."
-            )
-        except Exception as e:
-            duration = round((time.perf_counter() - start) * 1000, 2)
-            log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))
-            raise
-
-    return wrapper  # type: ignore[return-value]
