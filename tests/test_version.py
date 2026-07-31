@@ -56,9 +56,23 @@ def test_version_base_matches_latest_tag():
 
 
 def test_version_matches_package_metadata():
-    """The runtime __version__ matches the installed distribution metadata."""
-    assert lgrep.__version__ == importlib.metadata.version("lgrep")
+    """The runtime __version__ matches the installed distribution metadata.
+
+    When the imported package is a source checkout (e.g. ``PYTHONPATH=src``),
+    the distribution metadata may belong to an unrelated host installation.
+    In that case we only verify the runtime version is a valid PEP 440 version.
+    """
     Version(lgrep.__version__)
+
+    try:
+        dist = importlib.metadata.distribution("lgrep")
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip("no lgrep distribution metadata available")
+
+    dist_root = Path(dist.locate_file("")).resolve()
+    package_root = Path(lgrep.__file__).resolve().parent.parent
+    if dist_root == package_root:
+        assert lgrep.__version__ == importlib.metadata.version("lgrep")
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="importlib.metadata tomllib usage")
