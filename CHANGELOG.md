@@ -1,3 +1,8 @@
+## 2026-07-31 (v3.2.7)
+
+- fix: pin Vision deployment tool runtime (#10)
+- docs: update changelog for v3.2.6
+
 ## 2026-07-31 (v3.2.6)
 
 - chore(adv): checkpoint tk-3e97e38b2850 (#9)
