@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "change_id": "fixDeployedLgrepDefects",
+  "title": "Fix deployed lgrep defects",
+  "release_notes": {
+    "audience": "both",
+    "category": "fixed",
+    "headline_internal": "Fix deployed lgrep response, release, and indexing defects",
+    "headline_external": "Fixed maintenance previews, release version identity, and large-repository indexing",
+    "highlights": [
+      "Maintenance previews now return valid structured MCP responses.",
+      "Release artifacts derive their version from the release tag.",
+      "Large repositories continue indexing across bounded windows until complete."
+    ],
+    "area": "MCP maintenance, packaging, and semantic indexing",
+    "user_action_required": false
+  }
+}
