@@ -244,7 +244,7 @@ def _mcp_post(
     session_id: str | None = None,
     timeout: float = 30,
 ) -> tuple[urllib.request.addinfourl, dict[str, Any]]:
-    """POST a JSON-RPC payload and return the raw response plus parsed SSE data."""
+    """POST a JSON-RPC payload and return the raw response plus parsed JSON-RPC data."""
     data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -257,6 +257,12 @@ def _mcp_post(
     body = response.read().decode("utf-8")
     if not body.strip():
         return response, {}
+    content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+    if content_type == "application/json":
+        message = json.loads(body)
+        if not isinstance(message, dict):
+            raise RuntimeError("MCP JSON response is not an object")
+        return response, message
     message = _parse_sse_message(body)
     return response, message
 

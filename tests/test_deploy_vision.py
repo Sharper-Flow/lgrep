@@ -273,6 +273,18 @@ def _make_mcp_tool_result(
     }
 
 
+def test_mcp_post_accepts_json_response() -> None:
+    payload = {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
+    response = MagicMock()
+    response.read.return_value = json.dumps(payload).encode("utf-8")
+    response.headers = {"Content-Type": "application/json"}
+
+    with patch.object(dv.urllib.request, "urlopen", return_value=response):
+        _response, message = dv._mcp_post("http://localhost:6278/mcp", payload)
+
+    assert message == payload
+
+
 def _mcp_urlopen_effect(
     tool_results: dict[str, dict[str, Any]] | None = None,
     init_session_id: str = "sid",
