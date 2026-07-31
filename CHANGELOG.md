@@ -1,3 +1,8 @@
+## 2026-07-31 (v3.2.6)
+
+- chore(adv): checkpoint tk-3e97e38b2850 (#9)
+- docs: update changelog for v3.2.5
+
 ## 2026-07-31 (v3.2.5)
 
 - fix: make index-window timing tests deterministic (#8)
