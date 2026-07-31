@@ -71,6 +71,10 @@ class ProjectState:
     LanceDB on every search. ``None`` means "not yet computed"; the pre-flight
     populates it lazily on first call and refreshes it after every full or
     incremental re-index.
+
+    ``pending_index_files`` holds the deterministic remaining work from an
+    interrupted bounded index window.  When it is non-empty, the next index
+    window resumes from this list instead of re-walking the repository.
     """
 
     db: ChunkStore
@@ -78,6 +82,7 @@ class ProjectState:
     watcher: FileWatcher | None = None
     watching: bool = False
     latest_indexed_at: float | None = None
+    pending_index_files: list[str] | None = None
 
 
 @dataclass
@@ -428,6 +433,30 @@ async def _schedule_background_reindex(
     task.add_done_callback(lambda t, p=project_path: _on_bg_reindex_done(app_ctx, p, t))
 
 
+async def _run_index_continuation(
+    app_ctx: LgrepContext, project_path: str, path_obj: Path
+) -> None:
+    """Schedule a background continuation that processes remaining pending files.
+
+    Called by an index window that did not complete.  It installs a fresh
+    background task that resumes from ``state.pending_index_files`` and loops
+    until convergence.  The caller is responsible for releasing the
+    single-flight event before calling this helper so searches do not block on
+    the continuation.
+    """
+    async with app_ctx._lock:
+        # Overwriting the caller's own task entry is intentional: the caller's
+        # done callback will see a different task object and no-op.
+        task = asyncio.create_task(
+            _auto_index_project_single_flight(
+                app_ctx, project_path, path_obj, continue_until_complete=True
+            ),
+            name=f"bg_reindex_continuation:{project_path}",
+        )
+        app_ctx._bg_reindex_tasks[project_path] = task
+    task.add_done_callback(lambda t, p=project_path: _on_bg_reindex_done(app_ctx, p, t))
+
+
 def _on_bg_reindex_done(app_ctx: LgrepContext, project_path: str, task: asyncio.Task) -> None:
     """Remove a finished background reindex task from the registry and log.
 
@@ -452,9 +481,19 @@ def _on_bg_reindex_done(app_ctx: LgrepContext, project_path: str, task: asyncio.
 
 
 async def _auto_index_project_single_flight(
-    app_ctx: LgrepContext, project_path: str, path_obj: Path
+    app_ctx: LgrepContext,
+    project_path: str,
+    path_obj: Path,
+    continue_until_complete: bool = False,
 ) -> ProjectState | dict:
-    """Auto-index project on first search using leader/follower coordination."""
+    """Auto-index project on first search using leader/follower coordination.
+
+    Processes one bounded index window by default.  If the window does not
+    converge, it stores the remaining pending files on ``state`` and schedules
+    a background continuation, then returns the state so the calling search
+    does not block.  When ``continue_until_complete`` is true, the coroutine
+    loops windows in the background until the pending set is empty.
+    """
     is_leader = False
     async with app_ctx._lock:
         if project_path in app_ctx._indexing_events:
@@ -474,86 +513,130 @@ async def _auto_index_project_single_flight(
             )
         return state
 
-    log.info("search_auto_index_start", project=project_path)
+    log.info(
+        "search_auto_index_start",
+        project=project_path,
+        continue_until_complete=continue_until_complete,
+    )
     try:
         result = await _ensure_project_initialized(app_ctx, path_obj)
         if isinstance(result, dict):
             return result
         state = result
 
-        for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
-            # Construct a fresh cancel_event per attempt so the supervisor
-            # can propagate the awaiting asyncio coroutine's cancellation
-            # to the blocking index_all work. The indexer checks the
-            # event at the top of every per-file iteration and raises
-            # OperationCancelled, allowing the bounded executor worker
-            # thread to exit instead of holding the slot forever.
-            cancel_event = threading.Event()
+        # Seed pending work so cancellation can preserve it even if the
+        # blocking index_window raises before returning a window result.
+        if state.pending_index_files is None:
             try:
-                status = await app_ctx.runtime.run_blocking(
-                    "index_all",
+                state.pending_index_files = await app_ctx.runtime.run_blocking(
+                    "compute_pending_files",
                     "_auto_index_project_single_flight",
                     project_path,
-                    lambda cancel_event=cancel_event: state.indexer.index_all(
-                        cancel_event=cancel_event
-                    ),
-                    cancel_event=cancel_event,
+                    state.indexer.compute_pending_files,
                 )
-                # Refresh the cached freshness timestamp so subsequent
-                # staleness pre-flights observe the just-completed index.
+            except Exception as e:
+                log.warning("compute_pending_files_failed", project=project_path, error=str(e))
+
+        while True:
+            pending = state.pending_index_files
+            window = None
+            for attempt in range(1, AUTO_INDEX_MAX_ATTEMPTS + 1):
+                # Construct a fresh cancel_event per window attempt so the
+                # supervisor can propagate the awaiting asyncio coroutine's
+                # cancellation to the blocking index_window work. The indexer
+                # checks the event at file boundaries and raises
+                # OperationCancelled, allowing the bounded executor worker
+                # thread to exit instead of holding the slot forever.
+                cancel_event = threading.Event()
+                try:
+                    window = await app_ctx.runtime.run_blocking(
+                        "index_window",
+                        "_auto_index_project_single_flight",
+                        project_path,
+                        lambda cancel_event=cancel_event, pending=pending: state.indexer.index_window(
+                            cancel_event=cancel_event, pending_files=pending
+                        ),
+                        cancel_event=cancel_event,
+                    )
+                    break
+                except OperationCancelled:
+                    # Preserve whatever pending set we had before cancellation
+                    # so a future continuation can resume.
+                    state.pending_index_files = pending
+                    log.info(
+                        "search_auto_index_cancelled",
+                        project=project_path,
+                        attempt=attempt,
+                        max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                        remaining_files=len(pending) if pending else 0,
+                    )
+                    return state
+                except Exception as e:
+                    if attempt < AUTO_INDEX_MAX_ATTEMPTS:
+                        delay_s = AUTO_INDEX_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+                        log.warning(
+                            "search_auto_index_retry",
+                            project=project_path,
+                            attempt=attempt,
+                            max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                            delay_s=delay_s,
+                            error=str(e),
+                        )
+                        await asyncio.sleep(delay_s)
+                        continue
+
+                    app_ctx.projects.pop(project_path, None)
+                    log.exception(
+                        "search_auto_index_failed",
+                        project=project_path,
+                        attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                        error=str(e),
+                    )
+                    return _error_response(
+                        "Failed to auto-index project on first search. Check server logs for details."
+                    )
+
+            # Update remaining work and refresh the cached freshness timestamp
+            # at every window boundary so partial indexes are visible to the
+            # staleness pre-flight.
+            state.pending_index_files = window.remaining_files
+            try:
                 state.latest_indexed_at = await app_ctx.runtime.run_blocking(
                     "db_latest_indexed_at",
                     "_auto_index_project_single_flight",
                     project_path,
                     state.db.get_latest_indexed_at,
                 )
+            except Exception as e:
+                log.debug("latest_indexed_at_refresh_failed", error=str(e))
+
+            if window.complete:
+                state.pending_index_files = None
                 log.info(
                     "search_auto_index_success",
                     project=project_path,
-                    files=status.file_count,
-                    chunks=status.chunk_count,
-                    duration_ms=round(status.duration_ms, 2),
-                    attempt=attempt,
-                    max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
+                    files=window.status.file_count,
+                    chunks=window.status.chunk_count,
+                    duration_ms=round(window.status.duration_ms, 2),
                 )
                 return state
-            except OperationCancelled:
-                # The awaiting asyncio coroutine was cancelled (e.g. 8s
-                # tool timeout). The bounded executor worker has already
-                # exited cleanly. Return the state so the search proceeds
-                # with the slightly-stale index; the next search will
-                # trigger a fresh reindex.
-                log.info(
-                    "search_auto_index_cancelled",
-                    project=project_path,
-                    attempt=attempt,
-                    max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
-                )
-                return state
-            except Exception as e:
-                if attempt < AUTO_INDEX_MAX_ATTEMPTS:
-                    delay_s = AUTO_INDEX_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
-                    log.warning(
-                        "search_auto_index_retry",
-                        project=project_path,
-                        attempt=attempt,
-                        max_attempts=AUTO_INDEX_MAX_ATTEMPTS,
-                        delay_s=delay_s,
-                        error=str(e),
-                    )
-                    await asyncio.sleep(delay_s)
-                    continue
 
-                app_ctx.projects.pop(project_path, None)
-                log.exception(
-                    "search_auto_index_failed",
+            if not continue_until_complete:
+                # One window done; hand remaining work to a background
+                # continuation and return state immediately so search can
+                # proceed with the partial index.
+                await _finish_single_flight_indexing(app_ctx, project_path, event)
+                await _run_index_continuation(app_ctx, project_path, path_obj)
+                log.info(
+                    "search_auto_index_continuation_scheduled",
                     project=project_path,
-                    attempts=AUTO_INDEX_MAX_ATTEMPTS,
-                    error=str(e),
+                    remaining_files=len(window.remaining_files),
                 )
-                return _error_response(
-                    "Failed to auto-index project on first search. Check server logs for details."
-                )
+                return state
+
+            # Continuation mode: yield briefly so the event loop can service
+            # other work between bounded windows.
+            await asyncio.sleep(0)
     except Exception as e:
         app_ctx.projects.pop(project_path, None)
         log.exception("search_auto_index_failed", project=project_path, error=str(e))

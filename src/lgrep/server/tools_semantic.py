@@ -130,6 +130,25 @@ def _check_staleness(state: ProjectState) -> tuple[bool, int]:
             except (OSError, ValueError):
                 continue
 
+        # Stage 0 — current files that are absent from the indexed set.  This
+        # catches partial indexes where a bounded window left files pending,
+        # even though their mtime is older than the latest chunk timestamp.
+        # Exclude zero-chunk files, which are intentionally not represented in
+        # the chunks table but are tracked separately.
+        if indexed_files:
+            try:
+                zero_chunk_files = set(state.db.get_zero_chunk_files())
+            except Exception:
+                zero_chunk_files = set()
+            never_indexed = current_rel_paths - indexed_files - zero_chunk_files
+            if never_indexed:
+                log.info(
+                    "staleness_never_indexed_files",
+                    project=str(indexer.project_path),
+                    count=len(never_indexed),
+                )
+                return True, len(never_indexed)
+
         # Stage 1a — indexed files that no longer exist on disk are stale.
         deleted_indexed_files = indexed_files - current_rel_paths
         if deleted_indexed_files:

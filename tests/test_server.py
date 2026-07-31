@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from mcp.server.fastmcp import Context
 
+from lgrep.indexing import IndexStatus, IndexWindowResult
 from lgrep.server import (
     AUTO_INDEX_MAX_ATTEMPTS,
     MAX_PROJECTS,
@@ -45,6 +46,17 @@ from lgrep.server import (
     watch_stop_semantic as lgrep_watch_stop,
 )
 from lgrep.storage import SearchResult, SearchResults
+
+
+def _complete_window_result():
+    """Return a completed IndexWindowResult for mock tests."""
+    return IndexWindowResult(
+        status=IndexStatus(file_count=1, chunk_count=1, duration_ms=10.0, total_tokens=1),
+        complete=True,
+        remaining_files=[],
+        indexed_files=["a.py"],
+        files_indexed=1,
+    )
 
 
 class TestDiskCacheAutoLoad:
@@ -522,14 +534,15 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         call_counter = {"count": 0}
 
-        def slow_index_all(**_kwargs):
+        def slow_index_window(*_args, **_kwargs):
             import time
 
             call_counter["count"] += 1
             time.sleep(0.05)
-            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+            return _complete_window_result()
 
-        mock_state.indexer.index_all.side_effect = slow_index_all
+        mock_state.indexer.compute_pending_files.return_value = ["a.py"]
+        mock_state.indexer.index_window.side_effect = slow_index_window
 
         async def fake_ensure_init(ctx, path):
             """Simulate _ensure_project_initialized: register state in projects dict."""
@@ -598,7 +611,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
         project_path.mkdir()
 
         mock_state = ProjectState(db=MagicMock(), indexer=MagicMock())
-        mock_state.indexer.index_all.side_effect = RuntimeError("Embedding API down")
+        mock_state.indexer.compute_pending_files.return_value = ["a.py"]
+        mock_state.indexer.index_window.side_effect = RuntimeError("Embedding API down")
 
         async def fake_ensure_init(ctx, path):
             ctx.projects[str(path)] = mock_state
@@ -619,7 +633,7 @@ class TestAcceptanceToolChoiceAndOnboarding:
         data = response
         assert "error" in data
         assert "Failed to auto-index" in data["error"]
-        assert mock_state.indexer.index_all.call_count == AUTO_INDEX_MAX_ATTEMPTS
+        assert mock_state.indexer.index_window.call_count == AUTO_INDEX_MAX_ATTEMPTS
         # Must NOT tell user to run lgrep_index manually
         assert "lgrep_index" not in data["error"]
         # Partial state must be removed
@@ -650,13 +664,14 @@ class TestAcceptanceToolChoiceAndOnboarding:
 
         attempts = {"count": 0}
 
-        def flaky_index_all(**_kwargs):
+        def flaky_index_window(*_args, **_kwargs):
             attempts["count"] += 1
             if attempts["count"] == 1:
                 raise RuntimeError("temporary embedding timeout")
-            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+            return _complete_window_result()
 
-        mock_state.indexer.index_all.side_effect = flaky_index_all
+        mock_state.indexer.compute_pending_files.return_value = ["a.py"]
+        mock_state.indexer.index_window.side_effect = flaky_index_window
 
         async def fake_ensure_init(ctx, path):
             ctx.projects[str(path)] = mock_state
@@ -693,7 +708,8 @@ class TestAcceptanceToolChoiceAndOnboarding:
         project_path.mkdir()
 
         mock_state = ProjectState(db=MagicMock(), indexer=MagicMock())
-        mock_state.indexer.index_all.side_effect = RuntimeError("Embedding API timeout")
+        mock_state.indexer.compute_pending_files.return_value = ["a.py"]
+        mock_state.indexer.index_window.side_effect = RuntimeError("Embedding API timeout")
 
         async def fake_ensure_init(ctx, path):
             ctx.projects[str(path)] = mock_state
@@ -1700,36 +1716,42 @@ class TestBackgroundReindex:
 
         call_count = {"n": 0}
 
-        def slow_index_all(**_kwargs):
+        def slow_index_window(*_args, **_kwargs):
             call_count["n"] += 1
             import time
 
             time.sleep(0.2)
-            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
-
-        state.indexer.index_all = MagicMock(side_effect=slow_index_all)
+            return _complete_window_result()
 
         project_path = str(project.resolve())
-        await asyncio.gather(
-            *[_schedule_background_reindex(app_ctx, project_path, project) for _ in range(5)]
-        )
+        original_compute = state.indexer.compute_pending_files
+        original_index_window = state.indexer.index_window
+        state.indexer.compute_pending_files = MagicMock(return_value=["a.py"])
+        state.indexer.index_window = MagicMock(side_effect=slow_index_window)
+        try:
+            await asyncio.gather(
+                *[_schedule_background_reindex(app_ctx, project_path, project) for _ in range(5)]
+            )
 
-        # Let the scheduled task start.  There must be exactly one background
-        # task, rather than one leader plus untracked follower tasks; shutdown
-        # relies on this registry to cancel all reindex work.
-        await asyncio.sleep(0)
-        active_background_tasks = [
-            task
-            for task in asyncio.all_tasks()
-            if task.get_name() == f"bg_reindex:{project_path}" and not task.done()
-        ]
-        assert len(active_background_tasks) == 1
+            # Let the scheduled task start.  There must be exactly one background
+            # task, rather than one leader plus untracked follower tasks; shutdown
+            # relies on this registry to cancel all reindex work.
+            await asyncio.sleep(0)
+            active_background_tasks = [
+                task
+                for task in asyncio.all_tasks()
+                if task.get_name() == f"bg_reindex:{project_path}" and not task.done()
+            ]
+            assert len(active_background_tasks) == 1
 
-        # Wait for all spawned background tasks to finish.
-        while app_ctx._bg_reindex_tasks:
-            await asyncio.sleep(0.01)
+            # Wait for all spawned background tasks to finish.
+            while app_ctx._bg_reindex_tasks:
+                await asyncio.sleep(0.01)
 
-        assert call_count["n"] == 1, f"Expected one index_all, got {call_count['n']}"
+            assert call_count["n"] == 1, f"Expected one index_window, got {call_count['n']}"
+        finally:
+            state.indexer.compute_pending_files = original_compute
+            state.indexer.index_window = original_index_window
 
     @pytest.mark.asyncio
     async def test_background_reindex_failure_leaves_index_stale_and_serves(self, tmp_path):
@@ -1747,8 +1769,6 @@ class TestBackgroundReindex:
         app_ctx = LgrepContext(voyage_api_key="mock-key")
         app_ctx.projects[str(project.resolve())] = state
 
-        state.indexer.index_all = MagicMock(side_effect=RuntimeError("embedding API down"))
-
         captured_error = []
         captured_info = []
         original_error = lifecycle_mod.log.error
@@ -1757,14 +1777,21 @@ class TestBackgroundReindex:
         lifecycle_mod.log.info = lambda event, **kw: captured_info.append((event, kw))
 
         project_path = str(project.resolve())
-        await _schedule_background_reindex(app_ctx, project_path, project)
+        original_compute = state.indexer.compute_pending_files
+        original_index_window = state.indexer.index_window
+        state.indexer.compute_pending_files = MagicMock(return_value=["a.py"])
+        state.indexer.index_window = MagicMock(side_effect=RuntimeError("embedding API down"))
+        try:
+            await _schedule_background_reindex(app_ctx, project_path, project)
 
-        # Wait for the background task to finish and clean itself up.
-        while app_ctx._bg_reindex_tasks:
-            await asyncio.sleep(0.01)
-
-        lifecycle_mod.log.error = original_error
-        lifecycle_mod.log.info = original_info
+            # Wait for the background task to finish and clean itself up.
+            while app_ctx._bg_reindex_tasks:
+                await asyncio.sleep(0.01)
+        finally:
+            state.indexer.compute_pending_files = original_compute
+            state.indexer.index_window = original_index_window
+            lifecycle_mod.log.error = original_error
+            lifecycle_mod.log.info = original_info
 
         assert project_path not in app_ctx._bg_reindex_tasks
         assert any("bg_reindex_failed" in e for e, _ in captured_error), captured_error
@@ -1791,30 +1818,37 @@ class TestBackgroundReindex:
 
         index_started = threading.Event()
 
-        def slow_index_all(**_kwargs):
+        def slow_index_window(*_args, **_kwargs):
             index_started.set()
             import time
 
             time.sleep(0.5)
-            return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
+            return _complete_window_result()
 
-        state.indexer.index_all = MagicMock(side_effect=slow_index_all)
-
+        mock_window = MagicMock(side_effect=slow_index_window)
         project_path = str(project.resolve())
-        start = _time.monotonic()
-        response = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
-        elapsed = _time.monotonic() - start
+        original_compute = state.indexer.compute_pending_files
+        original_index_window = state.indexer.index_window
+        state.indexer.compute_pending_files = MagicMock(return_value=["a.py"])
+        state.indexer.index_window = mock_window
+        try:
+            start = _time.monotonic()
+            response = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
+            elapsed = _time.monotonic() - start
 
-        assert "error" not in response, response
-        assert elapsed < 0.3, f"Search took {elapsed:.2f}s; should not await reindex"
-        assert index_started.is_set(), "index_all should have started in background"
-        assert project_path in app_ctx._bg_reindex_tasks
+            assert "error" not in response, response
+            assert elapsed < 0.3, f"Search took {elapsed:.2f}s; should not await reindex"
+            assert index_started.is_set(), "index_window should have started in background"
+            assert project_path in app_ctx._bg_reindex_tasks
 
-        # Wait for background to finish.
-        while app_ctx._bg_reindex_tasks:
-            await asyncio.sleep(0.01)
+            # Wait for background to finish.
+            while app_ctx._bg_reindex_tasks:
+                await asyncio.sleep(0.01)
 
-        assert state.indexer.index_all.call_count == 1
+            assert mock_window.call_count == 1
+        finally:
+            state.indexer.compute_pending_files = original_compute
+            state.indexer.index_window = original_index_window
 
     @pytest.mark.asyncio
     async def test_background_reindex_refreshes_next_search(self, tmp_path):

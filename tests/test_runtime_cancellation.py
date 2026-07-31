@@ -385,34 +385,40 @@ def test_index_file_raises_before_storage_on_cancel(tmp_project):
 
 
 # ---------------------------------------------------------------------------
-# AC10: index_all enforces a hard wall-clock backstop
+# AC10: index_all converges through bounded windows
 # ---------------------------------------------------------------------------
 
 
-def test_index_all_raises_on_wall_clock_budget(tmp_project, monkeypatch):
-    """Indexer.index_all must raise OperationCancelled once total wall-clock
-    exceeds LGREP_INDEX_MAX_WALL_S, independent of cancel_event, as a
-    defense-in-depth backstop.
+def test_index_all_converges_through_bounded_windows(tmp_project, monkeypatch):
+    """Indexer.index_all must loop bounded windows until the project is fully
+    indexed, with each window respecting LGREP_INDEX_MAX_WALL_S.  It no
+    longer raises OperationCancelled merely because the overall wall budget
+    is exceeded; the backstop is now per-window.
     """
-    from lgrep.exceptions import OperationCancelled
-
     project_root, indexer = tmp_project
 
-    # Tiny budget so the backstop fires quickly.
-    monkeypatch.setenv("LGREP_INDEX_MAX_WALL_S", "0.1")
+    # Tiny per-window budget so multiple windows are required.
+    monkeypatch.setenv("LGREP_INDEX_MAX_WALL_S", "0.03")
 
-    # Make each index_file slow enough that the wall-clock budget is exceeded
-    # within the first couple of files.
+    # Make each index_file slow enough that one window cannot fit every file.
     original = indexer.index_file
 
     def slow_index_file(file_path, **kwargs):
-        time.sleep(0.08)
+        time.sleep(0.02)
         return original(file_path, **kwargs)
 
     indexer.index_file = slow_index_file
 
-    with pytest.raises(OperationCancelled):
-        indexer.index_all()  # no cancel_event — wall-clock backstop only
+    start = time.perf_counter()
+    status = indexer.index_all()  # no cancel_event — bounded-window convergence
+    elapsed = time.perf_counter() - start
+
+    # All 20 files should eventually be indexed.
+    assert status.file_count == 20
+    assert status.chunk_count > 0
+    # The whole operation should take at least two windows (more than one
+    # budget period) but still finish deterministically.
+    assert elapsed > 0.03
 
 
 # ---------------------------------------------------------------------------

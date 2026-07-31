@@ -37,6 +37,10 @@ EMBEDDING_DIM = 1024
 # Table name
 CHUNKS_TABLE = "chunks"
 
+# File storing paths known to produce zero chunks, so staleness checks do not
+# keep re-attempting them after a complete index window.
+_ZERO_CHUNK_FILES_FILENAME = "zero_chunk_files.json"
+
 
 def _escape_sql_string(value: str) -> str:
     """Escape a string for use in a LanceDB SQL predicate.
@@ -697,6 +701,63 @@ class ChunkStore:
         except Exception as e:
             log.debug("get_file_hashes_failed", error=str(e))
             return {}
+
+    def get_zero_chunk_files(self) -> set[str]:
+        """Return paths known to produce zero chunks.
+
+        Zero-chunk files are not present in the chunks table, so a staleness
+        check that simply compares current files to indexed files would flag
+        them as pending forever.  This persisted set lets completed index
+        windows remember that such files were already considered and can be
+        ignored on subsequent checks.
+        """
+        try:
+            path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
+            if not path.is_file():
+                return set()
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return set(data.get("files", []))
+        except Exception as e:
+            log.debug("get_zero_chunk_files_failed", error=str(e))
+            return set()
+
+    def add_zero_chunk_files(self, paths: list[str]) -> None:
+        """Persist a set of paths that produced zero chunks in this window.
+
+        Merging avoids duplicate entries.  Failures are logged and ignored so
+        zero-chunk tracking never blocks indexing.
+        """
+        if not paths:
+            return
+        try:
+            current = self.get_zero_chunk_files()
+            current.update(paths)
+            path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
+            path.write_text(
+                json.dumps({"files": sorted(current)}, indent=2),
+                encoding="utf-8",
+            )
+            log.info("zero_chunk_files_persisted", count=len(current))
+        except Exception as e:
+            log.warning("add_zero_chunk_files_failed", error=str(e))
+
+    def remove_zero_chunk_file(self, file_path: str) -> None:
+        """Remove a path from the zero-chunk set, e.g. after it gains content."""
+        try:
+            current = self.get_zero_chunk_files()
+            if file_path not in current:
+                return
+            current.discard(file_path)
+            path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
+            if current:
+                path.write_text(
+                    json.dumps({"files": sorted(current)}, indent=2),
+                    encoding="utf-8",
+                )
+            else:
+                path.unlink(missing_ok=True)
+        except Exception as e:
+            log.warning("remove_zero_chunk_file_failed", error=str(e))
 
     def get_latest_indexed_at(self) -> float:
         """Return the most-recent ``indexed_at`` timestamp across all chunks.
