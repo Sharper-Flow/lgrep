@@ -52,6 +52,8 @@ dev = [
     # Build tooling used by release tests to verify tag-derived wheel versions.
     "build>=1.0.0",
     "hatch-vcs>=0.4.0",
+    # Static workflow tests parse GitHub Actions YAML deterministically.
+    "pyyaml>=6.0,<7",
 ]
 
 [project.scripts]
