@@ -625,6 +625,6 @@ async def invalidate_cache(
     result = await asyncio.to_thread(_invalidate_cache, path)
     return InvalidateCacheResult(
         status=result["status"],
-        refused_reason=None,
+        refused_reason="",
         _meta=make_meta(time.monotonic(), "invalidate_cache"),
     )

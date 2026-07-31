@@ -127,7 +127,7 @@ async def test_destructive_allowed_with_grant_deletes_fixtures(tool_name, monkey
     assert result["dry_run"] is False, (
         f"{tool_name} must honour the caller's destructive request once {GRANT_ENV} is set"
     )
-    assert result.get("refused_reason") is None
+    assert result.get("refused_reason") == ""
 
     if tool_name == "prune_orphans":
         assert result["deleted_dirs"] >= 1
@@ -146,7 +146,7 @@ async def test_preview_request_is_never_marked_refused(tool_name, monkeypatch):
     result = await _tool_fn(tool_name)(dry_run=True, ctx=_stdio_ctx())
 
     assert result["dry_run"] is True
-    assert result.get("refused_reason") is None
+    assert result.get("refused_reason") == ""
 
 
 def test_transport_no_longer_decides_authority():
@@ -303,7 +303,7 @@ class TestRemainingDestructiveGrants:
         assert result["status"] == "deleted", (
             "invalidate_cache must honour the destructive request once the grant is set"
         )
-        assert result.get("refused_reason") is None
+        assert result.get("refused_reason") == ""
         from lgrep.tools.list_repos import list_repos
 
         assert str(repo) not in list_repos(storage_dir=tmp_path / "symbols")["repos"]
@@ -354,7 +354,7 @@ class TestRemainingDestructiveGrants:
         assert result["paths_cleaned"] == 1, (
             "invalidate_worktree_cache must honour the destructive request once the grant is set"
         )
-        assert result.get("refused_reason") is None
+        assert result.get("refused_reason") == ""
         entry = result["entries"][0]
         assert entry["error"] is None
         assert entry["cache_deleted"] is True

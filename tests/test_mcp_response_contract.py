@@ -91,9 +91,27 @@ async def test_maintenance_tool_validates_on_default_path(
     raw = await _run_validated(_tool(tool_name), arguments)
     assert "_meta" in raw, f"{tool_name} response missing _meta envelope"
     assert raw["_meta"]["tool"] == tool_name
-    # required-nullable refusal field is always present, even when not refused
+    # refused_reason is a non-nullable string; empty when the run was not refused
     assert "refused_reason" in raw
-    assert raw.get("refused_reason") is None
+    assert raw.get("refused_reason") == ""
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "prune_orphans",
+        "prune_symbols",
+        "invalidate_worktree_cache",
+        "invalidate_cache",
+    ],
+)
+def test_maintenance_output_schema_rejects_nullable_refused_reason(tool_name: str):
+    """Vision strict response schemas reject nullable output fields (hotfix)."""
+    tool = _tool(tool_name)
+    refused_schema = tool.output_schema["properties"]["refused_reason"]
+    assert refused_schema == {"title": "Refused Reason", "type": "string"}, (
+        f"{tool_name}.refused_reason must be a non-nullable string, got {refused_schema}"
+    )
 
 
 @pytest.mark.parametrize(

@@ -310,9 +310,9 @@ class InvalidateCacheResult(TypedDict):
     """Response for invalidate_cache."""
 
     status: str  # "deleted" | "not_found" | "refused"
-    # Always present. Null on success, a refusal message when destructive run
+    # Always present. Empty string on success, a refusal message when destructive run
     # was refused without the grant.
-    refused_reason: str | None
+    refused_reason: str
     _meta: _Meta
 
 
@@ -346,9 +346,9 @@ class PruneOrphansResult(TypedDict):
     deleted_dirs: int
     reclaimed_bytes: int
     failures: list[PruneFailureEntry]
-    # Always present. Null on success, a refusal message when destructive run
+    # Always present. Empty string on success, a refusal message when destructive run
     # was downgraded to a preview.
-    refused_reason: str | None
+    refused_reason: str
     _meta: _Meta
 
 
@@ -382,9 +382,9 @@ class PruneSymbolsResult(TypedDict):
     deleted_files: int
     reclaimed_bytes: int
     failures: list[PruneSymbolsFailureEntry]
-    # Always present. Null on success, a refusal message when destructive run
+    # Always present. Empty string on success, a refusal message when destructive run
     # was downgraded to a preview.
-    refused_reason: str | None
+    refused_reason: str
     _meta: _Meta
 
 
@@ -405,9 +405,9 @@ class WorktreeInvalidationResult(TypedDict):
     paths_cleaned: int
     bytes_reclaimed: int
     entries: list[WorktreeInvalidationEntry]
-    # Always present. Null on success, a refusal message when destructive run
+    # Always present. Empty string on success, a refusal message when destructive run
     # was refused without the grant.
-    refused_reason: str | None
+    refused_reason: str
     _meta: _Meta
 
 
