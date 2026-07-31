@@ -285,6 +285,30 @@ def test_mcp_post_accepts_json_response() -> None:
     assert message == payload
 
 
+def test_mcp_post_accept_header_allows_json_and_sse() -> None:
+    """MCP Streamable HTTP rejects a json-only Accept with HTTP 400.
+
+    The server requires the client to advertise both media types before it will
+    dispatch the request, so a json-only Accept makes every health check fail.
+    """
+    payload = {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
+    response = MagicMock()
+    response.read.return_value = json.dumps(payload).encode("utf-8")
+    response.headers = {"Content-Type": "application/json"}
+    captured: dict[str, Any] = {}
+
+    def fake_urlopen(request: Any, **kwargs: Any) -> Any:
+        captured["request"] = request
+        return response
+
+    with patch.object(dv.urllib.request, "urlopen", side_effect=fake_urlopen):
+        dv._mcp_post("http://localhost:6278/mcp", payload)
+
+    accept = captured["request"].get_header("Accept")
+    assert "application/json" in accept, accept
+    assert "text/event-stream" in accept, accept
+
+
 def _mcp_urlopen_effect(
     tool_results: dict[str, dict[str, Any]] | None = None,
     init_session_id: str = "sid",

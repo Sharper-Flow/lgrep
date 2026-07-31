@@ -137,5 +137,24 @@ def test_release_publishes_exact_tag_assets(workflow: dict[str, Any]) -> None:
     assert release["uses"].startswith("softprops/action-gh-release")
     assert release["with"]["tag_name"] == "${{ steps.bump.outputs.new_tag }}"
     files = release["with"]["files"]
-    assert any("*.whl" in f for f in files), files
-    assert any("*.tar.gz" in f for f in files), files
+    # `files` is a newline-delimited STRING input, not a YAML sequence.
+    assert isinstance(files, str), f"files must be a newline-delimited string, got {type(files)}"
+    globs = [line.strip() for line in files.splitlines() if line.strip()]
+    assert any(g.endswith("*.whl") for g in globs), globs
+    assert any(g.endswith("*.tar.gz") for g in globs), globs
+
+
+def test_all_step_with_values_are_scalars(workflow: dict[str, Any]) -> None:
+    """GitHub Actions rejects non-scalar ``with:`` values, invalidating the workflow.
+
+    The workflow schema types ``jobs.<id>.steps[*].with`` values as
+    string | number | boolean. A YAML sequence or mapping makes GitHub reject the
+    entire file, which surfaces as a release run with zero executable jobs (AC1).
+    """
+    for job_name, job in workflow["jobs"].items():
+        for step in job.get("steps", []):
+            for key, value in (step.get("with") or {}).items():
+                assert isinstance(value, str | int | float | bool), (
+                    f"{job_name}/{step.get('name')}: with.{key} must be a scalar, "
+                    f"got {type(value).__name__} ({value!r})"
+                )

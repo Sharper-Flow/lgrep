@@ -248,7 +248,9 @@ def _mcp_post(
     data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "Accept": "application/json",
+        # MCP Streamable HTTP requires clients to accept BOTH media types; the
+        # server rejects a json-only Accept with HTTP 400 before dispatching.
+        "Accept": "application/json, text/event-stream",
     }
     if session_id is not None:
         headers["Mcp-Session-Id"] = session_id

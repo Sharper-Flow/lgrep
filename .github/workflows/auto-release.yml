@@ -106,9 +106,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.bump.outputs.new_tag }}
-          files:
-            - dist/*.tar.gz
-            - dist/*.whl
+          # `files` is a newline-delimited string input. GitHub Actions `with:`
+          # values must be string/number/boolean — a YAML sequence here makes the
+          # whole workflow file invalid and produces a zero-job release run.
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
           generate_release_notes: true
 
       - name: Summary
