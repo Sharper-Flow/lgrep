@@ -229,7 +229,7 @@ def test_wait_vision_ready_fails_after_exhausting_retries() -> None:
 
 def test_check_installed_version_matches() -> None:
     with patch.object(dv, "_run", return_value=FakeCompletedProcess("lgrep 3.2.5\n")):
-        dv.check_installed_version("3.2.5")
+        dv.check_installed_version("3.2.5", "lgrep")
 
 
 def test_check_installed_version_mismatch() -> None:
@@ -237,7 +237,152 @@ def test_check_installed_version_mismatch() -> None:
         patch.object(dv, "_run", return_value=FakeCompletedProcess("lgrep 3.2.4\n")),
         pytest.raises(RuntimeError, match="does not match"),
     ):
-        dv.check_installed_version("3.2.5")
+        dv.check_installed_version("3.2.5", "lgrep")
+
+
+# ---------------------------------------------------------------------------
+# Configured lgrep command resolution
+# ---------------------------------------------------------------------------
+
+
+def _make_executable(tmp_path: Path, name: str = "lgrep") -> Path:
+    exe = tmp_path / name
+    exe.write_text("#!/bin/sh\necho lgrep 3.2.5\n")
+    exe.chmod(0o755)
+    return exe
+
+
+def _write_servers_yaml(tmp_path: Path, command: str | None, port: Any = 6278) -> Path:
+    config = tmp_path / "servers.yaml"
+    port_value = f'"{port}"' if isinstance(port, str) else str(port)
+    lines = ["servers:", "  lgrep:", f"    port: {port_value}"]
+    if command is not None:
+        lines.append(f"    command: {command}")
+    config.write_text("\n".join(lines) + "\n")
+    return config
+
+
+def test_vision_lgrep_server_returns_port_and_command(tmp_path: Path) -> None:
+    exe = _make_executable(tmp_path)
+    config = _write_servers_yaml(tmp_path, str(exe))
+    port, command = dv._vision_lgrep_server(config)
+    assert port == 6278
+    assert command == str(exe)
+
+
+def test_vision_lgrep_server_rejects_missing_server(tmp_path: Path) -> None:
+    config = tmp_path / "servers.yaml"
+    config.write_text("servers:\n  other:\n    port: 1234\n")
+    with pytest.raises(RuntimeError, match="server 'lgrep' not found"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_missing_command(tmp_path: Path) -> None:
+    config = _write_servers_yaml(tmp_path, command=None)
+    with pytest.raises(RuntimeError, match="missing command"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_non_string_command(tmp_path: Path) -> None:
+    config = tmp_path / "servers.yaml"
+    config.write_text("servers:\n  lgrep:\n    port: 6278\n    command: [1, 2]\n")
+    with pytest.raises(RuntimeError, match="command is not a string"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_relative_command(tmp_path: Path) -> None:
+    config = _write_servers_yaml(tmp_path, command="lgrep")
+    with pytest.raises(RuntimeError, match="not an absolute path"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_nonexistent_command(tmp_path: Path) -> None:
+    config = _write_servers_yaml(tmp_path, command="/does/not/exist")
+    with pytest.raises(RuntimeError, match="does not exist"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_non_executable_command(tmp_path: Path) -> None:
+    exe = tmp_path / "lgrep"
+    exe.write_text("no execute bit")
+    config = _write_servers_yaml(tmp_path, command=str(exe))
+    with pytest.raises(RuntimeError, match="not executable"):
+        dv._vision_lgrep_server(config)
+
+
+def test_vision_lgrep_server_rejects_invalid_port(tmp_path: Path) -> None:
+    exe = _make_executable(tmp_path)
+    config = _write_servers_yaml(tmp_path, command=str(exe), port="6278")
+    with pytest.raises(RuntimeError, match="invalid port"):
+        dv._vision_lgrep_server(config)
+
+
+def test_deploy_uses_configured_command_not_ambient_path() -> None:
+    configured_command = "/configured/lgrep"
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
+        joined = " ".join(cmd)
+        if "git" in joined:
+            return _fake_run_for_trunk_ok(cmd, **kwargs)
+        if "vision config validate" in joined:
+            return FakeCompletedProcess("")
+        if "uv tool install" in joined:
+            return FakeCompletedProcess("")
+        if "systemctl --user restart" in joined:
+            return FakeCompletedProcess("")
+        if "vision health" in joined:
+            return FakeCompletedProcess("")
+        if joined.startswith(f"{configured_command} --version"):
+            return FakeCompletedProcess("lgrep 3.2.5\n")
+        # Any call to the ambient ``lgrep`` executable is a PATH-divergence bug.
+        if cmd and cmd[0] == "lgrep":
+            raise RuntimeError("ambient lgrep was invoked unexpectedly")
+        return FakeCompletedProcess("")
+
+    with (
+        patch.object(dv, "_run", side_effect=fake_run),
+        patch.object(
+            dv.urllib.request,
+            "urlopen",
+            side_effect=_mcp_urlopen_effect(
+                tool_results={
+                    "prune_orphans": _make_mcp_tool_result("prune_orphans"),
+                    "prune_symbols": _make_mcp_tool_result("prune_symbols"),
+                }
+            ),
+        ),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
+        patch.object(dv, "download_wheel"),
+    ):
+        args = _make_namespace(tag="v3.2.5")
+        assert dv.deploy(args) == 0
+
+
+def test_deploy_rejects_invalid_command_before_restart() -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
+        calls.append(cmd)
+        joined = " ".join(cmd)
+        if "git" in joined:
+            return _fake_run_for_trunk_ok(cmd, **kwargs)
+        if "vision config validate" in joined:
+            return FakeCompletedProcess("")
+        if "systemctl --user restart" in joined:
+            return FakeCompletedProcess("")
+        return FakeCompletedProcess("")
+
+    with (
+        patch.object(dv, "_run", side_effect=fake_run),
+        patch.object(
+            dv, "_vision_lgrep_server", side_effect=RuntimeError("configured command missing")
+        ),
+        patch.object(dv, "download_wheel"),
+    ):
+        args = _make_namespace(tag="v3.2.5")
+        assert dv.deploy(args) == 1
+
+    assert not any("systemctl --user restart" in " ".join(c) for c in calls)
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +574,7 @@ def test_deploy_refuses_unsafe_context() -> None:
 
 def _fake_run_full_deploy(
     version: str = "3.2.5",
+    configured_command: str = "/configured/lgrep",
 ) -> Any:
     """Return a fake _run that handles the full deploy command list."""
     calls: list[list[str]] = []
@@ -452,7 +598,7 @@ def _fake_run_full_deploy(
             if "describe --tags --exact-match" in joined:
                 return FakeCompletedProcess(f"v{version}")
 
-        # Vision / uv / systemctl / lgrep commands
+        # Vision / uv / systemctl / configured lgrep commands
         if "vision config validate" in joined:
             return FakeCompletedProcess("")
         if "uv tool install" in joined:
@@ -461,7 +607,7 @@ def _fake_run_full_deploy(
             return FakeCompletedProcess("")
         if "vision health" in joined:
             return FakeCompletedProcess("")
-        if "lgrep --version" in joined:
+        if joined.startswith(f"{configured_command} --version"):
             return FakeCompletedProcess(f"lgrep {version}\n")
 
         return FakeCompletedProcess("")
@@ -470,7 +616,8 @@ def _fake_run_full_deploy(
 
 
 def test_deploy_full_flow_succeeds() -> None:
-    fake_run, calls = _fake_run_full_deploy()
+    configured_command = "/configured/lgrep"
+    fake_run, calls = _fake_run_full_deploy(configured_command=configured_command)
 
     with (
         patch.object(dv, "_run", side_effect=fake_run),
@@ -484,7 +631,7 @@ def test_deploy_full_flow_succeeds() -> None:
                 }
             ),
         ),
-        patch.object(dv, "_vision_lgrep_port", return_value=6278),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
         patch.object(dv, "download_wheel"),
     ):
         args = _make_namespace()
@@ -494,26 +641,32 @@ def test_deploy_full_flow_succeeds() -> None:
     assert any("uv tool install" in " ".join(c) for c in calls)
     assert any("systemctl --user restart" in " ".join(c) for c in calls)
     assert any("vision health" in " ".join(c) for c in calls)
-    assert any("lgrep --version" in " ".join(c) for c in calls)
+    assert any(f"{configured_command} --version" in " ".join(c) for c in calls)
 
 
 def test_deploy_fails_when_version_mismatch() -> None:
-    fake_run, _calls = _fake_run_full_deploy(version="3.2.5")
+    configured_command = "/configured/lgrep"
+    fake_run, _calls = _fake_run_full_deploy(version="3.2.5", configured_command=configured_command)
 
-    # Make version check return a different version.
+    # Make version check return a different version for the configured command.
     def patched_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
         joined = " ".join(cmd)
-        if "lgrep --version" in joined:
+        if joined.startswith(f"{configured_command} --version"):
             return FakeCompletedProcess("lgrep 3.2.4\n")
         return fake_run(cmd, **kwargs)
 
-    with patch.object(dv, "_run", side_effect=patched_run), patch.object(dv, "download_wheel"):
+    with (
+        patch.object(dv, "_run", side_effect=patched_run),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
+        patch.object(dv, "download_wheel"),
+    ):
         args = _make_namespace(tag="v3.2.5")
         assert dv.deploy(args) == 1
 
 
 def test_deploy_fails_when_health_check_lacks_refused_reason() -> None:
-    fake_run, _calls = _fake_run_full_deploy()
+    configured_command = "/configured/lgrep"
+    fake_run, _calls = _fake_run_full_deploy(configured_command=configured_command)
 
     with (
         patch.object(dv, "_run", side_effect=fake_run),
@@ -528,7 +681,7 @@ def test_deploy_fails_when_health_check_lacks_refused_reason() -> None:
                 }
             ),
         ),
-        patch.object(dv, "_vision_lgrep_port", return_value=6278),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
         patch.object(dv, "download_wheel"),
     ):
         args = _make_namespace(tag="v3.2.5")
