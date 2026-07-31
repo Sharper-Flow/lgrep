@@ -104,19 +104,19 @@ def search_references(
     t0 = time.monotonic()
 
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0))
+        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
     query = query.strip()
 
     if usage_filter not in _USAGE_FILTERS:
         return error_response(
             f"usage_filter must be one of {sorted(_USAGE_FILTERS)}; got {usage_filter!r}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     if kind is not None and kind not in _OCCURRENCE_KINDS:
         return error_response(
             f"kind must be one of {sorted(_OCCURRENCE_KINDS)}; got {kind!r}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     if limit < 1:
@@ -129,7 +129,7 @@ def search_references(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     # Stale/invalid index: occurrence data is required for this tool.
@@ -137,7 +137,7 @@ def search_references(
         return error_response(
             f"Symbol index is missing candidate occurrence data for {repo_path}. "
             "Run lgrep_index_symbols_folder to refresh.",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     query_lower = query.lower()
@@ -156,7 +156,7 @@ def search_references(
             "results": [],
             "candidate_names": [],
             "disclaimer": _DISCLAIMER,
-            "_meta": make_meta(t0, tokens_saved=estimate_savings(0)),
+            "_meta": make_meta(t0, __name__, tokens_saved=estimate_savings(0)),
         }
 
     matches: list[dict] = []
@@ -215,5 +215,5 @@ def search_references(
         "results": results,
         "candidate_names": candidate_names,
         "disclaimer": _DISCLAIMER,
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

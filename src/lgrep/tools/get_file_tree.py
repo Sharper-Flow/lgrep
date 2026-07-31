@@ -34,7 +34,7 @@ def get_file_tree(
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.discovery import FileDiscovery
@@ -54,5 +54,5 @@ def get_file_tree(
         "repo_path": str(root.resolve()),
         "files": files,
         "total_files": len(files),
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

@@ -29,10 +29,10 @@ def get_repo_outline(repo_path: str, max_files: int = 500) -> dict:
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     outline = build_repo_outline(root, max_files=max_files)
     tokens_saved = estimate_savings(outline["total_symbols"])
-    outline["_meta"] = make_meta(t0, tokens_saved=tokens_saved)
+    outline["_meta"] = make_meta(t0, __name__, tokens_saved=tokens_saved)
     return outline

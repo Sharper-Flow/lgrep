@@ -37,14 +37,14 @@ def search_text(
 
     # Input validation
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0))
+        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
 
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.discovery import FileDiscovery
@@ -81,5 +81,5 @@ def search_text(
     return {
         "results": results,
         "total_matches": len(results),
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

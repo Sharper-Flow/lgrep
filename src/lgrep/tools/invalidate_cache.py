@@ -41,12 +41,12 @@ def invalidate_cache(
         return {
             "status": "not_found",
             "repo_path": repo_key,
-            "_meta": make_meta(t0),
+            "_meta": make_meta(t0, __name__),
         }
 
     store.delete_index(repo_key)
     return {
         "status": "deleted",
         "repo_path": repo_key,
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from functools import partial
 from pathlib import Path
 from typing import Annotated
@@ -29,6 +30,7 @@ from lgrep.server.responses import (
     error_response,
 )
 from lgrep.server.tools_maintenance import _destructive_grant_present
+from lgrep.tools._meta import make_meta
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
@@ -91,7 +93,7 @@ async def index_symbols_folder(
         symbols_indexed=result["symbols_indexed"],
         occurrences_indexed=result["occurrences_indexed"],
         repo_path=result["repo_path"],
-        _meta={"duration_ms": 0.0, "tool": "index_symbols_folder"},
+        _meta=make_meta(time.monotonic(), "index_symbols_folder"),
     )
 
 
@@ -138,7 +140,7 @@ async def index_symbols_repo(
         files_indexed=result["files_indexed"],
         symbols_indexed=result["symbols_indexed"],
         repo=result["repo"],
-        _meta={"duration_ms": 0.0, "tool": "index_symbols_repo"},
+        _meta=make_meta(time.monotonic(), "index_symbols_repo"),
     )
 
 
@@ -160,7 +162,7 @@ async def list_repos() -> ListReposResult:
     result = await asyncio.to_thread(_list_repos)
     return ListReposResult(
         repos=result["repos"],
-        _meta={"duration_ms": 0.0, "tool": "list_repos"},
+        _meta=make_meta(time.monotonic(), "list_repos"),
     )
 
 
@@ -196,7 +198,7 @@ async def get_file_tree(
     return GetFileTreeResult(
         files=result["files"],
         total_files=result["total_files"],
-        _meta={"duration_ms": 0.0, "tool": "get_file_tree"},
+        _meta=make_meta(time.monotonic(), "get_file_tree"),
     )
 
 
@@ -233,7 +235,7 @@ async def get_file_outline(
         file_path=result["file_path"],
         symbols=result["symbols"],
         symbol_count=result["symbol_count"],
-        _meta={"duration_ms": 0.0, "tool": "get_file_outline"},
+        _meta=make_meta(time.monotonic(), "get_file_outline"),
     )
 
 
@@ -271,7 +273,7 @@ async def get_repo_outline(
         files=result["files"],
         total_files=result["total_files"],
         total_symbols=result["total_symbols"],
-        _meta={"duration_ms": 0.0, "tool": "get_repo_outline"},
+        _meta=make_meta(time.monotonic(), "get_repo_outline"),
     )
 
 
@@ -326,7 +328,7 @@ async def search_symbols(
     return SearchSymbolsResult(
         results=result["results"],
         total_matches=result["total_matches"],
-        _meta={"duration_ms": 0.0, "tool": "search_symbols"},
+        _meta=make_meta(time.monotonic(), "search_symbols"),
     )
 
 
@@ -390,14 +392,14 @@ async def search_text(
         return SearchTextResult(
             results=[],
             max_results=max_results,
-            _meta={"duration_ms": 0.0, "tool": "search_text"},
+            _meta=make_meta(time.monotonic(), "search_text"),
             error=result["error"],
         )
 
     return SearchTextResult(
         results=result["results"],
         max_results=max_results,
-        _meta={"duration_ms": 0.0, "tool": "search_text"},
+        _meta=make_meta(time.monotonic(), "search_text"),
         error="",
     )
 
@@ -438,7 +440,7 @@ async def get_symbol(
         return error_response(result["error"])
     return GetSymbolResult(
         symbol=result["symbol"],
-        _meta={"duration_ms": 0.0, "tool": "get_symbol"},
+        _meta=make_meta(time.monotonic(), "get_symbol"),
     )
 
 
@@ -475,7 +477,7 @@ async def get_symbols(
         return error_response(result["error"])
     return GetSymbolsResult(
         symbols=result["symbols"],
-        _meta={"duration_ms": 0.0, "tool": "get_symbols"},
+        _meta=make_meta(time.monotonic(), "get_symbols"),
     )
 
 
@@ -575,7 +577,7 @@ async def search_references(
         results=result["results"],
         candidate_names=result["candidate_names"],
         disclaimer=result["disclaimer"],
-        _meta={"duration_ms": 0.0, "tool": "search_references"},
+        _meta=make_meta(time.monotonic(), "search_references"),
     )
 
 
@@ -617,11 +619,12 @@ async def invalidate_cache(
                 "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 on the server to allow destructive "
                 "MCP calls. There is no CLI equivalent."
             ),
-            _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
+            _meta=make_meta(time.monotonic(), "invalidate_cache"),
         )
 
     result = await asyncio.to_thread(_invalidate_cache, path)
     return InvalidateCacheResult(
         status=result["status"],
-        _meta={"duration_ms": 0.0, "tool": "invalidate_cache"},
+        refused_reason=None,
+        _meta=make_meta(time.monotonic(), "invalidate_cache"),
     )

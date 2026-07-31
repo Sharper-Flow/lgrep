@@ -403,7 +403,7 @@ def prune_orphans(
         "deleted_dirs": deleted_dirs,
         "reclaimed_bytes": reclaimed_bytes,
         "failures": failures,
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }
 
 
@@ -445,7 +445,7 @@ def gc_worktree_meta(
             "checked": 0,
             "aliases_removed": 0,
             "dirs_updated": 0,
-            "_meta": make_meta(t0),
+            "_meta": make_meta(t0, __name__),
         }
 
     checked = 0
@@ -460,7 +460,7 @@ def gc_worktree_meta(
             "checked": 0,
             "aliases_removed": 0,
             "dirs_updated": 0,
-            "_meta": make_meta(t0),
+            "_meta": make_meta(t0, __name__),
         }
 
     for child in entries:
@@ -527,5 +527,5 @@ def gc_worktree_meta(
         "checked": checked,
         "aliases_removed": aliases_removed,
         "dirs_updated": dirs_updated,
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

@@ -102,7 +102,7 @@ class TestSymbolToolResponses:
         result = await fn(path=str(tmp_path))
         data = result
         assert "_meta" in data
-        assert "duration_ms" in data["_meta"]
+        assert "timing_ms" in data["_meta"]
         assert data["files_deleted"] == 0
         assert data["occurrences_indexed"] == 0
 
@@ -248,7 +248,7 @@ class TestSymbolToolResponses:
         assert result["candidate_names"] == []
         assert result["disclaimer"] == ""
         assert result["_meta"]["tool"] == "search_references"
-        assert result["_meta"]["duration_ms"] >= 0
+        assert result["_meta"]["timing_ms"] >= 0
         assert result["error"] == "Operation was cancelled."
 
     @pytest.mark.asyncio

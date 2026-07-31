@@ -31,5 +31,5 @@ def list_repos(storage_dir: Path | str | None = None) -> dict:
     return {
         "repos": repos,
         "count": len(repos),
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

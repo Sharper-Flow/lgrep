@@ -28,15 +28,15 @@ def time_tool(func):
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
-        start = time.perf_counter()
+        start = time.monotonic()
         tool_name = func.__name__
         try:
             result = await asyncio.wait_for(func(*args, **kwargs), timeout=TOOL_TIMEOUT_S)
-            duration = round((time.perf_counter() - start) * 1000, 2)
+            duration = round((time.monotonic() - start) * 1000, 2)
             log.info(f"{tool_name}_completed", duration_ms=duration)
             return result
         except TimeoutError:
-            duration = round((time.perf_counter() - start) * 1000, 2)
+            duration = round((time.monotonic() - start) * 1000, 2)
             message = (
                 f"Operation timed out after {TOOL_TIMEOUT_S}s. "
                 "The project may need re-indexing or the Voyage API may be slow. "
@@ -51,7 +51,7 @@ def time_tool(func):
                 return {
                     "results": [],
                     "max_results": kwargs.get("max_results", 50),
-                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "_meta": make_meta(start, tool_name),
                     "error": message,
                 }
 
@@ -63,7 +63,7 @@ def time_tool(func):
                     "results": [],
                     "candidate_names": [],
                     "disclaimer": "",
-                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "_meta": make_meta(start, tool_name),
                     "error": message,
                 }
 
@@ -71,7 +71,7 @@ def time_tool(func):
 
             return _err(message)
         except asyncio.CancelledError:
-            duration = round((time.perf_counter() - start) * 1000, 2)
+            duration = round((time.monotonic() - start) * 1000, 2)
             log.warning(f"{tool_name}_cancelled", duration_ms=duration)
             if tool_name == "search_references":
                 return {
@@ -81,12 +81,12 @@ def time_tool(func):
                     "results": [],
                     "candidate_names": [],
                     "disclaimer": "",
-                    "_meta": {"duration_ms": duration, "tool": tool_name},
+                    "_meta": make_meta(start, tool_name),
                     "error": "Operation was cancelled.",
                 }
             raise
         except Exception as e:
-            duration = round((time.perf_counter() - start) * 1000, 2)
+            duration = round((time.monotonic() - start) * 1000, 2)
             log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))
             raise
 
@@ -112,6 +112,7 @@ from lgrep.server.lifecycle import (  # noqa: E402
     _warm_projects,
     app_lifespan,
 )
+from lgrep.tools._meta import make_meta  # noqa: E402
 
 mcp = FastMCP(
     "lgrep",

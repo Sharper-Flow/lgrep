@@ -42,7 +42,7 @@ def search_symbols(
 
     # Input validation
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0))
+        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
     if limit < 0:
         limit = 1
 
@@ -53,7 +53,7 @@ def search_symbols(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     query_lower = query.lower()
@@ -73,5 +73,5 @@ def search_symbols(
     return {
         "results": results,
         "total_matches": len(results),
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

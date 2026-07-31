@@ -80,14 +80,14 @@ def index_folder(
 
     # Input validation
     if not repo_path or not repo_path.strip():
-        return error_response("repo_path must not be empty", _meta=make_meta(t0))
+        return error_response("repo_path must not be empty", _meta=make_meta(t0, __name__))
 
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     store = IndexStore(storage_dir=storage_dir)
@@ -243,5 +243,5 @@ def index_folder(
         "files_deleted": files_deleted,
         "symbols_indexed": len(symbols_dict),
         "occurrences_indexed": occurrence_count,
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

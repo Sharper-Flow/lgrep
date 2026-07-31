@@ -42,7 +42,7 @@ async def index_repo(
     if "/" not in repo or repo.count("/") != 1:
         return error_response(
             f"Invalid repo format. Expected 'owner/name', got: {repo!r}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     try:
@@ -50,7 +50,7 @@ async def index_repo(
     except ImportError:
         return error_response(
             "httpx is required for GitHub repo indexing. Install with: pip install httpx",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     try:
@@ -58,7 +58,7 @@ async def index_repo(
     except ImportError:
         return error_response(
             "tree-sitter-language-pack is required. Install with: pip install tree-sitter-language-pack",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.parser.extractor import _extract_symbols_from_tree
@@ -84,12 +84,12 @@ async def index_repo(
         except httpx.HTTPStatusError as e:
             return error_response(
                 f"GitHub API error: {e.response.status_code} for {repo}",
-                _meta=make_meta(t0),
+                _meta=make_meta(t0, __name__),
             )
         except httpx.RequestError as e:
             return error_response(
                 f"Network error fetching {repo}: {e}",
-                _meta=make_meta(t0),
+                _meta=make_meta(t0, __name__),
             )
 
         tree_data = resp.json()
@@ -160,5 +160,5 @@ async def index_repo(
         "ref": ref,
         "files_indexed": files_processed,
         "symbols_indexed": len(symbols_dict),
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

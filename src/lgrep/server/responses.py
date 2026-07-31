@@ -1,9 +1,8 @@
 """MCP response contracts for lgrep tools.
 
 This module defines the canonical TypedDict shapes for all MCP tool responses.
-TypedDicts are used for maintainer-side type safety — FastMCP itself accepts
-plain dicts at runtime, so these are checked by type checkers but do not
-enforce validation at runtime.
+FastMCP derives a runtime Pydantic model from these TypedDicts, so every
+field declared here is validated on every tool result.
 
 **Location:** ``lgrep.server.responses`` (moved from ``lgrep.server_responses``
 during the server split).
@@ -18,9 +17,25 @@ Response convention:
 
 from __future__ import annotations
 
-from typing import Any, NotRequired
+from typing import Any
 
 from typing_extensions import TypedDict
+
+
+class _Meta(TypedDict):
+    """Canonical metadata envelope attached to every MCP tool response.
+
+    Produced by ``lgrep.tools._meta.make_meta``; all server handlers use that
+    single constructor so the runtime schema matches the declared shape exactly.
+    """
+
+    tool: str
+    timing_ms: float
+    tokens_saved: int
+    session_tokens: int
+    total_tokens: int
+    cost_avoided_usd: float
+
 
 # --------------------------------------------------------------------------- #
 # TypedDict definitions
@@ -295,8 +310,9 @@ class InvalidateCacheResult(TypedDict):
     """Response for invalidate_cache."""
 
     status: str  # "deleted" | "not_found" | "refused"
-    # Present when a destructive request was refused without the grant.
-    refused_reason: NotRequired[str]
+    # Always present. Null on success, a refusal message when destructive run
+    # was refused without the grant.
+    refused_reason: str | None
     _meta: _Meta
 
 
@@ -330,8 +346,9 @@ class PruneOrphansResult(TypedDict):
     deleted_dirs: int
     reclaimed_bytes: int
     failures: list[PruneFailureEntry]
-    # Present only when a destructive request was downgraded to a preview.
-    refused_reason: NotRequired[str]
+    # Always present. Null on success, a refusal message when destructive run
+    # was downgraded to a preview.
+    refused_reason: str | None
     _meta: _Meta
 
 
@@ -365,8 +382,9 @@ class PruneSymbolsResult(TypedDict):
     deleted_files: int
     reclaimed_bytes: int
     failures: list[PruneSymbolsFailureEntry]
-    # Present only when a destructive request was downgraded to a preview.
-    refused_reason: NotRequired[str]
+    # Always present. Null on success, a refusal message when destructive run
+    # was downgraded to a preview.
+    refused_reason: str | None
     _meta: _Meta
 
 
@@ -387,8 +405,9 @@ class WorktreeInvalidationResult(TypedDict):
     paths_cleaned: int
     bytes_reclaimed: int
     entries: list[WorktreeInvalidationEntry]
-    # Present when a destructive request was refused without the grant.
-    refused_reason: NotRequired[str]
+    # Always present. Null on success, a refusal message when destructive run
+    # was refused without the grant.
+    refused_reason: str | None
     _meta: _Meta
 
 
@@ -425,13 +444,6 @@ class DiagnosticsResult(TypedDict):
     active_jobs: list[dict[str, Any]]
     recent_jobs: list[dict[str, Any]]
     timeout_abandonment_summary: TimeoutAbandonmentSummary
-
-
-class _Meta(TypedDict):
-    """Envelope metadata attached to symbol-tool responses."""
-
-    duration_ms: float
-    tool: str
 
 
 # --------------------------------------------------------------------------- #

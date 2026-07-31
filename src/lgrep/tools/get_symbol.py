@@ -82,7 +82,7 @@ def get_symbol(
 
     # Input validation
     if not symbol_id or not symbol_id.strip():
-        return error_response("symbol_id must not be empty", _meta=make_meta(t0))
+        return error_response("symbol_id must not be empty", _meta=make_meta(t0, __name__))
 
     store = IndexStore(storage_dir=storage_dir)
 
@@ -91,14 +91,14 @@ def get_symbol(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     sym_data = index.symbols.get(symbol_id)
     if sym_data is None:
         return error_response(
             f"Symbol not found: {symbol_id}",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     # Retrieve source bytes
@@ -109,7 +109,7 @@ def get_symbol(
     tokens_saved = estimate_savings(1)
     return {
         "symbol": sym_data,
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }
 
 
@@ -137,7 +137,7 @@ def get_symbols(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, __name__),
         )
 
     symbols = []
@@ -157,5 +157,5 @@ def get_symbols(
     tokens_saved = estimate_savings(len(symbols))
     return {
         "symbols": symbols,
-        "_meta": make_meta(t0, tokens_saved=tokens_saved),
+        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

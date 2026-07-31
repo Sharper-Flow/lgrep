@@ -447,5 +447,5 @@ def prune_symbols(
         "deleted_files": deleted_files,
         "reclaimed_bytes": reclaimed_bytes,
         "failures": failures,
-        "_meta": make_meta(t0),
+        "_meta": make_meta(t0, __name__),
     }

@@ -112,6 +112,7 @@ async def prune_orphans(
     server. Without it the handler coerces ``dry_run=True`` and reports why.
     Operators can always run the CLI (``lgrep prune-orphans --execute``).
     """
+    t0 = time.monotonic()
     active_set: list[str] = []
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
@@ -131,8 +132,8 @@ async def prune_orphans(
         dry_run=effective_dry_run,
         active_set=active_set,
     )
-    if refused_reason is not None:
-        result["refused_reason"] = refused_reason
+    result.setdefault("refused_reason", refused_reason)
+    result["_meta"] = make_meta(t0, "prune_orphans")
     return result
 
 
@@ -166,6 +167,7 @@ async def prune_symbols(
     server. Without it the handler coerces ``dry_run=True`` and reports why.
     Operators can always run the CLI (``lgrep prune-symbols --execute``).
     """
+    t0 = time.monotonic()
     active_set: list[str] = []
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
@@ -185,8 +187,8 @@ async def prune_symbols(
         dry_run=effective_dry_run,
         active_set=active_set,
     )
-    if refused_reason is not None:
-        result["refused_reason"] = refused_reason
+    result.setdefault("refused_reason", refused_reason)
+    result["_meta"] = make_meta(t0, "prune_symbols")
     return result
 
 
@@ -237,7 +239,7 @@ async def invalidate_worktree_cache(
                 "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 on the server to allow destructive "
                 "MCP calls. There is no CLI equivalent."
             ),
-            _meta=make_meta(t0),
+            _meta=make_meta(t0, "invalidate_worktree_cache"),
         )
 
     # Run the core invalidation logic in a thread (sync I/O)
@@ -264,5 +266,6 @@ async def invalidate_worktree_cache(
         paths_cleaned=paths_cleaned,
         bytes_reclaimed=bytes_reclaimed,
         entries=entries,
-        _meta=make_meta(t0),
+        refused_reason=None,
+        _meta=make_meta(t0, "invalidate_worktree_cache"),
     )
