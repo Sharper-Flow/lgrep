@@ -119,7 +119,7 @@ async def prune_orphans(
         active_set = list(app_ctx.projects.keys())
 
     effective_dry_run = dry_run
-    refused_reason: str | None = None
+    refused_reason: str = ""
     if not dry_run and not _destructive_grant_present():
         effective_dry_run = True
         refused_reason = _refusal_reason("lgrep prune-orphans --execute")
@@ -174,7 +174,7 @@ async def prune_symbols(
         active_set = list(app_ctx.projects.keys())
 
     effective_dry_run = dry_run
-    refused_reason: str | None = None
+    refused_reason: str = ""
     if not dry_run and not _destructive_grant_present():
         effective_dry_run = True
         refused_reason = _refusal_reason("lgrep prune-symbols --execute")
@@ -266,6 +266,6 @@ async def invalidate_worktree_cache(
         paths_cleaned=paths_cleaned,
         bytes_reclaimed=bytes_reclaimed,
         entries=entries,
-        refused_reason=None,
+        refused_reason="",
         _meta=make_meta(t0, "invalidate_worktree_cache"),
     )
