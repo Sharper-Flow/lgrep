@@ -1,6 +1,23 @@
-## 2026-07-30 (v3.2.3)\n\n### Changed\n- checkpoint tk-7d4722205f39\n- checkpoint tk-0edb2ec14795\n- checkpoint tk-389d9063d15c\n- checkpoint tk-dfa0f990b25c\n- checkpoint tk-b439c00f4e14
+## 2026-07-30 (v3.2.3)
 
-## 2026-07-30 (v3.2.2)\n\n### Fixed\n- correct transport-safety drift and pin ruff to unbreak lint\n- stop staleness annotation leaking into cached index; confine freshness read\n\n### Changed\n- checkpoint tk-d93f0f72a3b7\n- checkpoint tk-ec6f446f6a1d\n- checkpoint tk-593a5819ec49\n- checkpoint tk-c149dd1461a8
+### Changed
+- checkpoint tk-7d4722205f39
+- checkpoint tk-0edb2ec14795
+- checkpoint tk-389d9063d15c
+- checkpoint tk-dfa0f990b25c
+- checkpoint tk-b439c00f4e14
+
+## 2026-07-30 (v3.2.2)
+
+### Fixed
+- correct transport-safety drift and pin ruff to unbreak lint
+- stop staleness annotation leaking into cached index; confine freshness read
+
+### Changed
+- checkpoint tk-d93f0f72a3b7
+- checkpoint tk-ec6f446f6a1d
+- checkpoint tk-593a5819ec49
+- checkpoint tk-c149dd1461a8
 
 ## Unreleased (v3.2.2)
 
@@ -52,15 +69,32 @@ Closes issue #5 (multi-agent hosts accumulate stale symbol indexes forever).
 
 - **`search_semantic` no longer blocks on a full re-embed** — when the staleness pre-flight detects drift, the search now serves the current index immediately and triggers a background single-flight refresh; the next search observes fresh results. Removes the `provider_timeout` failure mode where a minutes-long Voyage re-embed blocked the search path behind the Vision proxy. Default behavior, no operator flag; freshness converges automatically. Spec: `rq-search-never-blocks-on-reindex`.
 
-## 2026-07-04 (v3.1.8)\n\n### Changed\n- checkpoint main before archiving updateReadmePositioning2\n- checkpoint tk-92fc0bbcf001\n- checkpoint tk-afcb776da4f0
+## 2026-07-04 (v3.1.8)
 
-## 2026-06-25 (v3.1.7)\n\n### Changed\n- checkpoint tk-87be31396184
+### Changed
+- checkpoint main before archiving updateReadmePositioning2
+- checkpoint tk-92fc0bbcf001
+- checkpoint tk-afcb776da4f0
 
-## 2026-06-25 (v3.1.6)\n\n### Changed\n- checkpoint tk-e592560ea67b
+## 2026-06-25 (v3.1.7)
 
-## 2026-06-25 (v3.1.5)\n\n### Changed\n- checkpoint tk-660caa7e043d
+### Changed
+- checkpoint tk-87be31396184
 
-## 2026-06-25 (v3.1.4)\n\n### Changed\n- checkpoint tk-8e98937e38dc
+## 2026-06-25 (v3.1.6)
+
+### Changed
+- checkpoint tk-e592560ea67b
+
+## 2026-06-25 (v3.1.5)
+
+### Changed
+- checkpoint tk-660caa7e043d
+
+## 2026-06-25 (v3.1.4)
+
+### Changed
+- checkpoint tk-8e98937e38dc
 
 ## 2026-06-10 (v3.1.3)
 
@@ -113,9 +147,24 @@ Closes issue #5 (multi-agent hosts accumulate stale symbol indexes forever).
 - Add worktree-aware cache lifecycle (`addWorktreeAwareCacheLifecycle`)
 - Expand worktree workflow docs with concurrency + dual-pass gc
 
-## 2026-05-11 (v3.0.2)\n\n### Fixed\n- avoid staleness loop on zero-chunk files
+## 2026-05-11 (v3.0.2)
 
-## 2026-05-11 (v3.0.1)\n\n### Fixed\n- pin compatible tree-sitter language pack\n- support pydantic TypedDict on Python 3.11\n- move dependencies out of [project.urls] section\n\n### Changed\n- use setup-python for test matrix\n- install dev extras with uv\n- add lgrep ignore defaults\n- format codebase for CI\n- add auto release workflow
+### Fixed
+- avoid staleness loop on zero-chunk files
+
+## 2026-05-11 (v3.0.1)
+
+### Fixed
+- pin compatible tree-sitter language pack
+- support pydantic TypedDict on Python 3.11
+- move dependencies out of [project.urls] section
+
+### Changed
+- use setup-python for test matrix
+- install dev extras with uv
+- add lgrep ignore defaults
+- format codebase for CI
+- add auto release workflow
 
 # Changelog
 

@@ -84,18 +84,27 @@ jobs:
           while IFS= read -r line; do
             MSG=$(echo "$line" | sed -E 's/^[a-z]+(\(.+\))?:\s*//')
             if echo "$line" | grep -qE '^feat(\(.+\))?:'; then
-              FEAT_ENTRIES="${FEAT_ENTRIES}\n- ${MSG}"
+              FEAT_ENTRIES="${FEAT_ENTRIES}
+- ${MSG}"
             elif echo "$line" | grep -qE '^fix(\(.+\))?:'; then
-              FIX_ENTRIES="${FIX_ENTRIES}\n- ${MSG}"
+              FIX_ENTRIES="${FIX_ENTRIES}
+- ${MSG}"
             elif echo "$line" | grep -qE '^(chore|ci|docs|refactor|test|perf|style|build)(\(.+\))?:'; then
-              OTHER_ENTRIES="${OTHER_ENTRIES}\n- ${MSG}"
+              OTHER_ENTRIES="${OTHER_ENTRIES}
+- ${MSG}"
             fi
           done <<< "$COMMITS"
 
           ENTRY="## ${TODAY} (${NEW_TAG})"
-          [ -n "$FEAT_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Added${FEAT_ENTRIES}"
-          [ -n "$FIX_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Fixed${FIX_ENTRIES}"
-          [ -n "$OTHER_ENTRIES" ] && ENTRY="${ENTRY}\n\n### Changed${OTHER_ENTRIES}"
+          [ -n "$FEAT_ENTRIES" ] && ENTRY="${ENTRY}
+
+### Added${FEAT_ENTRIES}"
+          [ -n "$FIX_ENTRIES" ] && ENTRY="${ENTRY}
+
+### Fixed${FIX_ENTRIES}"
+          [ -n "$OTHER_ENTRIES" ] && ENTRY="${ENTRY}
+
+### Changed${OTHER_ENTRIES}"
 
           if [ -f CHANGELOG.md ]; then
             EXISTING=$(cat CHANGELOG.md)
