@@ -433,9 +433,7 @@ async def _schedule_background_reindex(
     task.add_done_callback(lambda t, p=project_path: _on_bg_reindex_done(app_ctx, p, t))
 
 
-async def _run_index_continuation(
-    app_ctx: LgrepContext, project_path: str, path_obj: Path
-) -> None:
+async def _run_index_continuation(app_ctx: LgrepContext, project_path: str, path_obj: Path) -> None:
     """Schedule a background continuation that processes remaining pending files.
 
     Called by an index window that did not complete.  It installs a fresh
@@ -553,8 +551,10 @@ async def _auto_index_project_single_flight(
                         "index_window",
                         "_auto_index_project_single_flight",
                         project_path,
-                        lambda cancel_event=cancel_event, pending=pending: state.indexer.index_window(
-                            cancel_event=cancel_event, pending_files=pending
+                        lambda cancel_event=cancel_event, pending=pending: (
+                            state.indexer.index_window(
+                                cancel_event=cancel_event, pending_files=pending
+                            )
                         ),
                         cancel_event=cancel_event,
                     )

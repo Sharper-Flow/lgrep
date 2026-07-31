@@ -189,9 +189,7 @@ async def test_lifecycle_preserves_pending_on_cancellation(tmp_project, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_continuation_converges_without_blocking_search(
-    tmp_project, monkeypatch
-):
+async def test_lifecycle_continuation_converges_without_blocking_search(tmp_project, monkeypatch):
     """A single background continuation task must converge remaining pending
     files while search callers receive the initialized state immediately."""
     project_root, indexer = tmp_project

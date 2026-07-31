@@ -113,9 +113,7 @@ class Indexer:
         log.info("full_index_started", project=str(self.project_path))
 
         while True:
-            window = self.index_window(
-                cancel_event=cancel_event, pending_files=pending
-            )
+            window = self.index_window(cancel_event=cancel_event, pending_files=pending)
             status.file_count += window.status.file_count
             status.chunk_count += window.status.chunk_count
             status.total_tokens += window.status.total_tokens
@@ -267,9 +265,7 @@ class Indexer:
         removed when worktree dedup is disabled.
         """
         all_files = list(self.discovery.find_files())
-        current_rel_paths = {
-            str(Path(f).relative_to(self.project_path)) for f in all_files
-        }
+        current_rel_paths = {str(Path(f).relative_to(self.project_path)) for f in all_files}
 
         # Remove stale chunks for files that no longer exist on disk.
         if not self._dedup_enabled:
