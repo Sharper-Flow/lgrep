@@ -244,12 +244,43 @@ class TestSymbolToolResponses:
         assert result["query"] == "greet"
         assert result["usage_filter"] == "tests_only"
         assert result["total_matches"] == 0
+        assert result["production_matches"] == 0
+        assert result["test_matches"] == 0
+        assert result["returned_production"] == 0
+        assert result["returned_tests"] == 0
+        assert result["stale_file_count"] == 0
         assert result["results"] == []
         assert result["candidate_names"] == []
         assert result["disclaimer"] == ""
         assert result["_meta"]["tool"] == "search_references"
         assert result["_meta"]["timing_ms"] >= 0
         assert result["error"] == "Operation was cancelled."
+
+    @pytest.mark.asyncio
+    async def test_search_references_timeout_keeps_schema_shape(self, monkeypatch):
+        import lgrep.server as server_mod
+
+        monkeypatch.setattr(server_mod, "TOOL_TIMEOUT_S", 0.01)
+
+        @server_mod.time_tool
+        async def search_references(query="greet", usage_filter="production_first"):
+            await asyncio.sleep(0.05)
+
+        result = await search_references(query="greet", usage_filter="tests_only")
+
+        assert result["query"] == "greet"
+        assert result["usage_filter"] == "tests_only"
+        assert result["total_matches"] == 0
+        assert result["production_matches"] == 0
+        assert result["test_matches"] == 0
+        assert result["returned_production"] == 0
+        assert result["returned_tests"] == 0
+        assert result["stale_file_count"] == 0
+        assert result["results"] == []
+        assert result["candidate_names"] == []
+        assert result["disclaimer"] == ""
+        assert result["_meta"]["tool"] == "search_references"
+        assert result["error"].startswith("Operation timed out after")
 
     @pytest.mark.asyncio
     async def test_search_references_uses_runtime_supervisor_when_context_available(self, tmp_path):
