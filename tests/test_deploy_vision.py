@@ -68,6 +68,9 @@ def _make_uv_launcher(tmp_path: Path, name: str = "lgrep", tool_dir: Path | None
     if tool_dir is None:
         tool_dir = tmp_path / "tools"
     interpreter = tool_dir / "lgrep" / "bin" / "python"
+    interpreter.parent.mkdir(parents=True, exist_ok=True)
+    interpreter.write_text("#!/bin/sh\n")
+    interpreter.chmod(0o755)
     exe.write_text(f"#!{interpreter}\n")
     exe.chmod(0o755)
     return exe
@@ -467,6 +470,29 @@ def test_deploy_rejects_invalid_command_before_restart() -> None:
         assert dv.deploy(args) == 1
 
     assert not any("systemctl --user restart" in " ".join(c) for c in calls)
+
+
+def test_derive_uv_paths_rejects_missing_shebang_interpreter(tmp_path: Path) -> None:
+    command = tmp_path / "bin" / "lgrep"
+    command.parent.mkdir()
+    command.write_text(f"#!{tmp_path}/tools/lgrep/bin/python\n")
+    command.chmod(0o755)
+
+    with pytest.raises(RuntimeError, match="interpreter .* does not exist"):
+        dv._derive_uv_paths_from_command(str(command))
+
+
+def test_derive_uv_paths_rejects_non_executable_shebang_interpreter(tmp_path: Path) -> None:
+    interpreter = tmp_path / "tools" / "lgrep" / "bin" / "python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_text("not executable")
+    command = tmp_path / "bin" / "lgrep"
+    command.parent.mkdir()
+    command.write_text(f"#!{interpreter}\n")
+    command.chmod(0o755)
+
+    with pytest.raises(RuntimeError, match="interpreter .* is not executable"):
+        dv._derive_uv_paths_from_command(str(command))
 
 
 # ---------------------------------------------------------------------------

@@ -62,8 +62,9 @@ The command refuses to run unless all of the following are true:
 - The configured `lgrep` command is an absolute path to an executable launcher with
   a uv-style shebang pointing at `\<UV_TOOL_DIR\>/lgrep/bin/python`.
 
-A `--dry-run` still enforces the context checks and launcher validation. The
-actual wheel download, install, restart, and health checks are skipped.
+A `--dry-run` still enforces the trunk-only context and release-tag checks. The
+Vision configuration, launcher validation, wheel download, install, restart,
+and health checks are skipped.
 
 ## Retry behavior
 

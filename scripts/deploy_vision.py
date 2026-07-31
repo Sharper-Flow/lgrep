@@ -320,6 +320,14 @@ def _derive_uv_paths_from_command(command: str) -> tuple[str, str]:
         raise RuntimeError(
             f"configured command {command!r} interpreter is not under 'bin': {interpreter!r}"
         )
+    if not interpreter_path.is_file():
+        raise RuntimeError(
+            f"configured command {command!r} interpreter {interpreter!r} does not exist"
+        )
+    if not os.access(interpreter_path, os.X_OK):
+        raise RuntimeError(
+            f"configured command {command!r} interpreter {interpreter!r} is not executable"
+        )
 
     uv_tool_dir = str(interpreter_path.parent.parent.parent)
     uv_tool_bin_dir = str(command_path.parent)
