@@ -25,22 +25,25 @@ def test_pathspec_importable():
     assert hasattr(pathspec, "patterns")
 
 
-def test_version_matches_pyproject():
-    """lgrep package __version__ should match the pyproject.toml version."""
+def test_version_is_dynamic():
+    """Version must be derived from VCS tags, not a static pyproject field."""
     import tomllib
     from pathlib import Path
-
-    from lgrep import __version__
 
     pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
     with pyproject.open("rb") as f:
         data = tomllib.load(f)
-    expected = data["project"]["version"]
-    assert __version__ == expected, (
-        f"src/lgrep/__init__.py:__version__ ({__version__!r}) "
-        f"does not match pyproject.toml version ({expected!r}). "
-        f"Bump both together when releasing."
+
+    assert "version" not in data["project"], (
+        "pyproject.toml still declares a static project.version"
     )
+    assert "version" in data["project"].get("dynamic", []), (
+        "pyproject.toml does not list version in project.dynamic"
+    )
+    assert any("hatch-vcs" in req for req in data["build-system"]["requires"]), (
+        "hatch-vcs must be a build-system requirement for tag-derived versions"
+    )
+    assert data["tool"]["hatch"]["version"]["source"] == "vcs", "hatch version source is not VCS"
 
 
 def _declared_requirement(name: str):

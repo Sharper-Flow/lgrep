@@ -1,6 +1,6 @@
 [project]
 name = "lgrep"
-version = "3.2.2"
+dynamic = ["version"]
 description = "Dual-engine code intelligence MCP server: semantic search (Voyage Code 3 + LanceDB) and symbol intelligence (tree-sitter AST parsing)"
 readme = "README.md"
 license = "MIT"
@@ -45,18 +45,36 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     # Pinned to a minor range: the formatter's output is version-sensitive, so an
-    # unpinned constraint lets CI drift onto a newer ruff than contributors run and
+    # unpinned constraint lets a fresh install resolve a newer ruff than contributors run and
     # turn `ruff format --check` red without a code change. Bump deliberately.
     "ruff>=0.16.0,<0.17.0",
     "packaging>=24.0",
+    # Build tooling used by release tests to verify tag-derived wheel versions.
+    "build>=1.0.0",
+    "hatch-vcs>=0.4.0",
 ]
 
 [project.scripts]
 lgrep = "lgrep.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+# Tags are created as vMAJOR.MINOR.PATCH; strip the leading "v".
+tag-pattern = "v(?P<version>.*)"
+# Used for source distributions and checkouts without VCS metadata, where
+# Hatch VCS cannot detect a version from the repository.
+fallback-version = "3.2.3"
+
+[tool.hatch.version.raw-options]
+# Do not guess a dev/post version on non-tagged commits; prefer the exact last tag.
+version_scheme = "no-guess-dev"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/lgrep/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lgrep"]
