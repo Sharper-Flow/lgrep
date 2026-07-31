@@ -36,6 +36,7 @@ def _run(
     check: bool = True,
     capture_output: bool = True,
     timeout: float | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a subprocess and return the completed process."""
     return subprocess.run(
@@ -44,6 +45,7 @@ def _run(
         capture_output=capture_output,
         text=True,
         timeout=timeout,
+        env=env,
     )
 
 
@@ -161,12 +163,21 @@ def validate_vision_config(config_path: Path) -> None:
     )
 
 
-def install_wheel(wheel_path: Path) -> None:
-    """Install the wheel into the uv tool runtime."""
+def install_wheel(wheel_path: Path, uv_tool_bin_dir: str, uv_tool_dir: str) -> None:
+    """Install the wheel into the pinned uv tool runtime.
+
+    Both ``UV_TOOL_BIN_DIR`` and ``UV_TOOL_DIR`` are set explicitly in the
+    child environment so an inherited OpenCode per-project uv runtime cannot
+    redirect the install target.
+    """
+    env = os.environ.copy()
+    env["UV_TOOL_BIN_DIR"] = uv_tool_bin_dir
+    env["UV_TOOL_DIR"] = uv_tool_dir
     _run(
         ["uv", "tool", "install", "--reinstall", str(wheel_path)],
         check=True,
         timeout=300,
+        env=env,
     )
 
 
@@ -268,6 +279,51 @@ def _vision_lgrep_server(config_path: Path) -> tuple[int, str]:
         raise RuntimeError(f"server {LGREP_SERVER_NAME!r} command {command!r} is not executable")
 
     return port, str(command_path)
+
+
+def _derive_uv_paths_from_command(command: str) -> tuple[str, str]:
+    """Derive uv tool directories from a configured launcher shebang.
+
+    Reads the first line of the configured lgrep executable and requires the
+    uv launcher shape ``#!<UV_TOOL_DIR>/lgrep/bin/python...``. Returns
+    ``(UV_TOOL_BIN_DIR, UV_TOOL_DIR)`` where ``UV_TOOL_BIN_DIR`` is the
+    directory containing the launcher and ``UV_TOOL_DIR`` is the parent of the
+    ``lgrep`` package directory. Malformed or non-uv launchers raise before
+    any restart happens.
+    """
+    command_path = Path(command)
+    try:
+        first_line = command_path.read_text().splitlines()[0]
+    except (OSError, IndexError) as exc:
+        raise RuntimeError(f"configured command {command!r} launcher is unreadable: {exc}") from exc
+
+    shebang = first_line.strip()
+    if not shebang.startswith("#!"):
+        raise RuntimeError(f"configured command {command!r} is not a shebang launcher")
+
+    interpreter = shebang[2:].strip()
+    if not interpreter:
+        raise RuntimeError(f"configured command {command!r} has empty shebang interpreter")
+
+    interpreter_path = Path(interpreter)
+    parts = interpreter_path.parts
+    if len(parts) < 4:
+        raise RuntimeError(
+            f"configured command {command!r} interpreter path too short: {interpreter!r}"
+        )
+
+    if parts[-3] != "lgrep":
+        raise RuntimeError(
+            f"configured command {command!r} interpreter is not under a 'lgrep' package directory: {interpreter!r}"
+        )
+    if parts[-2] != "bin":
+        raise RuntimeError(
+            f"configured command {command!r} interpreter is not under 'bin': {interpreter!r}"
+        )
+
+    uv_tool_dir = str(interpreter_path.parent.parent.parent)
+    uv_tool_bin_dir = str(command_path.parent)
+    return uv_tool_bin_dir, uv_tool_dir
 
 
 def _vision_lgrep_port(config_path: Path) -> int:
@@ -437,8 +493,14 @@ def deploy(args: argparse.Namespace) -> int:
             print("resolving configured lgrep command")
             _configured_port, configured_command = _vision_lgrep_server(args.vision_config)
 
-            print("installing lgrep wheel into uv tool runtime")
-            install_wheel(wheel_path)
+            print("deriving uv tool runtime from configured command")
+            uv_tool_bin_dir, uv_tool_dir = _derive_uv_paths_from_command(configured_command)
+
+            print("installing lgrep wheel into pinned uv tool runtime")
+            install_wheel(wheel_path, uv_tool_bin_dir, uv_tool_dir)
+
+            print("checking installed lgrep version before restart")
+            check_installed_version(version, configured_command)
 
             print("restarting Vision service")
             restart_vision_service()
@@ -449,9 +511,6 @@ def deploy(args: argparse.Namespace) -> int:
                 retries=args.init_retries,
                 delay_seconds=args.init_retry_delay,
             )
-
-            print("checking installed lgrep version")
-            check_installed_version(version, configured_command)
 
             print("running non-destructive MCP health checks")
             run_prune_health_checks(args.vision_config)

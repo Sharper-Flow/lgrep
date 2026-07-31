@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from io import StringIO
@@ -53,6 +54,65 @@ def _make_namespace(**kwargs: Any) -> argparse.Namespace:
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
+
+
+# ---------------------------------------------------------------------------
+# UV path derivation from configured launcher
+# ---------------------------------------------------------------------------
+
+
+def _make_uv_launcher(tmp_path: Path, name: str = "lgrep", tool_dir: Path | None = None) -> Path:
+    """Create a launcher script with a uv-style shebang pointing at an lgrep tool dir."""
+    exe = tmp_path / "bin" / name
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    if tool_dir is None:
+        tool_dir = tmp_path / "tools"
+    interpreter = tool_dir / "lgrep" / "bin" / "python"
+    exe.write_text(f"#!{interpreter}\n")
+    exe.chmod(0o755)
+    return exe
+
+
+def test_derive_uv_paths_from_command_succeeds(tmp_path: Path) -> None:
+    exe = _make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools")
+    uv_tool_bin_dir, uv_tool_dir = dv._derive_uv_paths_from_command(str(exe))
+    assert uv_tool_bin_dir == str(tmp_path / "bin")
+    assert uv_tool_dir == str(tmp_path / "tools")
+
+
+def test_derive_uv_paths_from_command_rejects_non_shebang(tmp_path: Path) -> None:
+    exe = tmp_path / "lgrep"
+    exe.write_text("not a shebang launcher")
+    exe.chmod(0o755)
+    with pytest.raises(RuntimeError, match="not a shebang launcher"):
+        dv._derive_uv_paths_from_command(str(exe))
+
+
+def test_derive_uv_paths_from_command_rejects_wrong_package_directory(tmp_path: Path) -> None:
+    exe = tmp_path / "bin" / "lgrep"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text(f"#!{tmp_path / 'tools' / 'wrongpkg' / 'bin' / 'python'}\n")
+    exe.chmod(0o755)
+    with pytest.raises(RuntimeError, match="not under a 'lgrep' package directory"):
+        dv._derive_uv_paths_from_command(str(exe))
+
+
+def test_derive_uv_paths_from_command_rejects_interpreter_not_under_bin(tmp_path: Path) -> None:
+    exe = tmp_path / "bin" / "lgrep"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text(f"#!{tmp_path / 'tools' / 'lgrep' / 'lib' / 'python'}\n")
+    exe.chmod(0o755)
+    with pytest.raises(RuntimeError, match="not under 'bin'"):
+        dv._derive_uv_paths_from_command(str(exe))
+
+
+def test_derive_uv_paths_from_command_rejects_short_interpreter_path(tmp_path: Path) -> None:
+    exe = tmp_path / "bin" / "lgrep"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text("#!/tmp/python\n")
+    exe.chmod(0o755)
+    with pytest.raises(RuntimeError, match="interpreter path too short"):
+        dv._derive_uv_paths_from_command(str(exe))
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +300,30 @@ def test_check_installed_version_mismatch() -> None:
         dv.check_installed_version("3.2.5", "lgrep")
 
 
+def test_install_wheel_passes_pinned_env() -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env")
+        return FakeCompletedProcess("")
+
+    with patch.object(dv, "_run", side_effect=fake_run):
+        dv.install_wheel(Path("/tmp/lgrep-3.2.5-py3-none-any.whl"), "/tmp/bin", "/tmp/tools")
+
+    assert captured["cmd"] == [
+        "uv",
+        "tool",
+        "install",
+        "--reinstall",
+        "/tmp/lgrep-3.2.5-py3-none-any.whl",
+    ]
+    env = captured["env"]
+    assert env is not None
+    assert env["UV_TOOL_BIN_DIR"] == "/tmp/bin"
+    assert env["UV_TOOL_DIR"] == "/tmp/tools"
+
+
 # ---------------------------------------------------------------------------
 # Configured lgrep command resolution
 # ---------------------------------------------------------------------------
@@ -317,8 +401,8 @@ def test_vision_lgrep_server_rejects_invalid_port(tmp_path: Path) -> None:
         dv._vision_lgrep_server(config)
 
 
-def test_deploy_uses_configured_command_not_ambient_path() -> None:
-    configured_command = "/configured/lgrep"
+def test_deploy_uses_configured_command_not_ambient_path(tmp_path: Path) -> None:
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools"))
 
     def fake_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
         joined = " ".join(cmd)
@@ -578,9 +662,11 @@ def _fake_run_full_deploy(
 ) -> Any:
     """Return a fake _run that handles the full deploy command list."""
     calls: list[list[str]] = []
+    env_calls: list[dict[str, str] | None] = []
 
     def fake_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
         calls.append(cmd)
+        env_calls.append(kwargs.get("env"))
         joined = " ".join(cmd)
 
         # Git safety / tag commands
@@ -612,12 +698,12 @@ def _fake_run_full_deploy(
 
         return FakeCompletedProcess("")
 
-    return fake_run, calls
+    return fake_run, calls, env_calls
 
 
-def test_deploy_full_flow_succeeds() -> None:
-    configured_command = "/configured/lgrep"
-    fake_run, calls = _fake_run_full_deploy(configured_command=configured_command)
+def test_deploy_full_flow_succeeds(tmp_path: Path) -> None:
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools"))
+    fake_run, calls, env_calls = _fake_run_full_deploy(configured_command=configured_command)
 
     with (
         patch.object(dv, "_run", side_effect=fake_run),
@@ -644,9 +730,81 @@ def test_deploy_full_flow_succeeds() -> None:
     assert any(f"{configured_command} --version" in " ".join(c) for c in calls)
 
 
-def test_deploy_fails_when_version_mismatch() -> None:
-    configured_command = "/configured/lgrep"
-    fake_run, _calls = _fake_run_full_deploy(version="3.2.5", configured_command=configured_command)
+@patch.dict(
+    os.environ,
+    {"UV_TOOL_DIR": "/wrong/tools", "UV_TOOL_BIN_DIR": "/wrong/bin"},
+    clear=False,
+)
+def test_deploy_pinned_env_overrides_ambient(tmp_path: Path) -> None:
+    """Ambient UV tool paths must not leak into the uv install child environment."""
+    tool_dir = tmp_path / "tools"
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tool_dir))
+    fake_run, _calls, env_calls = _fake_run_full_deploy(configured_command=configured_command)
+
+    with (
+        patch.object(dv, "_run", side_effect=fake_run),
+        patch.object(
+            dv.urllib.request,
+            "urlopen",
+            side_effect=_mcp_urlopen_effect(
+                tool_results={
+                    "prune_orphans": _make_mcp_tool_result("prune_orphans"),
+                    "prune_symbols": _make_mcp_tool_result("prune_symbols"),
+                }
+            ),
+        ),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
+        patch.object(dv, "download_wheel"),
+    ):
+        args = _make_namespace(tag="v3.2.5")
+        assert dv.deploy(args) == 0
+
+    install_env = next(
+        env for env in env_calls if env is not None and env.get("UV_TOOL_DIR") is not None
+    )
+    assert install_env is not None
+    assert install_env["UV_TOOL_DIR"] == str(tool_dir)
+    assert install_env["UV_TOOL_BIN_DIR"] == str(tmp_path / "bin")
+    assert install_env["UV_TOOL_DIR"] != "/wrong/tools"
+    assert install_env["UV_TOOL_BIN_DIR"] != "/wrong/bin"
+
+
+def test_deploy_version_check_before_restart_catches_mismatch(tmp_path: Path) -> None:
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools"))
+    fake_run, _calls, _env_calls = _fake_run_full_deploy(
+        version="3.2.5", configured_command=configured_command
+    )
+
+    # Make version check return a different version for the configured command.
+    def patched_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
+        joined = " ".join(cmd)
+        if joined.startswith(f"{configured_command} --version"):
+            return FakeCompletedProcess("lgrep 3.2.4\n")
+        return fake_run(cmd, **kwargs)
+
+    calls: list[list[str]] = []
+
+    def capturing_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
+        calls.append(cmd)
+        return patched_run(cmd, **kwargs)
+
+    with (
+        patch.object(dv, "_run", side_effect=capturing_run),
+        patch.object(dv, "_vision_lgrep_server", return_value=(6278, configured_command)),
+        patch.object(dv, "download_wheel"),
+    ):
+        args = _make_namespace(tag="v3.2.5")
+        assert dv.deploy(args) == 1
+
+    assert any(f"{configured_command} --version" in " ".join(c) for c in calls)
+    assert not any("systemctl --user restart" in " ".join(c) for c in calls)
+
+
+def test_deploy_fails_when_version_mismatch(tmp_path: Path) -> None:
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools"))
+    fake_run, _calls, _env_calls = _fake_run_full_deploy(
+        version="3.2.5", configured_command=configured_command
+    )
 
     # Make version check return a different version for the configured command.
     def patched_run(cmd: list[str], **kwargs: Any) -> FakeCompletedProcess:
@@ -664,9 +822,9 @@ def test_deploy_fails_when_version_mismatch() -> None:
         assert dv.deploy(args) == 1
 
 
-def test_deploy_fails_when_health_check_lacks_refused_reason() -> None:
-    configured_command = "/configured/lgrep"
-    fake_run, _calls = _fake_run_full_deploy(configured_command=configured_command)
+def test_deploy_fails_when_health_check_lacks_refused_reason(tmp_path: Path) -> None:
+    configured_command = str(_make_uv_launcher(tmp_path, tool_dir=tmp_path / "tools"))
+    fake_run, _calls, _env_calls = _fake_run_full_deploy(configured_command=configured_command)
 
     with (
         patch.object(dv, "_run", side_effect=fake_run),

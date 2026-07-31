@@ -9,13 +9,17 @@ manager and proves the deployment is healthy before reporting success.
 2. Resolves the release tag (``--tag`` or the exact tag at `HEAD`).
 3. Downloads the GitHub Release wheel for the tag.
 4. Validates `~/.config/vision/servers.yaml` with `vision config validate`.
-5. Installs the wheel into the uv tool runtime with `uv tool install --reinstall`.
-6. Restarts the Vision user service with `systemctl --user restart vision.service`.
-7. Waits for Vision health, allowing one bounded retry after the restart.
-8. Confirms the configured `lgrep` executable reports the selected release version.
-9. Runs two non-destructive MCP health checks through Vision:
-   - `prune_orphans`
-   - `prune_symbols`
+5. Resolves the configured `lgrep` command and derives its uv tool runtime from
+   the launcher shebang.
+6. Installs the wheel into the pinned uv tool runtime with explicit
+   `UV_TOOL_BIN_DIR` and `UV_TOOL_DIR` environment variables.
+7. Confirms the configured `lgrep` executable reports the selected release
+   version before restarting anything.
+8. Restarts the Vision user service with `systemctl --user restart vision.service`.
+9. Waits for Vision health, allowing one bounded retry after the restart.
+10. Runs two non-destructive MCP health checks through Vision:
+    - `prune_orphans`
+    - `prune_symbols`
 
 Each health check must return a structured result with `dry_run: true` and a
 string `refused_reason`. The command exits nonzero if any step fails.
@@ -55,9 +59,11 @@ The command refuses to run unless all of the following are true:
 - The current branch is `main`.
 - The working tree has no uncommitted changes.
 - The checkout is not a git worktree (`--git-dir` resolves to `--git-common-dir`).
+- The configured `lgrep` command is an absolute path to an executable launcher with
+  a uv-style shebang pointing at `\<UV_TOOL_DIR\>/lgrep/bin/python`.
 
-A `--dry-run` still enforces the context checks. The actual wheel download,
-install, restart, and health checks are skipped.
+A `--dry-run` still enforces the context checks and launcher validation. The
+actual wheel download, install, restart, and health checks are skipped.
 
 ## Retry behavior
 
