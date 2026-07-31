@@ -1,3 +1,13 @@
+## 2026-07-31 (v3.2.5)
+
+- fix: make index-window timing tests deterministic (#8)
+- Archive fixAutoReleaseTrigger: apply spec deltas and bundle
+- chore(adv): checkpoint tk-211aea8c7d3d
+- chore(adv): checkpoint tk-211aea8c7d3d
+- chore(adv): checkpoint tk-5ad7d7b8cd00
+- chore(adv): checkpoint tk-5ad7d7b8cd00
+- chore(adv): checkpoint tk-211aea8c7d3d
+
 ## 2026-07-30 (v3.2.3)
 
 ### Changed
