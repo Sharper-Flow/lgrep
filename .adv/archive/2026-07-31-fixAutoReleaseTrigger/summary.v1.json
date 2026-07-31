@@ -1,0 +1,16 @@
+{
+  "archived_at": "2026-07-31T20:49:29.010Z",
+  "capabilities": [],
+  "change_hash": "5ef9a9a7240883d843d8c4e275dad6e89da4763877fa0848a770447bd2a107b8",
+  "change_id": "fixAutoReleaseTrigger",
+  "completed_tasks": 2,
+  "created_at": "2026-07-31T19:17:28.282Z",
+  "current_gate": "release",
+  "last_activity_at": "2026-07-31T20:25:49.895Z",
+  "lifecycle_state": "open",
+  "status": "archived",
+  "summary_hash": "0ebf84a4f1ae78137ccdb35666774ccfe2ec957e1422ce9fa9cde0020bbeface",
+  "task_count": 2,
+  "title": "Fix auto release trigger",
+  "version": "1"
+}

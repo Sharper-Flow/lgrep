@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "change_id": "fixAutoReleaseTrigger",
+  "title": "Fix auto release trigger",
+  "release_notes": {
+    "audience": "internal",
+    "category": "fixed",
+    "headline_internal": "Fix auto-release trigger and add safe Vision deploy command",
+    "highlights": [
+      "Auto Release now triggers deterministically from exact CI SHA on main",
+      "Added scripts/deploy_vision.py with trunk-only safety, version check, and real MCP health verification",
+      "CHANGELOG generation restored as post-release best-effort step"
+    ],
+    "area": "release automation and local deployment",
+    "user_action_required": false
+  }
+}
