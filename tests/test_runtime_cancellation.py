@@ -55,7 +55,7 @@ def mock_storage():
 
 
 @pytest.fixture
-def tmp_project(tmp_path, mock_storage, mock_embedder):
+def tmp_project(tmp_path, mock_storage, mock_embedder, fake_clock):
     """Build a tiny project with N files and an Indexer bound to mocks."""
     for i in range(20):
         (tmp_path / f"file_{i:02d}.py").write_text(f"def f{i}(): pass\n")
@@ -64,6 +64,7 @@ def tmp_project(tmp_path, mock_storage, mock_embedder):
         storage=mock_storage,
         embedder=mock_embedder,
         chunk_size=500,
+        perf_counter=fake_clock,
     )
     return tmp_path, indexer
 
@@ -389,7 +390,7 @@ def test_index_file_raises_before_storage_on_cancel(tmp_project):
 # ---------------------------------------------------------------------------
 
 
-def test_index_all_converges_through_bounded_windows(tmp_project, monkeypatch):
+def test_index_all_converges_through_bounded_windows(tmp_project, monkeypatch, fake_clock):
     """Indexer.index_all must loop bounded windows until the project is fully
     indexed, with each window respecting LGREP_INDEX_MAX_WALL_S.  It no
     longer raises OperationCancelled merely because the overall wall budget
@@ -400,25 +401,24 @@ def test_index_all_converges_through_bounded_windows(tmp_project, monkeypatch):
     # Tiny per-window budget so multiple windows are required.
     monkeypatch.setenv("LGREP_INDEX_MAX_WALL_S", "0.03")
 
-    # Make each index_file slow enough that one window cannot fit every file.
+    # Make each index_file consume enough budget that one window cannot fit
+    # every file, without real sleeps.
     original = indexer.index_file
 
-    def slow_index_file(file_path, **kwargs):
-        time.sleep(0.02)
-        return original(file_path, **kwargs)
+    def slow_index_file(file_path, cancel_event=None):
+        fake_clock.advance(0.02)
+        return original(file_path, cancel_event=cancel_event)
 
     indexer.index_file = slow_index_file
 
-    start = time.perf_counter()
     status = indexer.index_all()  # no cancel_event — bounded-window convergence
-    elapsed = time.perf_counter() - start
 
     # All 20 files should eventually be indexed.
     assert status.file_count == 20
     assert status.chunk_count > 0
-    # The whole operation should take at least two windows (more than one
-    # budget period) but still finish deterministically.
-    assert elapsed > 0.03
+    # The fake-clock duration proves multiple bounded windows were needed
+    # (each window is capped at 0.03s, so the whole run must span > 0.03s).
+    assert status.duration_ms > 0.03 * 1000
 
 
 # ---------------------------------------------------------------------------

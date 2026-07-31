@@ -48,7 +48,7 @@ def mock_storage():
 
 
 @pytest.fixture
-def tmp_project(tmp_path, mock_storage, mock_embedder):
+def tmp_project(tmp_path, mock_storage, mock_embedder, fake_clock):
     """Build a tiny project with N files and an Indexer bound to mocks."""
     for i in range(5):
         (tmp_path / f"file_{i:02d}.py").write_text(f"def f{i}(): pass\n")
@@ -57,6 +57,7 @@ def tmp_project(tmp_path, mock_storage, mock_embedder):
         storage=mock_storage,
         embedder=mock_embedder,
         chunk_size=500,
+        perf_counter=fake_clock,
     )
     return tmp_path, indexer
 
@@ -66,7 +67,7 @@ def tmp_project(tmp_path, mock_storage, mock_embedder):
 # ---------------------------------------------------------------------------
 
 
-def test_index_window_processes_at_least_one_file_per_window(tmp_project, monkeypatch):
+def test_index_window_processes_at_least_one_file_per_window(tmp_project, monkeypatch, fake_clock):
     """With a budget smaller than one file, index_window must still process
     at least one file and return the remaining pending paths."""
     project_root, indexer = tmp_project
@@ -75,7 +76,7 @@ def test_index_window_processes_at_least_one_file_per_window(tmp_project, monkey
     original_index_file = indexer.index_file
 
     def slow_index_file(file_path, cancel_event=None):
-        time.sleep(0.02)
+        fake_clock.advance(0.02)
         return original_index_file(file_path, cancel_event=cancel_event)
 
     indexer.index_file = slow_index_file
@@ -83,12 +84,33 @@ def test_index_window_processes_at_least_one_file_per_window(tmp_project, monkey
     result = indexer.index_window()
 
     assert isinstance(result, IndexWindowResult)
-    assert result.files_indexed >= 1
+    assert result.indexed_files == ["file_00.py"]
+    assert result.files_indexed == 1
     assert not result.complete
-    assert len(result.remaining_files) == 5 - result.files_indexed
+    assert result.remaining_files == [
+        "file_01.py",
+        "file_02.py",
+        "file_03.py",
+        "file_04.py",
+    ]
 
 
-def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch):
+def test_indexer_uses_perf_counter_by_default(tmp_path, mock_storage, mock_embedder, monkeypatch):
+    """Production Indexers must retain time.perf_counter when no seam is injected."""
+    import lgrep.indexing as indexing_module
+
+    monkeypatch.setattr(indexing_module.time, "perf_counter", lambda: 123.0)
+
+    indexer = Indexer(
+        project_path=tmp_path,
+        storage=mock_storage,
+        embedder=mock_embedder,
+    )
+
+    assert indexer._perf_counter() == 123.0
+
+
+def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch, fake_clock):
     """Repeatedly resuming index_window from the remaining pending list must
     eventually index every file, with each individual window bounded by
     LGREP_INDEX_MAX_WALL_S."""
@@ -98,7 +120,7 @@ def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch):
     original_index_file = indexer.index_file
 
     def slow_index_file(file_path, cancel_event=None):
-        time.sleep(0.02)
+        fake_clock.advance(0.02)
         return original_index_file(file_path, cancel_event=cancel_event)
 
     indexer.index_file = slow_index_file
@@ -106,15 +128,12 @@ def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch):
     pending = None
     total_indexed = 0
     windows = 0
-    budget_s = 0.015
 
     while True:
         windows += 1
-        start = time.perf_counter()
         result = indexer.index_window(pending_files=pending)
-        elapsed = time.perf_counter() - start
         total_indexed += result.files_indexed
-        assert elapsed <= budget_s + 0.05, f"window exceeded budget: {elapsed:.3f}s"
+        assert result.files_indexed == 1
         if result.complete:
             break
         pending = result.remaining_files
@@ -123,9 +142,10 @@ def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch):
     assert total_indexed == 5
     assert result.complete
     assert not result.remaining_files
+    assert windows > 1, "multiple bounded windows should have been required"
 
 
-def test_index_window_prepares_hybrid_indexes_at_boundary(tmp_project, monkeypatch):
+def test_index_window_prepares_hybrid_indexes_at_boundary(tmp_project, monkeypatch, fake_clock):
     """An incomplete window must call prepare_hybrid_indexes before returning
     so that the partial corpus is usable for hybrid search."""
     _project_root, indexer = tmp_project
@@ -134,7 +154,7 @@ def test_index_window_prepares_hybrid_indexes_at_boundary(tmp_project, monkeypat
     original_index_file = indexer.index_file
 
     def slow_index_file(file_path, cancel_event=None):
-        time.sleep(0.02)
+        fake_clock.advance(0.02)
         return original_index_file(file_path, cancel_event=cancel_event)
 
     indexer.index_file = slow_index_file
@@ -189,7 +209,9 @@ async def test_lifecycle_preserves_pending_on_cancellation(tmp_project, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_continuation_converges_without_blocking_search(tmp_project, monkeypatch):
+async def test_lifecycle_continuation_converges_without_blocking_search(
+    tmp_project, monkeypatch, fake_clock
+):
     """A single background continuation task must converge remaining pending
     files while search callers receive the initialized state immediately."""
     project_root, indexer = tmp_project
@@ -204,7 +226,7 @@ async def test_lifecycle_continuation_converges_without_blocking_search(tmp_proj
     original_index_file = indexer.index_file
 
     def slow_index_file(file_path, cancel_event=None):
-        time.sleep(0.02)
+        fake_clock.advance(0.02)
         return original_index_file(file_path, cancel_event=cancel_event)
 
     indexer.index_file = slow_index_file

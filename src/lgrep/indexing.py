@@ -22,6 +22,8 @@ from lgrep.exceptions import OperationCancelled
 from lgrep.storage import CodeChunk
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.storage import ChunkStore
 
@@ -69,6 +71,7 @@ class Indexer:
         storage: ChunkStore,
         embedder: VoyageEmbedder,
         chunk_size: int = 500,
+        perf_counter: Callable[[], float] | None = None,
     ) -> None:
         """Initialize the indexer.
 
@@ -77,6 +80,9 @@ class Indexer:
             storage: ChunkStore instance
             embedder: VoyageEmbedder instance
             chunk_size: Token size for chunks
+            perf_counter: Optional monotonic clock callable. Defaults to
+                ``time.perf_counter`` so production keeps wall-clock behavior;
+                tests may inject a deterministic advancing clock.
         """
         self.project_path = Path(project_path).resolve()
         self.storage = storage
@@ -84,6 +90,7 @@ class Indexer:
         self.chunker = CodeChunker(chunk_size=chunk_size)
         self.discovery = FileDiscovery(self.project_path)
         self._dedup_enabled = bool(os.environ.get("LGREP_WORKTREE_DEDUP"))
+        self._perf_counter = perf_counter or time.perf_counter
 
         log.info("indexer_initialized", project=str(self.project_path))
 
@@ -106,7 +113,7 @@ class Indexer:
             OperationCancelled: if ``cancel_event`` is set before or during
                 a window.
         """
-        start_time = time.perf_counter()
+        start_time = self._perf_counter()
         status = IndexStatus()
         pending: list[str] | None = None
 
@@ -121,7 +128,7 @@ class Indexer:
                 break
             pending = window.remaining_files
 
-        status.duration_ms = (time.perf_counter() - start_time) * 1000
+        status.duration_ms = (self._perf_counter() - start_time) * 1000
 
         log.info(
             "full_index_complete",
@@ -163,7 +170,7 @@ class Indexer:
         Raises:
             OperationCancelled: if ``cancel_event`` is set.
         """
-        start_time = time.perf_counter()
+        start_time = self._perf_counter()
         wall_budget_s = float(os.environ.get("LGREP_INDEX_MAX_WALL_S", "60.0"))
         status = IndexStatus()
 
@@ -193,7 +200,7 @@ class Indexer:
 
             # After the first file, respect the wall budget.  The first file
             # is always processed so a window never yields with zero progress.
-            if processed and (time.perf_counter() - start_time) > wall_budget_s:
+            if processed and (self._perf_counter() - start_time) > wall_budget_s:
                 log.warning(
                     "index_window_wall_clock_exceeded",
                     project=str(self.project_path),
@@ -222,7 +229,7 @@ class Indexer:
                 self.storage.remove_zero_chunk_file(rel_path)
             processed = True
 
-            if (time.perf_counter() - start_time) > wall_budget_s:
+            if (self._perf_counter() - start_time) > wall_budget_s:
                 log.warning(
                     "index_window_wall_clock_exceeded",
                     project=str(self.project_path),
@@ -236,7 +243,7 @@ class Indexer:
         if zero_chunk_this_window:
             self.storage.add_zero_chunk_files(zero_chunk_this_window)
 
-        status.duration_ms = (time.perf_counter() - start_time) * 1000
+        status.duration_ms = (self._perf_counter() - start_time) * 1000
 
         log.info(
             "index_window_complete",
@@ -351,7 +358,7 @@ class Indexer:
             OperationCancelled: if ``cancel_event`` is set before embedding
                 or before storage.
         """
-        start_time = time.perf_counter()
+        start_time = self._perf_counter()
         file_path = Path(file_path)
         if not file_path.is_absolute():
             file_path = self.project_path / file_path
@@ -395,7 +402,7 @@ class Indexer:
         status = IndexStatus(
             file_count=1,
             chunk_count=len(code_chunks),
-            duration_ms=(time.perf_counter() - start_time) * 1000,
+            duration_ms=(self._perf_counter() - start_time) * 1000,
             total_tokens=embed_result.token_usage,
         )
 
