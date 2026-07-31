@@ -12,7 +12,7 @@ manager and proves the deployment is healthy before reporting success.
 5. Installs the wheel into the uv tool runtime with `uv tool install --reinstall`.
 6. Restarts the Vision user service with `systemctl --user restart vision.service`.
 7. Waits for Vision health, allowing one bounded retry after the restart.
-8. Confirms the installed `lgrep --version` matches the selected release.
+8. Confirms the configured `lgrep` executable reports the selected release version.
 9. Runs two non-destructive MCP health checks through Vision:
    - `prune_orphans`
    - `prune_symbols`

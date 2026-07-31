@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -206,9 +207,11 @@ def wait_vision_ready(
     raise RuntimeError(f"Vision did not become healthy after {retries} retries: {last_error}")
 
 
-def check_installed_version(expected_version: str) -> None:
-    """Assert that ``lgrep --version`` matches the expected release."""
-    result = _run(["lgrep", "--version"], check=True, timeout=30)
+def check_installed_version(expected_version: str, command: str) -> None:
+    """Assert that the configured lgrep executable reports the expected version."""
+    if not command:
+        raise RuntimeError("no lgrep command configured")
+    result = _run([command, "--version"], check=True, timeout=30)
     prefix = "lgrep "
     if not result.stdout.startswith(prefix):
         raise RuntimeError(f"unexpected version output: {result.stdout!r}")
@@ -219,8 +222,13 @@ def check_installed_version(expected_version: str) -> None:
         )
 
 
-def _vision_lgrep_port(config_path: Path) -> int:
-    """Parse Vision servers.yaml and return the lgrep server port."""
+def _vision_lgrep_server(config_path: Path) -> tuple[int, str]:
+    """Parse Vision servers.yaml and return the lgrep server port and command.
+
+    Requires an absolute, executable command path. Rejects missing, non-string,
+    relative, or non-executable values so deployment fails before the service is
+    restarted.
+    """
     # PyYAML is a dev dependency; this script is repository maintenance tooling.
     yaml_spec = importlib.util.find_spec("yaml")
     if yaml_spec is None:
@@ -228,13 +236,43 @@ def _vision_lgrep_port(config_path: Path) -> int:
     import yaml
 
     data = yaml.safe_load(config_path.read_text())
-    server = data.get("servers", {}).get(LGREP_SERVER_NAME)
+    servers = data.get("servers") if isinstance(data, dict) else None
+    if not isinstance(servers, dict):
+        raise RuntimeError(f"servers map not found in {config_path}")
+
+    server = servers.get(LGREP_SERVER_NAME)
     if server is None:
         raise RuntimeError(f"server {LGREP_SERVER_NAME!r} not found in {config_path}")
+    if not isinstance(server, dict):
+        raise RuntimeError(f"server {LGREP_SERVER_NAME!r} is not a map in {config_path}")
+
     port = server.get("port")
     if not isinstance(port, int):
         raise RuntimeError(f"server {LGREP_SERVER_NAME!r} has invalid port {port!r}")
-    return port
+
+    command = server.get("command")
+    if command is None:
+        raise RuntimeError(f"server {LGREP_SERVER_NAME!r} missing command in {config_path}")
+    if not isinstance(command, str):
+        raise RuntimeError(
+            f"server {LGREP_SERVER_NAME!r} command is not a string ({type(command).__name__})"
+        )
+    command_path = Path(command)
+    if not command_path.is_absolute():
+        raise RuntimeError(
+            f"server {LGREP_SERVER_NAME!r} command {command!r} is not an absolute path"
+        )
+    if not command_path.is_file():
+        raise RuntimeError(f"server {LGREP_SERVER_NAME!r} command {command!r} does not exist")
+    if not os.access(command_path, os.X_OK):
+        raise RuntimeError(f"server {LGREP_SERVER_NAME!r} command {command!r} is not executable")
+
+    return port, str(command_path)
+
+
+def _vision_lgrep_port(config_path: Path) -> int:
+    """Parse Vision servers.yaml and return the lgrep server port."""
+    return _vision_lgrep_server(config_path)[0]
 
 
 def _mcp_post(
@@ -396,6 +434,9 @@ def deploy(args: argparse.Namespace) -> int:
             print("validating Vision configuration")
             validate_vision_config(args.vision_config)
 
+            print("resolving configured lgrep command")
+            _configured_port, configured_command = _vision_lgrep_server(args.vision_config)
+
             print("installing lgrep wheel into uv tool runtime")
             install_wheel(wheel_path)
 
@@ -410,7 +451,7 @@ def deploy(args: argparse.Namespace) -> int:
             )
 
             print("checking installed lgrep version")
-            check_installed_version(version)
+            check_installed_version(version, configured_command)
 
             print("running non-destructive MCP health checks")
             run_prune_health_checks(args.vision_config)
