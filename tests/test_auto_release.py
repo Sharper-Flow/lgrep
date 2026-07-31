@@ -2,8 +2,8 @@
 
 These tests treat the workflow YAML as the artifact under test. They verify that
 a successful CI run on ``main`` always selects a release job, that the job
-checks out the exact triggering SHA, tags before building, and never pushes a new
-commit back to the default branch.
+checks out the exact triggering SHA, tags before building, and only updates
+CHANGELOG.md afterwards from a fresh default-branch checkout.
 """
 
 from __future__ import annotations
@@ -112,16 +112,33 @@ def test_release_job_checks_out_exact_triggering_sha(workflow: dict[str, Any]) -
     assert checkout["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
 
 
-def test_release_tag_created_before_build_and_no_pushback(workflow: dict[str, Any]) -> None:
+def test_release_tag_created_before_build_and_changelog_pushback_is_isolated(
+    workflow: dict[str, Any],
+) -> None:
     steps = _job_steps(workflow, "release")
     names = [s.get("name") for s in steps]
     tag_idx = names.index("Create release tag")
     build_idx = names.index("Build package")
+    release_idx = names.index("Create Release")
+    changelog_idx = names.index("Update CHANGELOG")
     assert tag_idx < build_idx, f"tag must precede build: {names}"
+    assert release_idx < changelog_idx == len(steps) - 1, (
+        f"CHANGELOG update must be the final post-release step: {names}"
+    )
     tag_step = steps[tag_idx]
     assert "git tag" in tag_step["run"]
-    # No detached-HEAD pushback race: never push HEAD to a branch or commit in-place.
+
+    changelog_step = steps[changelog_idx]
+    assert changelog_step["continue-on-error"] is True
+    assert "git switch --create changelog-update --track origin/main" in changelog_step["run"]
+    assert "git commit -m" in changelog_step["run"]
+    assert "git push origin HEAD:main" in changelog_step["run"]
+
+    # No detached-HEAD pushback race: only the final, isolated changelog step
+    # may commit or push HEAD back to the default branch.
     for step in steps:
+        if step is changelog_step:
+            continue
         run = step.get("run", "")
         assert "git push origin HEAD" not in run, (
             f"step {step.get('name')!r} pushes HEAD, creating a CHANGELOG pushback race"
