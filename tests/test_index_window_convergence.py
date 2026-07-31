@@ -84,9 +84,30 @@ def test_index_window_processes_at_least_one_file_per_window(tmp_project, monkey
     result = indexer.index_window()
 
     assert isinstance(result, IndexWindowResult)
-    assert result.files_indexed >= 1
+    assert result.indexed_files == ["file_00.py"]
+    assert result.files_indexed == 1
     assert not result.complete
-    assert len(result.remaining_files) == 5 - result.files_indexed
+    assert result.remaining_files == [
+        "file_01.py",
+        "file_02.py",
+        "file_03.py",
+        "file_04.py",
+    ]
+
+
+def test_indexer_uses_perf_counter_by_default(tmp_path, mock_storage, mock_embedder, monkeypatch):
+    """Production Indexers must retain time.perf_counter when no seam is injected."""
+    import lgrep.indexing as indexing_module
+
+    monkeypatch.setattr(indexing_module.time, "perf_counter", lambda: 123.0)
+
+    indexer = Indexer(
+        project_path=tmp_path,
+        storage=mock_storage,
+        embedder=mock_embedder,
+    )
+
+    assert indexer._perf_counter() == 123.0
 
 
 def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch, fake_clock):
@@ -112,6 +133,7 @@ def test_index_window_converges_to_all_files_indexed(tmp_project, monkeypatch, f
         windows += 1
         result = indexer.index_window(pending_files=pending)
         total_indexed += result.files_indexed
+        assert result.files_indexed == 1
         if result.complete:
             break
         pending = result.remaining_files
