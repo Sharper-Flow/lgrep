@@ -299,10 +299,7 @@ def _scan_indexes(
             continue
 
         reason, repo_path = _classify(child)
-        if (
-            repo_path is not None
-            and repo_path not in classified_repo_paths
-        ):
+        if repo_path is not None and repo_path not in classified_repo_paths:
             classified_repo_paths.append(repo_path)
         if reason is None:
             continue
@@ -367,9 +364,7 @@ def _scan_indexes(
             except (PermissionError, OSError):
                 continue
             # Active set: an in-memory project may be mid-recreate.
-            orphan_repo_path = _read_sidecar_repo_path(
-                child.with_name(index_name)
-            )
+            orphan_repo_path = _read_sidecar_repo_path(child.with_name(index_name))
             if orphan_repo_path is not None and orphan_repo_path in active_paths:
                 continue
             # Grace: a fresh orphan may sit in the tiny delete_index crash
@@ -507,11 +502,7 @@ def prune_symbols(
     # on-disk index are not reported here because there is nothing to skip.
     stale = find_stale_indexes(root, active_set=active_set, grace_seconds=grace_seconds)
     classified_repo_paths = getattr(stale, "classified_repo_paths", [])
-    skipped_active = [
-        repo_path
-        for repo_path in classified_repo_paths
-        if repo_path in active_paths
-    ]
+    skipped_active = [repo_path for repo_path in classified_repo_paths if repo_path in active_paths]
     failures: list[FailureEntry] = []
     deleted_files = 0
     reclaimed_bytes = 0

@@ -352,7 +352,8 @@ class TestConcurrentSaveIntegrity:
                 errors.append(exc)
 
         threads = [
-            threading.Thread(target=writer, args=(m,)) for m in ("alpha", "bravo", "charlie", "delta")
+            threading.Thread(target=writer, args=(m,))
+            for m in ("alpha", "bravo", "charlie", "delta")
         ]
         for t in threads:
             t.start()
@@ -848,7 +849,9 @@ class TestSidecarListRepos:
         (tmp_path / f"index_{key}.meta.json").write_text(
             json.dumps({"repo_path": repo}), encoding="utf-8"
         )
-        monkeypatch.setattr(module, "normalize_repo_key", lambda _: (_ for _ in ()).throw(RuntimeError))
+        monkeypatch.setattr(
+            module, "normalize_repo_key", lambda _: (_ for _ in ()).throw(RuntimeError)
+        )
 
         assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
 

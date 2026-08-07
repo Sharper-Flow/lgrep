@@ -744,9 +744,7 @@ class TestSidecarCheapClassification:
 
         repo = tmp_path / "live-repo"
         repo.mkdir()
-        index_file, _ = _write_index_with_sidecar(
-            tmp_path, str(repo), index_body="{ torn garbage"
-        )
+        index_file, _ = _write_index_with_sidecar(tmp_path, str(repo), index_body="{ torn garbage")
 
         reason, repo_path = _classify(index_file)
         assert reason is None
@@ -876,9 +874,7 @@ class TestSidecarAndTmpReclamation:
 
         _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "3600"
         try:
-            results = find_stale_indexes(
-                storage_dir=tmp_path, active_set=[str(repo_dir)]
-            )
+            results = find_stale_indexes(storage_dir=tmp_path, active_set=[str(repo_dir)])
         finally:
             _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "0"
 
@@ -892,8 +888,7 @@ class TestSidecarAndTmpReclamation:
         results = find_stale_indexes(storage_dir=tmp_path)
 
         assert any(
-            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp)
-            for entry in results
+            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp) for entry in results
         ), results
 
     def test_stale_legacy_temp_is_swept(self, tmp_path):
@@ -904,8 +899,7 @@ class TestSidecarAndTmpReclamation:
         results = find_stale_indexes(storage_dir=tmp_path)
 
         assert any(
-            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp)
-            for entry in results
+            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp) for entry in results
         ), results
 
     def test_fresh_temp_is_preserved(self, tmp_path):
@@ -980,9 +974,7 @@ class TestSidecarAndTmpReclamation:
 
         repo = tmp_path / "recreated-repo"
         repo.mkdir()
-        index_file, sidecar = _write_index_with_sidecar(
-            tmp_path, str(repo), age_seconds=7200
-        )
+        index_file, sidecar = _write_index_with_sidecar(tmp_path, str(repo), age_seconds=7200)
 
         # Simulate a scan that ran while the index was missing.
         stale_entry = {
@@ -991,9 +983,7 @@ class TestSidecarAndTmpReclamation:
             "bytes": sidecar.stat().st_size,
             "repo_path": str(repo),
         }
-        monkeypatch.setattr(
-            module, "find_stale_indexes", lambda *a, **k: [stale_entry]
-        )
+        monkeypatch.setattr(module, "find_stale_indexes", lambda *a, **k: [stale_entry])
 
         report = module.prune_symbols(storage_dir=tmp_path, dry_run=False)
 

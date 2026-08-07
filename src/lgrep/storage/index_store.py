@@ -127,7 +127,7 @@ def _read_sidecar_repo_path(index_file: Path) -> str | None:
     repo_path = data.get("repo_path")
     if not isinstance(repo_path, str) or not repo_path:
         return None
-    key = index_file.stem[len("index_"):]
+    key = index_file.stem[len("index_") :]
     try:
         if _repo_key(normalize_repo_key(repo_path)) != key:
             return None
