@@ -281,6 +281,10 @@ class IndexStore:
         index_file = self._index_path(normalized_repo)
         try:
             index_file.unlink(missing_ok=True)
+            # Remove the sidecar with its index (AC4). The prune path must
+            # handle its own orphan case — it unlinks index files directly
+            # and never routes through this method.
+            self._meta_path(normalized_repo).unlink(missing_ok=True)
             self._cache.pop(index_file, None)
             log.info("index_deleted", repo=normalized_repo)
         except OSError as e:

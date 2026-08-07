@@ -606,3 +606,71 @@ class TestCompactSerialization:
         assert loaded is not None
         assert loaded.repo_path == "/repo/legacy"
         assert loaded.files == {"a.py": "h"}
+
+
+class TestDeleteRemovesSidecar:
+    """delete_index() must remove the sidecar alongside the index (AC4).
+
+    prune_symbols unlinks index files directly and never calls delete_index(),
+    so the prune path covers its own orphan case separately (AC5). This class
+    covers the delete_index() path only.
+    """
+
+    def test_delete_index_removes_both_files(self, tmp_path):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(CodeIndex(repo_path="/repo/delete-me", files={}, symbols={"s": {}}))
+
+        index_files = [p for p in tmp_path.glob("index_*.json")]
+        assert any(".meta." in p.name for p in index_files), "precondition: sidecar exists"
+
+        store.delete_index("/repo/delete-me")
+
+        leftovers = [p for p in tmp_path.glob("index_*.json")]
+        assert leftovers == [], f"delete_index left artifacts: {leftovers}"
+
+    def test_delete_index_tolerates_missing_sidecar(self, tmp_path):
+        """Legacy indexes (no sidecar) must still delete cleanly."""
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        key = hashlib.sha256("/repo/legacy".encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": "/repo/legacy",
+                    "files": {},
+                    "symbols": {},
+                    "occurrences": {},
+                    "version": "2.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.delete_index("/repo/legacy")  # must not raise
+        assert list(tmp_path.iterdir()) == []
+
+    def test_delete_index_preserves_lock_file(self, tmp_path):
+        """The per-key lock file must survive delete_index().
+
+        Removing a lock file while another process waits on that inode
+        silently breaks mutual exclusion (design §2b lifecycle).
+        """
+        import hashlib
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        key = hashlib.sha256("/repo/locked".encode()).hexdigest()[:16]
+        lock_file = tmp_path / f".index_{key}.lock"
+        lock_file.touch()
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(CodeIndex(repo_path="/repo/locked", files={}, symbols={"s": {}}))
+        store.delete_index("/repo/locked")
+
+        assert lock_file.is_file(), "delete_index() removed the lock file"
