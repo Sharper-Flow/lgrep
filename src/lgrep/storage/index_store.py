@@ -470,47 +470,6 @@ class IndexStore:
 
         return {"new": new_files, "changed": changed_files, "deleted": deleted_files}
 
-    def incremental_save(
-        self,
-        repo_path: str,
-        updated_files: dict[str, str],
-        updated_symbols: dict[str, dict],
-        deleted_files: list[str],
-    ) -> None:
-        """Update an existing index incrementally.
-
-        Merges updated files/symbols into the existing index and removes
-        symbols for deleted files.
-
-        Args:
-            repo_path: Absolute path to the repository root
-            updated_files: Dict of file paths → hashes to add/update
-            updated_symbols: Dict of symbol IDs → metadata to add/update
-            deleted_files: List of file paths whose symbols should be removed
-        """
-        index = self.load(repo_path) or CodeIndex(repo_path=repo_path, files={}, symbols={})
-
-        # Update file hashes
-        index.files.update(updated_files)
-        for path in deleted_files:
-            index.files.pop(path, None)
-
-        # Update symbols
-        index.symbols.update(updated_symbols)
-
-        # Remove symbols for deleted files
-        if deleted_files:
-            deleted_set = set(deleted_files)
-            to_remove = [
-                sym_id
-                for sym_id, sym_data in index.symbols.items()
-                if sym_data.get("file_path") in deleted_set
-            ]
-            for sym_id in to_remove:
-                del index.symbols[sym_id]
-
-        self.save(index)
-
     def get_symbol_content(
         self,
         file_path: Path | str,
