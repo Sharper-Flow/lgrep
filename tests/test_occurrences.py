@@ -317,3 +317,38 @@ class TestGoOccurrenceIndexRefresh:
         assert refreshed.version >= "2.2"
         assert "helper" in refreshed.occurrences
         assert "Println" in refreshed.occurrences
+
+
+class TestGoExtractionContentRefresh:
+    """fixGoExtractionGaps corrects Go extraction CONTENT (grouped specs,
+    aliases, import-kind qualifiers) — indexes written at 2.2 already contain
+    Go occurrences, but incomplete/incorrect ones. The version gate must force
+    a safe re-parse for 2.2-era indexes as well."""
+
+    def test_go_22_index_forces_content_refresh(self, go_source, tmp_store):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+        from lgrep.tools.index_folder import index_folder
+
+        first = index_folder(str(go_source), storage_dir=tmp_store)
+        assert first["occurrences_indexed"] > 0
+
+        store = IndexStore(storage_dir=tmp_store)
+        idx = store.load(str(go_source.resolve()))
+        assert idx is not None
+        old_index = CodeIndex(
+            repo_path=idx.repo_path,
+            files=dict(idx.files),
+            symbols=dict(idx.symbols),
+            version="2.2",
+            occurrences={},
+        )
+        store.save(old_index)
+
+        second = index_folder(str(go_source), storage_dir=tmp_store, incremental=True)
+        assert second["files_skipped"] == 0
+
+        refreshed = store.load(str(go_source.resolve()))
+        assert refreshed is not None
+        assert refreshed.version >= "2.3"
+        assert "helper" in refreshed.occurrences
+        assert "Println" in refreshed.occurrences

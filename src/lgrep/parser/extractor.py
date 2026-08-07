@@ -1,8 +1,9 @@
 """Symbol extractor using tree-sitter AST parsing.
 
 Walks the AST of a source file and extracts Symbol objects for each
-function, class, method, and interface definition. For Python, it also
-collects candidate identifier Occurrence objects for local reference lookup.
+function, class, method, and interface definition. For Python and Go, it
+also collects candidate identifier Occurrence objects for local reference
+lookup (call / attribute / import / reference kinds).
 
 Uses tree-sitter-language-pack for pre-built parsers (165+ languages).
 """

@@ -20,11 +20,12 @@ from lgrep.tools._meta import error_response, make_meta
 
 log = structlog.get_logger()
 
-_INDEX_VERSION = "2.2"
+_INDEX_VERSION = "2.3"
 # Minimum index version whose occurrence data is complete: 2.1 introduced
-# Python occurrences, 2.2 added Go occurrences. Older indexes must be
-# re-parsed before callers can trust occurrence results.
-_MIN_VERSION_FOR_OCCURRENCES = (2, 2)
+# Python occurrences, 2.2 added Go occurrences, 2.3 corrects Go extraction
+# content (grouped type specs, type aliases, import-kind qualifiers).
+# Older indexes must be re-parsed before callers can trust occurrence results.
+_MIN_VERSION_FOR_OCCURRENCES = (2, 3)
 
 _extractor = SymbolExtractor()
 
