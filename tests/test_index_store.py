@@ -462,7 +462,7 @@ class TestConcurrentSaveIntegrity:
 
         import lgrep.storage.index_store as mod
 
-        original = getattr(mod, "os").replace
+        original = mod.os.replace
         try:
             mod.os.replace = spy
             for i in range(3):
@@ -499,7 +499,7 @@ class TestSidecarWrite:
         import hashlib
         import json
 
-        key = hashlib.sha256("/repo/with-sidecar".encode()).hexdigest()[:16]
+        key = hashlib.sha256(b"/repo/with-sidecar").hexdigest()[:16]
         meta = tmp_path / f"index_{key}.meta.json"
         assert meta.is_file(), f"sidecar not written: {sorted(p.name for p in tmp_path.iterdir())}"
 
@@ -551,7 +551,7 @@ class TestSidecarWrite:
 
     def test_sidecar_temp_name_does_not_collide_with_index_temp(self, tmp_path):
         """Both writes stage via writer-unique temps; the names must differ."""
-        from lgrep.storage.index_store import CodeIndex, IndexStore, _unique_temp_path
+        from lgrep.storage.index_store import _unique_temp_path
 
         key = "0123456789abcdef"
         index_target = tmp_path / f"index_{key}.json"
@@ -587,7 +587,7 @@ class TestCompactSerialization:
 
         from lgrep.storage.index_store import IndexStore
 
-        key = hashlib.sha256("/repo/legacy".encode()).hexdigest()[:16]
+        key = hashlib.sha256(b"/repo/legacy").hexdigest()[:16]
         legacy = tmp_path / f"index_{key}.json"
         legacy.write_text(
             json.dumps(
@@ -639,7 +639,7 @@ class TestDeleteRemovesSidecar:
 
         from lgrep.storage.index_store import IndexStore
 
-        key = hashlib.sha256("/repo/legacy".encode()).hexdigest()[:16]
+        key = hashlib.sha256(b"/repo/legacy").hexdigest()[:16]
         (tmp_path / f"index_{key}.json").write_text(
             json.dumps(
                 {
@@ -667,7 +667,7 @@ class TestDeleteRemovesSidecar:
 
         from lgrep.storage.index_store import CodeIndex, IndexStore
 
-        key = hashlib.sha256("/repo/locked".encode()).hexdigest()[:16]
+        key = hashlib.sha256(b"/repo/locked").hexdigest()[:16]
         lock_file = tmp_path / f".index_{key}.lock"
         lock_file.touch()
 
@@ -1173,7 +1173,6 @@ class TestIndexFolderRmwGuard:
         import threading
         import time
 
-        from lgrep.storage import index_store as module
         from lgrep.storage.index_store import IndexStore
         from lgrep.tools.index_folder import index_folder
 
