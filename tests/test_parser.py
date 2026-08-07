@@ -560,7 +560,7 @@ class TestRepoOutline:
 
 
 GO_FIXTURE = textwrap.dedent(
-    '''\
+    """\
     package sample
 
     import "fmt"
@@ -588,7 +588,7 @@ GO_FIXTURE = textwrap.dedent(
         helper()
         g.Greet("bob")
     }
-    '''
+    """
 )
 
 

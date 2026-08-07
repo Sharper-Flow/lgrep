@@ -250,3 +250,70 @@ class TestOccurrenceIndexing:
         idx = IndexStore(storage_dir=tmp_store).load(str(occurrence_source.resolve()))
         assert idx is not None
         assert "helper" in idx.occurrences
+
+
+@pytest.fixture
+def go_source(tmp_path):
+    """Create a small Go repo with plain-call and selector occurrences."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.go").write_text(
+        textwrap.dedent(
+            """\
+            package main
+
+            import "fmt"
+
+            type Config struct{ Name string }
+
+            func helper() { fmt.Println("x") }
+
+            func main() {
+                var c Config
+                helper()
+                fmt.Println(c.Name)
+            }
+            """
+        )
+    )
+    return tmp_path
+
+
+class TestGoOccurrenceIndexRefresh:
+    """Consumer compatibility: indexes written before Go occurrence support
+    (version 2.1, Python-occurrence era) contain Go symbols but zero Go
+    occurrences. The version gate must force a safe re-parse so existing
+    Go-containing indexes are not silently stuck without Go occurrences."""
+
+    def test_go_21_index_forces_occurrence_refresh(self, go_source, tmp_store):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+        from lgrep.tools.index_folder import index_folder
+
+        # 1. Index with current code, then downgrade the stored version to
+        #    2.1 and strip occurrences — simulating an index written before
+        #    Go occurrence support shipped.
+        first = index_folder(str(go_source), storage_dir=tmp_store)
+        assert first["occurrences_indexed"] > 0
+
+        store = IndexStore(storage_dir=tmp_store)
+        idx = store.load(str(go_source.resolve()))
+        assert idx is not None
+        old_index = CodeIndex(
+            repo_path=idx.repo_path,
+            files=dict(idx.files),
+            symbols=dict(idx.symbols),
+            version="2.1",
+            occurrences={},
+        )
+        store.save(old_index)
+
+        # 2. Incremental re-run must not skip the unchanged Go file — the
+        #    pre-Go-occurrences version triggers a safe refresh.
+        second = index_folder(str(go_source), storage_dir=tmp_store, incremental=True)
+        assert second["files_skipped"] == 0
+
+        refreshed = store.load(str(go_source.resolve()))
+        assert refreshed is not None
+        assert refreshed.version >= "2.2"
+        assert "helper" in refreshed.occurrences
+        assert "Println" in refreshed.occurrences

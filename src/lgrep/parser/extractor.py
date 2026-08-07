@@ -28,7 +28,13 @@ def _get_node_name(node, source: bytes) -> str | None:
     # registered language emits field_identifier as a direct child of a
     # definition node (verified against grammar source + executable probe).
     for child in node.children:
-        if child.type in ("identifier", "name", "type_identifier", "property_identifier", "field_identifier"):
+        if child.type in (
+            "identifier",
+            "name",
+            "type_identifier",
+            "property_identifier",
+            "field_identifier",
+        ):
             return source[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
     # Go type_declaration: the declared name is the type_spec's type_identifier
     # child (a grandchild of the type_declaration node).
@@ -196,14 +202,16 @@ def _go_occurrence_kind(node, parent) -> str:
     # Selector member: the field of `operand.field` is the last child of a
     # selector_expression. Classified as attribute regardless of whether the
     # selector is being called (Python-mirror behavior).
-    if parent.type == "selector_expression" and parent.children:
-        if parent.children[-1].id == node.id:
-            return "attribute"
+    if (
+        parent.type == "selector_expression"
+        and parent.children
+        and parent.children[-1].id == node.id
+    ):
+        return "attribute"
 
     # Plain call target: identifier is the called expression of a call.
-    if parent.type == "call_expression" and parent.children:
-        if parent.children[0].id == node.id:
-            return "call"
+    if parent.type == "call_expression" and parent.children and parent.children[0].id == node.id:
+        return "call"
 
     return "reference"
 
@@ -215,9 +223,7 @@ def _is_go_excluded_identifier(node, parent) -> bool:
     field_declaration (a type_identifier sibling) is a usage and stays."""
     if parent is None:
         return False
-    if node.type == "field_identifier" and parent.type in ("field_declaration", "method_elem"):
-        return True
-    return False
+    return node.type == "field_identifier" and parent.type in ("field_declaration", "method_elem")
 
 
 def _go_type_kind(node) -> str:
