@@ -1,7 +1,7 @@
 # Lgrep Symbol Store Lifecycle
 
-> **Version:** 1.0.0
-> **Updated:** 2026-07-21
+> **Version:** 1.1.0
+> **Updated:** 2026-08-07
 
 ## Purpose
 
@@ -14,6 +14,8 @@ Capability: Lgrep Symbol Store Lifecycle
 **ID:** `rq-V7kP9mNx4hD` | **Priority:** **[MUST]**
 
 When `find_stale_indexes` scans the symbol store, each `index_*.json` file MUST be classified into exactly one of three stable reasons: `repo_path_enoent` (the `repo_path` field references a path that does not exist on disk), `unreadable_index_json` (the file exists but is not valid JSON), or `missing_repo_path_field` (the file is valid JSON but lacks a `repo_path` key). A file whose `repo_path` references an existing directory MUST NOT be classified as stale. Transient filesystem errors (e.g., `PermissionError` during `is_dir()`) MUST be treated as 'preserve, do not classify' rather than as stale.
+
+Sidecar exception: when an index has a key-verified metadata sidecar (`index_<key>.meta.json` whose `repo_path` normalizes to the same index key), classification MUST use the sidecar's `repo_path` without parsing the index body. The three-reason rule above applies unchanged to sidecar-less indexes. Consequence (documented blind spot): an index whose body is not valid JSON but which has a key-verified sidecar is classified from the sidecar rather than as `unreadable_index_json`. This is accepted because torn writes are prevented at the write path (unique temp + atomic rename), out-of-band corruption is the only remaining cause, and such an index self-heals on the next re-index.
 
 #### Scenarios
 
@@ -127,6 +129,53 @@ When `dry_run=False`, `prune_symbols` MUST enforce four guards: (1) path-confine
 - the first file is deleted
 - the second file appears in `failures[]` with the OSError message
 - the third file is deleted (processing continues)
+
+---
+
+### Sidecar and temp-file reclamation
+
+**ID:** `rq-4sDc7mW2pQ` | **Priority:** **[MUST]**
+
+`save()` writes each index as `index_<key>.json` plus an advisory metadata sidecar `index_<key>.meta.json`. The execute path MUST extend the same four delete-time guards (path-confinement, TOCTOU symlink refusal, grace window, batch isolation) to every file it removes. Deleting a stale index MUST also delete its companion sidecar in the same run. An orphan sidecar (no matching `index_<key>.json`) MUST be reclaimed only past the grace window and MUST be preserved when its repo belongs to the active set; at delete time the entry MUST be re-checked — if the matching index file now exists (recreated between scan and delete) the sidecar MUST be preserved, and an `OSError` during the re-check MUST be recorded in `failures[]` with the sidecar preserved. Stale temp files — legacy `index_<key>.tmp` and writer-unique `index_<key>.<pid>.<rand>.tmp` left by interrupted writes — MUST be reclaimed past the grace window. Lock files (`.index_<key>.lock`) MUST NOT be reclaimed: unlinking an inode another lock waiter holds silently breaks mutual exclusion.
+
+#### Scenarios
+
+**Stale index drags its companion sidecar** (`rq-4sDc7mW2pQ.1`)
+
+**Given:**
+- a stale index `index_abc.json` classified with reason `repo_path_enoent`
+- its companion sidecar `index_abc.meta.json` exists
+
+**When:** prune_symbols(dry_run=False) processes the entry
+
+**Then:**
+- the index is deleted
+- the companion sidecar is deleted through the same guarded path
+- both sizes count toward `reclaimed_bytes`
+
+**Orphan sidecar of a recreated index is preserved at delete time** (`rq-4sDc7mW2pQ.2`)
+
+**Given:**
+- an orphan sidecar `index_def.meta.json` older than the grace window
+- the matching `index_def.json` is recreated between scan and delete
+
+**When:** prune_symbols(dry_run=False) processes the entry
+
+**Then:**
+- the sidecar is NOT deleted
+- the entry does not appear in `failures[]`
+
+**Lock file never reclaimed** (`rq-4sDc7mW2pQ.3`)
+
+**Given:**
+- a lock file `.index_abc.lock` older than the grace window
+- no matching index file exists
+
+**When:** prune_symbols(dry_run=False) completes
+
+**Then:**
+- the lock file remains on disk
+- the lock file appears nowhere in the deletion report
 
 ---
 

@@ -5,7 +5,14 @@ Each indexed repository gets its own JSON file keyed by a hash of the repo path.
 
 Design decisions:
 - JSON (not SQLite) for v2.0 — simple, debuggable, no schema migrations
-- Atomic writes via write-to-temp + rename
+- Atomic writes via write-to-temp + rename (unique temp name per writer)
+- Per-index advisory metadata sidecars (index_{key}.meta.json) so list_repos/GC
+  read O(sidecar) instead of O(index bytes); sidecars are rebuilt on demand,
+  key-verified, and never authoritative
+- Per-repo advisory flock (.index_{key}.lock) guards index_folder's
+  load->save window against lost updates; lock files are NEVER deleted —
+  unlinking an inode another waiter holds silently breaks mutual exclusion —
+  so exactly one small file accumulates per indexed repo
 - File hashes for incremental change detection
 - Byte-offset retrieval for symbol source content
 - Path traversal safety for all file reads
@@ -399,7 +406,7 @@ class IndexStore:
             # the candidate set, so an orphaned sidecar (index deleted out
             # of band) can never surface as a live repo — AC9 is a property
             # of this loop, not a runtime check.
-            if ".meta." in index_file.name:
+            if index_file.name.endswith(".meta.json"):
                 continue
             repo_path = _read_sidecar_repo_path(index_file)
             if repo_path is None:

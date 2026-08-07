@@ -15,6 +15,8 @@ Covers:
 
 import textwrap
 
+import pytest
+
 PYTHON_FIXTURE = textwrap.dedent("""\
     def authenticate(user, password):
         return True
@@ -898,7 +900,10 @@ class TestSidecarListRepos:
             repos = IndexStore(storage_dir=tmp_path).list_repos()
             timings.append(time.monotonic() - t0)
         assert len(repos) == 21
-        assert max(timings) < 1.0, f"list_repos too slow with sidecars present: {timings}"
+        # Gross-regression backstop only: AC1's discriminating evidence is the
+        # zero-body-parse pin above. 2s has ~3 orders of magnitude of margin
+        # over the warm sidecar path (1-3ms) so it does not flake under CI load.
+        assert max(timings) < 2.0, f"list_repos too slow with sidecars present: {timings}"
 
     def test_read_only_dir_returns_results_without_backfill(self, tmp_path):
         """Backfill failure must never break listing (read-only FS simulation)."""
@@ -960,8 +965,6 @@ class TestRepoLock:
     and silently discards A's symbols. Each save() is individually atomic —
     unique temp paths cannot help because the INPUT was stale.
     """
-
-    import pytest
 
     @pytest.mark.xfail(
         reason=(

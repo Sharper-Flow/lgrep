@@ -280,9 +280,9 @@ lgrep prune-symbols --dry-run
 lgrep prune-symbols --execute --storage-dir /path/to/storage
 ```
 
-`prune-symbols` is dry-run by default. Use `--execute` to actually delete stale symbol-store index files (`index_<hash>.json`). `--storage-dir` overrides `LGREP_SYMBOLS_DIR` for a single run (default: `~/.cache/lgrep/symbols/`). `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_symbols` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+`prune-symbols` is dry-run by default. Use `--execute` to actually delete stale symbol-store index files (`index_<hash>.json`) — along with their metadata sidecars, orphaned sidecars, and stale temp files left by interrupted writes. `--storage-dir` overrides `LGREP_SYMBOLS_DIR` for a single run (default: `~/.cache/lgrep/symbols/`). `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_symbols` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
 
-**Grace window.** Recently modified index files are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). Only the `unreadable_index_json` reason is grace-eligible; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass the grace check because they are unambiguous.
+**Grace window.** Recently modified index files are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). Only the `unreadable_index_json` reason is grace-eligible; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass the grace check because they are unambiguous. Orphan metadata sidecars and stale temp files from interrupted writes are also grace-eligible; lock files (`.index_<hash>.lock`) are never removed.
 
 **MCP deletion requires an explicit grant.** The MCP tool coerces `dry_run=True` regardless of the caller's request unless `LGREP_ALLOW_DESTRUCTIVE_MCP` is set in the server's environment, and the refused response carries a `refused_reason` naming the grant. Transport kind is not consulted — see the note under `prune-orphans` above. Leave the grant unset on any shared deployment and use the CLI (`lgrep prune-symbols --execute`) so the operator is explicit.
 
@@ -536,9 +536,9 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
 
 1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
 2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files (worktrees that were deleted without calling `invalidate_worktree_cache`)
-3. `prune_symbols` — deletes stale symbol-store index files (`index_<hash>.json`) whose `repo_path` is missing, unreadable, or absent from the JSON
+3. `prune_symbols` — deletes stale symbol-store index files (`index_<hash>.json`) whose `repo_path` is missing, unreadable, or absent from the JSON, plus their metadata sidecars, orphaned sidecars, and stale temp files from interrupted writes
 
-The `prune_orphans` and `gc_worktree_meta` passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects. The `prune_symbols` pass respects the same grace window, but only for the `unreadable_index_json` reason; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass grace, and non-local `github:` entries are skipped.
+The `prune_orphans` and `gc_worktree_meta` passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects. The `prune_symbols` pass respects the same grace window, but only for the `unreadable_index_json` reason; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass grace, and non-local `github:` entries are skipped. Orphan sidecars and stale temp files are grace-eligible, and `.index_<hash>.lock` files are never deleted.
 
 ## Troubleshooting
 
