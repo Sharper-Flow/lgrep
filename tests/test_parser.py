@@ -738,3 +738,85 @@ class TestGoOccurrences:
         assert all(o.line_text.strip() for o in occurrences)
         sprintf = next(o for o in occurrences if o.name == "Sprintf")
         assert sprintf.enclosing_symbol_id == "sample.go:method:Person.Greet"
+
+
+GO_GROUPED_FIXTURE = textwrap.dedent(
+    """\
+    package sample
+
+    type (
+        Alpha struct{ X int }
+        Beta interface{ M() }
+        Gamma[T any] struct{ V T }
+    )
+
+    type (
+        Solo struct{}
+        Alias = int
+    )
+
+    type Celsius = float64
+    """
+)
+
+
+class TestGoTypeDeclarationGaps:
+    """Grouped type declarations must extract every spec (AC1) and type
+    aliases must extract as kind=alias instead of being dropped (AC2).
+    Grammar shapes probe-verified against the pinned tree-sitter-language-pack:
+    type_declaration children = type_spec | type_alias (multiple, mixable)."""
+
+    def _symbols(self, tmp_path):
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "sample.go"
+        src_file.write_text(GO_GROUPED_FIXTURE)
+        return SymbolExtractor().extract(src_file, repo_root=tmp_path)
+
+    def _occurrences(self, tmp_path):
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "sample.go"
+        src_file.write_text(GO_GROUPED_FIXTURE)
+        _, occurrences = SymbolExtractor().extract_full(src_file, repo_root=tmp_path)
+        return occurrences
+
+    def test_grouped_declaration_extracts_every_spec(self, tmp_path):
+        """AC1: specs 2..n of a grouped declaration are not dropped."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        assert by_name["Alpha"].kind == "class"
+        assert by_name["Beta"].kind == "interface"
+        assert by_name["Gamma"].kind == "class"
+
+    def test_grouped_spec_byte_ranges_are_per_spec(self, tmp_path):
+        """AC1: each spec gets its own (ordered, non-overlapping) byte range."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        alpha, beta, gamma = by_name["Alpha"], by_name["Beta"], by_name["Gamma"]
+        assert alpha.end_byte <= beta.start_byte
+        assert beta.end_byte <= gamma.start_byte
+
+    def test_mixed_grouped_spec_and_alias_no_double_emit(self, tmp_path):
+        """AC1/AC2: a group mixing type_spec and type_alias emits one symbol
+        per child — Solo as class, Alias as alias, nothing duplicated."""
+        symbols = self._symbols(tmp_path)
+        solo = [s for s in symbols if s.name == "Solo"]
+        alias = [s for s in symbols if s.name == "Alias"]
+        assert len(solo) == 1 and solo[0].kind == "class"
+        assert len(alias) == 1 and alias[0].kind == "alias"
+
+    def test_single_type_alias_extracted_as_alias(self, tmp_path):
+        """AC2: `type Celsius = float64` is extracted, not dropped."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        assert "Celsius" in by_name
+        assert by_name["Celsius"].kind == "alias"
+        assert by_name["Celsius"].parent is None
+
+    def test_declared_names_excluded_from_occurrences(self, tmp_path):
+        """AC1/AC2: per-spec and alias declared names never appear as
+        occurrences (definition positions are not usages)."""
+        names = {o.name for o in self._occurrences(tmp_path)}
+        for declared in ("Alpha", "Beta", "Gamma", "Solo", "Alias", "Celsius"):
+            assert declared not in names
+        # aliased types and type parameters remain usages
+        assert "float64" in names
+        assert "int" in names

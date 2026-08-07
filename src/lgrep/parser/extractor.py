@@ -36,16 +36,6 @@ def _get_node_name(node, source: bytes) -> str | None:
             "field_identifier",
         ):
             return source[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
-    # Go type_declaration: the declared name is the type_spec's type_identifier
-    # child (a grandchild of the type_declaration node).
-    if node.type == "type_declaration":
-        for child in node.children:
-            if child.type == "type_spec":
-                for grandchild in child.children:
-                    if grandchild.type == "type_identifier":
-                        return source[grandchild.start_byte : grandchild.end_byte].decode(
-                            "utf-8", errors="replace"
-                        )
     return None
 
 
@@ -163,6 +153,15 @@ def _is_definition_name(node, parent, spec: LanguageSpec) -> bool:
         for child in parent.children:
             if child.type == "type_identifier":
                 return child.id == node.id
+    # Go: the declared alias name is the first type_identifier under
+    # type_alias (the "name" field may be unavailable in pinned bindings).
+    if parent.type == "type_alias" and node.type == "type_identifier":
+        name_node = parent.child_by_field_name("name")
+        if name_node is not None:
+            return name_node.id == node.id
+        for child in parent.children:
+            if child.type == "type_identifier":
+                return child.id == node.id
     return False
 
 
@@ -226,19 +225,63 @@ def _is_go_excluded_identifier(node, parent) -> bool:
     return node.type == "field_identifier" and parent.type in ("field_declaration", "method_elem")
 
 
-def _go_type_kind(node) -> str:
-    """Classify a Go type_declaration by scanning type_spec children by node
-    type (ordinal positions break on generics, which insert
+def _go_spec_kind(spec_node) -> str:
+    """Classify one Go type_spec by scanning its children by node type
+    (ordinal positions break on generics, which insert
     type_parameter_list). struct_type -> class, interface_type -> interface;
-    type aliases and other forms keep the pre-existing class fallback."""
+    other forms keep the pre-existing class fallback."""
+    for child in spec_node.children:
+        if child.type == "struct_type":
+            return "class"
+        if child.type == "interface_type":
+            return "interface"
+    return "class"
+
+
+def _go_type_declaration_symbols(node, source: bytes, file_path: str) -> list[Symbol]:
+    """Emit one Symbol per type_spec / type_alias child of a Go
+    type_declaration.
+
+    Grouped declarations carry multiple (mixable) type_spec and type_alias
+    children; extracting only the first spec silently dropped specs 2..n,
+    and aliases (a distinct type_alias node, not type_spec) were dropped
+    entirely. Byte ranges come from the child node so each spec/alias gets
+    its own precise range. Nothing tracked nests inside these children
+    (methods are sibling method_declaration nodes), so no enclosing id.
+    """
+    emitted: list[Symbol] = []
     for child in node.children:
         if child.type == "type_spec":
-            for grandchild in child.children:
-                if grandchild.type == "struct_type":
-                    return "class"
-                if grandchild.type == "interface_type":
-                    return "interface"
-    return "class"
+            kind = _go_spec_kind(child)
+        elif child.type == "type_alias":
+            kind = "alias"
+        else:
+            continue
+        # The "name" field is unavailable for type_spec in some pinned
+        # bindings; the first type_identifier descendant is the declared
+        # name for both node types (probe-verified).
+        name_node = child.child_by_field_name("name")
+        if name_node is None:
+            name_node = _find_type_identifier(child)
+        if name_node is None:
+            continue
+        name = source[name_node.start_byte : name_node.end_byte].decode(
+            "utf-8", errors="replace"
+        )
+        emitted.append(
+            Symbol(
+                id=make_symbol_id(file_path, kind, name, parent=None),
+                name=name,
+                kind=kind,
+                file_path=file_path,
+                start_byte=child.start_byte,
+                end_byte=child.end_byte,
+                docstring=None,
+                decorators=None,
+                parent=None,
+            )
+        )
+    return emitted
 
 
 def _find_type_identifier(node):
@@ -308,12 +351,20 @@ def _extract_symbols_and_occurrences_from_tree(
 
         sym_id_for_children: str | None = None
 
+        # Go type_declaration: one symbol per type_spec / type_alias child
+        # (grouped declarations, mixed groups, and standalone aliases).
+        # Handled outside the generic single-symbol path; nothing tracked
+        # nests inside these children, so no enclosing id is pushed.
+        go_type_decl = spec.name == "go" and node_type == "type_declaration"
+
         if is_function or is_class or is_method or is_interface:
-            name = _get_node_name(node, source)
+            if go_type_decl:
+                symbols.extend(_go_type_declaration_symbols(node, source, file_path))
+                name = None
+            else:
+                name = _get_node_name(node, source)
             if name:
-                if spec.name == "go" and node_type == "type_declaration":
-                    kind = _go_type_kind(node)
-                elif spec.name == "go" and node_type == "method_declaration":
+                if spec.name == "go" and node_type == "method_declaration":
                     # tree-sitter-go guarantees a receiver parameter_list on
                     # method_declaration; _is_inside_class never matches
                     # top-level Go methods.
