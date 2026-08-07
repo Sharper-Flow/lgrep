@@ -16,6 +16,8 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import os
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -72,6 +74,26 @@ def _version_tuple(version: str) -> tuple[int, ...]:
         return (0,)
 
 
+def _unique_temp_path(target: Path) -> Path:
+    """Return a writer-unique staging path beside *target*.
+
+    The temp name must NOT be derivable from the target alone. A deterministic
+    name (``target.with_suffix(".tmp")``) is shared by every concurrent writer
+    of the same repo key, which produces two distinct failures:
+
+    - the writers interleave bytes into one file, and a torn blob is then
+      atomically renamed into place; and
+    - the first ``os.replace`` consumes the shared temp file, so the remaining
+      writers fail with ``FileNotFoundError`` and their saves are lost.
+
+    Including the pid and a random token gives each writer a private staging
+    file, so the committed artifact is always exactly one writer's complete
+    output. No lock is required: ``save`` is a whole-file overwrite that
+    derives nothing from the file it replaces.
+    """
+    return target.with_name(f"{target.stem}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+
+
 class IndexStore:
     """Persistent symbol index storage.
 
@@ -115,7 +137,7 @@ class IndexStore:
         normalized_repo = normalize_repo_key(index.repo_path)
         self._dir.mkdir(parents=True, exist_ok=True)
         target = self._index_path(normalized_repo)
-        tmp = target.with_suffix(".tmp")
+        tmp = _unique_temp_path(target)
 
         try:
             data = {
@@ -126,7 +148,11 @@ class IndexStore:
                 "version": index.version,
             }
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            tmp.rename(target)
+            # os.replace (not Path.rename): os.rename passes flags=0 on Windows
+            # and raises FileExistsError when the target already exists, which
+            # breaks re-indexing there. os.replace overwrites atomically on
+            # both POSIX and Windows.
+            os.replace(tmp, target)
             stat = target.stat()
             self._cache[target] = (stat.st_mtime_ns, stat.st_size, index)
             log.debug(

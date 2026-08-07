@@ -290,3 +290,186 @@ class TestPathTraversalSafety:
         result = store.get_symbol_content(evil_path, 0, 100)
         # Must return None (rejected) rather than reading the file
         assert result is None
+
+
+class TestConcurrentSaveIntegrity:
+    """save() must never commit a torn index under concurrent writers (AC8).
+
+    The pre-fix implementation derived its temp path as
+    ``target.with_suffix(".tmp")`` -- a DETERMINISTIC name. Two writers for the
+    same repo key therefore shared one temp file, interleaved their bytes into
+    it, and then renamed a corrupted blob into place. Atomic rename protects a
+    reader from seeing a partial file; it does not protect two writers sharing
+    one temp path.
+
+    These tests must FAIL against the deterministic-temp implementation.
+    """
+
+    @staticmethod
+    def _payload(marker: str, n_symbols: int = 4000) -> dict:
+        """Build a symbol map large enough that concurrent writes reliably tear.
+
+        A small payload can be written in a single syscall and would let the
+        race pass by luck, so the test would not be a real RED.
+        """
+        return {
+            f"src/{marker}_{i}.py:function:fn_{i}": {
+                "id": f"src/{marker}_{i}.py:function:fn_{i}",
+                "name": f"fn_{i}",
+                "kind": "function",
+                "file_path": f"src/{marker}_{i}.py",
+                "marker": marker,
+                "docstring": marker * 40,
+            }
+            for i in range(n_symbols)
+        }
+
+    def test_concurrent_threaded_saves_never_commit_torn_index(self, tmp_path):
+        """Concurrent same-key saves from threads must leave a parseable index."""
+        import json
+        import threading
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        repo = "/repo/contended"
+        errors: list[Exception] = []
+        barrier = threading.Barrier(4)
+
+        def writer(marker: str) -> None:
+            idx = CodeIndex(
+                repo_path=repo,
+                files={f"src/{marker}.py": marker * 8},
+                symbols=self._payload(marker),
+            )
+            try:
+                barrier.wait(timeout=30)
+                for _ in range(5):
+                    store.save(idx)
+            except Exception as exc:  # noqa: BLE001 - surfaced via assertion
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer, args=(m,)) for m in ("alpha", "bravo", "charlie", "delta")
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=120)
+
+        assert not errors, f"save() raised under concurrency: {errors}"
+
+        index_files = list(tmp_path.glob("index_*.json"))
+        assert len(index_files) == 1, f"expected exactly one index, got {index_files}"
+
+        # The committed file must be exactly ONE writer's complete output.
+        raw = index_files[0].read_text(encoding="utf-8")
+        data = json.loads(raw)  # torn write raises JSONDecodeError here
+        assert data["repo_path"] == repo
+
+        markers = {sym["marker"] for sym in data["symbols"].values()}
+        assert len(markers) == 1, f"index mixes output from multiple writers: {sorted(markers)}"
+        assert len(data["symbols"]) == 4000, "index is structurally incomplete"
+
+        # load() must also succeed on the committed artifact.
+        fresh = IndexStore(storage_dir=tmp_path)
+        loaded = fresh.load(repo)
+        assert loaded is not None
+        assert len(loaded.symbols) == 4000
+
+    def test_concurrent_subprocess_saves_never_commit_torn_index(self, tmp_path):
+        """Same guarantee across PROCESSES, where no in-process lock could help."""
+        import json
+        import subprocess
+        import sys
+        import textwrap
+
+        repo = "/repo/contended-proc"
+        script = textwrap.dedent(
+            """
+            import sys
+            from lgrep.storage.index_store import CodeIndex, IndexStore
+
+            storage_dir, repo, marker = sys.argv[1], sys.argv[2], sys.argv[3]
+            symbols = {
+                f"src/{marker}_{i}.py:function:fn_{i}": {
+                    "id": f"src/{marker}_{i}.py:function:fn_{i}",
+                    "name": f"fn_{i}",
+                    "kind": "function",
+                    "file_path": f"src/{marker}_{i}.py",
+                    "marker": marker,
+                    "docstring": marker * 40,
+                }
+                for i in range(4000)
+            }
+            store = IndexStore(storage_dir=storage_dir)
+            idx = CodeIndex(repo_path=repo, files={}, symbols=symbols)
+            for _ in range(5):
+                store.save(idx)
+            """
+        )
+        script_path = tmp_path / "_writer.py"
+        script_path.write_text(script, encoding="utf-8")
+        store_dir = tmp_path / "store"
+        store_dir.mkdir()
+
+        # The child does not inherit the test runner's sys.path, so hand it
+        # over explicitly; otherwise `import lgrep` fails in the subprocess.
+        import os as _os
+
+        child_env = dict(_os.environ)
+        child_env["PYTHONPATH"] = _os.pathsep.join(p for p in sys.path if p)
+
+        procs = [
+            subprocess.Popen(  # noqa: S603
+                [sys.executable, str(script_path), str(store_dir), repo, marker],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=child_env,
+            )
+            for marker in ("echo", "foxtrot", "golf", "hotel")
+        ]
+        for p in procs:
+            out, err = p.communicate(timeout=180)
+            assert p.returncode == 0, f"writer failed: {err.decode()[:500]}"
+
+        index_files = list(store_dir.glob("index_*.json"))
+        assert len(index_files) == 1, f"expected exactly one index, got {index_files}"
+
+        data = json.loads(index_files[0].read_text(encoding="utf-8"))
+        markers = {sym["marker"] for sym in data["symbols"].values()}
+        assert len(markers) == 1, f"index mixes output from multiple writers: {sorted(markers)}"
+        assert len(data["symbols"]) == 4000, "index is structurally incomplete"
+
+    def test_save_uses_unique_temp_path_per_writer(self, tmp_path):
+        """Temp paths must not be derivable from the target alone.
+
+        Guards the ROOT CAUSE directly, so a future refactor cannot silently
+        reintroduce a shared temp path while the timing tests pass by luck.
+        """
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        seen: list[str] = []
+
+        real_replace = __import__("os").replace
+
+        def spy(src, dst):
+            seen.append(str(src))
+            return real_replace(src, dst)
+
+        import lgrep.storage.index_store as mod
+
+        original = getattr(mod, "os").replace
+        try:
+            mod.os.replace = spy
+            for i in range(3):
+                store.save(CodeIndex(repo_path="/repo/x", files={}, symbols={f"s{i}": {}}))
+        finally:
+            mod.os.replace = original
+
+        index_temps = [s for s in seen if s.endswith(".tmp")]
+        assert len(index_temps) >= 3, f"expected temp writes, saw {seen}"
+        assert len(set(index_temps)) == len(index_temps), (
+            f"temp path is shared between writers (root cause of the torn-write race): {index_temps}"
+        )
