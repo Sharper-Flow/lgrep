@@ -1,6 +1,6 @@
 """lgrep_index_symbols_folder tool implementation.
 
-Indexes all symbols and candidate Python occurrences in a local folder and
+Indexes all symbols and candidate Python/Go occurrences in a local folder and
 persists to IndexStore.
 """
 
