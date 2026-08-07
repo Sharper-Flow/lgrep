@@ -582,6 +582,12 @@ GO_FIXTURE = textwrap.dedent(
     func (p *Person) String() string { return "p" }
 
     func helper() { fmt.Println("x") }
+
+    func run() {
+        var g Greeter = &Person{}
+        helper()
+        g.Greet("bob")
+    }
     '''
 )
 
@@ -644,3 +650,77 @@ class TestGoExtraction:
         """AC3/C2: type_parameter_list must not break interface disambiguation."""
         by_name = {s.name: s for s in self._symbols(tmp_path)}
         assert by_name["Collection"].kind == "interface"
+
+
+class TestGoOccurrences:
+    """Go candidate occurrences: plain call / attribute / reference kinds (AC4),
+    definition-name exclusion (AC4), and position/enclosing metadata (AC5)."""
+
+    def _occurrences(self, tmp_path):
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "sample.go"
+        src_file.write_text(GO_FIXTURE)
+        _, occurrences = SymbolExtractor().extract_full(src_file, repo_root=tmp_path)
+        return occurrences
+
+    def test_go_occurrences_collected(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        assert len(occurrences) > 0
+
+    def test_go_plain_call_kind(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        helper_occs = [o for o in occurrences if o.name == "helper"]
+        assert len(helper_occs) == 1
+        assert helper_occs[0].kind == "call"
+
+    def test_go_selector_member_is_attribute(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        sprintf = [o for o in occurrences if o.name == "Sprintf"]
+        println = [o for o in occurrences if o.name == "Println"]
+        assert len(sprintf) == 1 and sprintf[0].kind == "attribute"
+        assert len(println) == 1 and println[0].kind == "attribute"
+
+    def test_go_selector_call_of_method_is_attribute(self, tmp_path):
+        # g.Greet("bob") — definition names are excluded, only the call-site
+        # selector member remains, classified as attribute (Python-mirror).
+        occurrences = self._occurrences(tmp_path)
+        greet_occs = [o for o in occurrences if o.name == "Greet"]
+        assert len(greet_occs) == 1
+        assert greet_occs[0].kind == "attribute"
+
+    def test_go_type_usage_is_reference(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        person_occs = [o for o in occurrences if o.name == "Person"]
+        greeter_occs = [o for o in occurrences if o.name == "Greeter"]
+        # Person: receivers (value + pointer) + composite literal — all usages
+        assert len(person_occs) >= 2
+        assert all(o.kind == "reference" for o in person_occs)
+        # Greeter: only the var-declaration type usage; declaration excluded
+        assert len(greeter_occs) == 1
+        assert greeter_occs[0].kind == "reference"
+
+    def test_go_definition_names_excluded(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        names = {o.name for o in occurrences}
+        # package clause identifier, struct field name, interface method elems,
+        # and never-called definition names must not appear as occurrences
+        assert "sample" not in names
+        assert "Name" not in names
+        assert "Len" not in names
+        assert "Reset" not in names
+        assert "String" not in names
+        assert "Collection" not in names
+
+    def test_go_selector_operand_is_reference(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        fmt_occs = [o for o in occurrences if o.name == "fmt"]
+        assert len(fmt_occs) >= 2
+        assert all(o.kind == "reference" for o in fmt_occs)
+
+    def test_go_occurrence_positions_and_enclosing(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        assert all(o.line_number >= 1 for o in occurrences)
+        assert all(o.line_text.strip() for o in occurrences)
+        sprintf = next(o for o in occurrences if o.name == "Sprintf")
+        assert sprintf.enclosing_symbol_id == "sample.go:method:Person.Greet"

@@ -187,6 +187,39 @@ def _occurrence_kind(node, parent) -> str:
     return "reference"
 
 
+def _go_occurrence_kind(node, parent) -> str:
+    """Classify a Go candidate occurrence (identifier / field_identifier /
+    type_identifier) by its AST context. Mirrors the Python kinds."""
+    if parent is None:
+        return "reference"
+
+    # Selector member: the field of `operand.field` is the last child of a
+    # selector_expression. Classified as attribute regardless of whether the
+    # selector is being called (Python-mirror behavior).
+    if parent.type == "selector_expression" and parent.children:
+        if parent.children[-1].id == node.id:
+            return "attribute"
+
+    # Plain call target: identifier is the called expression of a call.
+    if parent.type == "call_expression" and parent.children:
+        if parent.children[0].id == node.id:
+            return "call"
+
+    return "reference"
+
+
+def _is_go_excluded_identifier(node, parent) -> bool:
+    """Return True for Go identifier-position nodes that name declarations
+    rather than usages, beyond what _is_definition_name already covers:
+    struct field names and interface method-element names. The type part of a
+    field_declaration (a type_identifier sibling) is a usage and stays."""
+    if parent is None:
+        return False
+    if node.type == "field_identifier" and parent.type in ("field_declaration", "method_elem"):
+        return True
+    return False
+
+
 def _go_type_kind(node) -> str:
     """Classify a Go type_declaration by scanning type_spec children by node
     type (ordinal positions break on generics, which insert
@@ -242,7 +275,7 @@ def _extract_symbols_and_occurrences_from_tree(
     file_path: str,
     spec: LanguageSpec,
 ) -> tuple[list[Symbol], list[Occurrence]]:
-    """Walk the AST and extract symbols plus Python candidate occurrences."""
+    """Walk the AST and extract symbols plus Python/Go candidate occurrences."""
     symbols: list[Symbol] = []
     occurrences: list[Occurrence] = []
     lines_decoded: list[str] | None = None
@@ -325,11 +358,23 @@ def _extract_symbols_and_occurrences_from_tree(
                     )
                 )
 
-        # Python candidate occurrence extraction
-        if spec.name == "python" and node_type == "identifier":
+        # Candidate occurrence extraction (Python and Go)
+        is_python_occ = spec.name == "python" and node_type == "identifier"
+        is_go_occ = spec.name == "go" and node_type in (
+            "identifier",
+            "field_identifier",
+            "type_identifier",
+        )
+        if is_python_occ or is_go_occ:
             parent = node.parent
-            if not _is_definition_name(node, parent, spec):
-                kind = _occurrence_kind(node, parent)
+            if not _is_definition_name(node, parent, spec) and not (
+                is_go_occ and _is_go_excluded_identifier(node, parent)
+            ):
+                kind = (
+                    _occurrence_kind(node, parent)
+                    if is_python_occ
+                    else _go_occurrence_kind(node, parent)
+                )
                 if kind in _OCCURRENCE_KINDS:
                     line_number = node.start_point[0] + 1
                     if lines_decoded is None:
@@ -419,7 +464,7 @@ class SymbolExtractor:
 
         Returns:
             Tuple of (symbols, occurrences). Occurrences are currently
-            collected for Python only; other languages return an empty list.
+            collected for Python and Go; other languages return an empty list.
             Empty lists are returned if the language is unsupported or the
             file cannot be parsed.
         """
