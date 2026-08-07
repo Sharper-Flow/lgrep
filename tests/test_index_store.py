@@ -829,6 +829,27 @@ class TestSidecarListRepos:
 
         assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
 
+    def test_sidecar_key_normalization_error_falls_back_to_parse(self, tmp_path, monkeypatch):
+        """Untrusted sidecars must not make list_repos fail on resolve errors."""
+        import hashlib
+        import json
+
+        from lgrep.storage import index_store as module
+        from lgrep.storage.index_store import IndexStore
+
+        repo = "/repo/resolve-error"
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps({"repo_path": repo, "files": {}, "symbols": {}}),
+            encoding="utf-8",
+        )
+        (tmp_path / f"index_{key}.meta.json").write_text(
+            json.dumps({"repo_path": repo}), encoding="utf-8"
+        )
+        monkeypatch.setattr(module, "normalize_repo_key", lambda _: (_ for _ in ()).throw(RuntimeError))
+
+        assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
+
     def test_list_repos_never_reads_index_bodies(self, tmp_path, monkeypatch):
         """AC1 (mechanism): when every sidecar is healthy, zero index parses."""
         import json
@@ -905,6 +926,29 @@ class TestSidecarListRepos:
             module.os.replace = original_replace
 
         assert repos == ["/repo/ro"]
+
+    def test_malformed_optional_collections_do_not_break_backfill(self, tmp_path):
+        """An advisory sidecar must not change legacy listing behavior."""
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        repo = "/repo/malformed-optional-collections"
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": repo,
+                    "files": 1,
+                    "symbols": "not-a-mapping",
+                    "occurrences": {"name": "not-a-list"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
 
 
 class TestRepoLock:

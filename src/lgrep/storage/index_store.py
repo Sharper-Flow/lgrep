@@ -124,7 +124,7 @@ def _read_sidecar_repo_path(index_file: Path) -> str | None:
     try:
         if _repo_key(normalize_repo_key(repo_path)) != key:
             return None
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
         return None
     return repo_path
 
@@ -149,14 +149,20 @@ def _write_sidecar(index_file: Path, meta: dict) -> None:
 
 def _meta_from_index_body(repo_path: str, data: dict) -> dict:
     """Build sidecar content from a parsed index body (backfill path)."""
-    occurrences = data.get("occurrences") or {}
+    files = data.get("files")
+    symbols = data.get("symbols")
+    occurrences = data.get("occurrences")
     return {
         "repo_path": repo_path,
         "version": data.get("version", "2.0"),
         "meta_version": 1,
-        "files": len(data.get("files") or {}),
-        "symbols": len(data.get("symbols") or {}),
-        "occurrences": sum(len(v) for v in occurrences.values()),
+        # The sidecar is advisory. A legacy index with malformed optional
+        # collections must still be listed and get a best-effort backfill.
+        "files": len(files) if isinstance(files, dict) else 0,
+        "symbols": len(symbols) if isinstance(symbols, dict) else 0,
+        "occurrences": sum(len(v) for v in occurrences.values() if isinstance(v, list))
+        if isinstance(occurrences, dict)
+        else 0,
         "updated_at": time.time(),
     }
 

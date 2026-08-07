@@ -972,3 +972,32 @@ class TestSidecarAndTmpReclamation:
 
         assert not any(entry["path"] == str(sidecar_link) for entry in results), results
         assert not any(entry["path"] == str(tmp_link) for entry in results), results
+
+    def test_orphan_recheck_preserves_sidecar_of_recreated_index(self, tmp_path, monkeypatch):
+        """Scan→unlink race: an orphan-classified sidecar whose index was
+        recreated between scan and delete must NOT be unlinked."""
+        from lgrep.tools import prune_symbols as module
+
+        repo = tmp_path / "recreated-repo"
+        repo.mkdir()
+        index_file, sidecar = _write_index_with_sidecar(
+            tmp_path, str(repo), age_seconds=7200
+        )
+
+        # Simulate a scan that ran while the index was missing.
+        stale_entry = {
+            "path": str(sidecar),
+            "reason": "orphan_sidecar_json",
+            "bytes": sidecar.stat().st_size,
+            "repo_path": str(repo),
+        }
+        monkeypatch.setattr(
+            module, "find_stale_indexes", lambda *a, **k: [stale_entry]
+        )
+
+        report = module.prune_symbols(storage_dir=tmp_path, dry_run=False)
+
+        assert sidecar.exists(), "sidecar of a recreated index was deleted"
+        assert index_file.exists()
+        assert report["deleted_files"] == 0
+        assert report["failures"] == []

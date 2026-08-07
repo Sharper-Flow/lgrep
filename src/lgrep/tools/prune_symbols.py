@@ -524,6 +524,19 @@ def prune_symbols(
     else:
         for entry in stale:
             entry_path = Path(entry["path"])
+            # Orphan recheck (scan→unlink race): an "orphan" sidecar whose
+            # index has been RECREATED since the scan now belongs to a live
+            # index; deleting it would strip that index's sidecar. A cheap
+            # stat per orphan closes the common case of the race (a recreate
+            # landing mid-prune); the residual microsecond window degrades
+            # to a list_repos() parse + backfill, never corruption.
+            if entry["reason"] == "orphan_sidecar_json":
+                index_name = entry_path.name[: -len(".meta.json")] + ".json"
+                try:
+                    if (entry_path.parent / index_name).exists():
+                        continue
+                except OSError:
+                    continue
             # TOCTOU guard: a symlink could have been swapped in between
             # scan and delete. Refuse to follow symlinks out of the
             # storage tree — record as a failure instead.
