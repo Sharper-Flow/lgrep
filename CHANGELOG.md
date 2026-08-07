@@ -1,3 +1,34 @@
+## 2026-08-07 (v3.2.8)
+
+- chore(adv): checkpoint tk-bbd3fa515816
+- chore(adv): checkpoint tk-76af4dfab277
+- chore(adv): checkpoint tk-b7734e760712
+- chore(backlog): archive three items shipped by fixGoExtractionGaps
+- chore(backlog): add empty-extraction observability item (bl-vEYN_6EQ)
+- fix(index-folder): bump index format to 2.3 for corrected Go extraction
+- chore(adv): checkpoint tk-39d03e9f5635
+- chore(adv): checkpoint tk-dc4762450f42
+- chore(adv): checkpoint tk-6b9af077bb33
+- chore(backlog): record validated Go-extraction follow-ups + prior session items
+- docs(index-folder): update module docstring for Go occurrences
+- fix(parser): support generic pointer receivers in Go method parent lookup
+- chore(adv): checkpoint tk-0078062828f6
+- chore(adv): checkpoint tk-00161cd8d232
+- chore(adv): checkpoint tk-21220d6e6cfb
+- docs+fix(adv-harden): spec/README sidecar semantics, exact sidecar sentinel, test hygiene
+- fix(adv-review): report orphan recheck OSError instead of silently preserving
+- fix(adv-review): harden sidecar reads against malformed state + orphan race
+- chore(adv): checkpoint tk-467e532094b0
+- chore(adv): checkpoint tk-d11d7b21fc6c
+- chore(adv): checkpoint tk-091490ac645f
+- chore(adv): checkpoint tk-d8f6ef5542f6
+- chore(adv): checkpoint tk-fe4a7fe51eb3
+- chore(adv): checkpoint tk-954080f3f431
+- chore(adv): checkpoint tk-dd963e9c5849
+- chore(adv): checkpoint tk-2223c5c9dd54
+- chore(adv): checkpoint tk-731f9f75c994
+- docs: update changelog for v3.2.7
+
 ## 2026-07-31 (v3.2.7)
 
 - fix: pin Vision deployment tool runtime (#10)
