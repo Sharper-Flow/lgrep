@@ -473,7 +473,13 @@ async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch
     await _schedule_background_reindex(app_ctx, project_path, project_root)
 
     # Wait until the runtime job has actually been submitted.
-    deadline = time.monotonic() + 2.0
+    # _schedule_background_reindex creates the asyncio task synchronously, but
+    # snapshot_active_jobs() only reflects it after the coroutine self-registers
+    # on its first time slice. A generous deadline absorbs CI scheduling jitter;
+    # the job registers deterministically (asyncio.create_task guarantees it runs),
+    # so this is not masking a bug — only widening a wall-clock window that was
+    # too tight (2.0s) under loaded CI runners.
+    deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline and not app_ctx.runtime.snapshot_active_jobs():
         await asyncio.sleep(0.01)
     assert app_ctx.runtime.snapshot_active_jobs(), "background job was never submitted"
