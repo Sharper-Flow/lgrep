@@ -199,6 +199,17 @@ def _go_occurrence_kind(node, parent, occ_name: str = "", import_qualifiers=froz
     if parent is None:
         return "reference"
 
+    # Qualified type (Go type positions: alias RHS, struct field types,
+    # parameter types). The package_identifier child is the package
+    # qualifier -> import usage; the type_identifier member -> attribute
+    # (selector-member mirror). Probe-verified: type positions use
+    # qualified_type, not selector_expression.
+    if parent.type == "qualified_type":
+        if node.type == "package_identifier":
+            return "import" if occ_name in import_qualifiers else "reference"
+        if node.type == "type_identifier":
+            return "attribute"
+
     # Selector member: the field of `operand.field` is the last child of a
     # selector_expression. Classified as attribute regardless of whether the
     # selector is being called (Python-mirror behavior).
@@ -306,9 +317,7 @@ def _go_type_declaration_symbols(node, source: bytes, file_path: str) -> list[Sy
             name_node = _find_type_identifier(child)
         if name_node is None:
             continue
-        name = source[name_node.start_byte : name_node.end_byte].decode(
-            "utf-8", errors="replace"
-        )
+        name = source[name_node.start_byte : name_node.end_byte].decode("utf-8", errors="replace")
         emitted.append(
             Symbol(
                 id=make_symbol_id(file_path, kind, name, parent=None),
@@ -500,52 +509,55 @@ def _extract_symbols_and_occurrences_from_tree(
                 )
 
         # Candidate occurrence extraction (Python and Go)
+        parent = node.parent
         is_python_occ = spec.name == "python" and node_type == "identifier"
-        is_go_occ = spec.name == "go" and node_type in (
-            "identifier",
-            "field_identifier",
-            "type_identifier",
+        is_go_occ = spec.name == "go" and (
+            node_type in ("identifier", "field_identifier", "type_identifier")
+            or (
+                # package_identifier only under qualified_type — the import
+                # table classifies it; import_spec aliases are emitted in the
+                # pre-pass and the package_clause name must never be one.
+                node_type == "package_identifier"
+                and parent is not None
+                and parent.type == "qualified_type"
+            )
         )
-        if is_python_occ or is_go_occ:
-            parent = node.parent
-            if not _is_definition_name(node, parent, spec) and not (
-                is_go_occ and _is_go_excluded_identifier(node, parent)
-            ):
-                occ_name = source[node.start_byte : node.end_byte].decode(
-                    "utf-8", errors="replace"
+        if (
+            (is_python_occ or is_go_occ)
+            and not _is_definition_name(node, parent, spec)
+            and not (is_go_occ and _is_go_excluded_identifier(node, parent))
+        ):
+            occ_name = source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+            # The blank identifier `_` (a plain `identifier` outside
+            # import specs) is never a candidate occurrence.
+            if is_go_occ and occ_name == "_":
+                pass
+            else:
+                kind = (
+                    _occurrence_kind(node, parent)
+                    if is_python_occ
+                    else _go_occurrence_kind(node, parent, occ_name, go_import_qualifiers)
                 )
-                # The blank identifier `_` (a plain `identifier` outside
-                # import specs) is never a candidate occurrence.
-                if is_go_occ and occ_name == "_":
-                    pass
-                else:
-                    kind = (
-                        _occurrence_kind(node, parent)
-                        if is_python_occ
-                        else _go_occurrence_kind(node, parent, occ_name, go_import_qualifiers)
+                if kind in _OCCURRENCE_KINDS:
+                    line_number = node.start_point[0] + 1
+                    if lines_decoded is None:
+                        lines_decoded = source.decode("utf-8", errors="replace").splitlines()
+                    line_text = (
+                        lines_decoded[line_number - 1] if line_number <= len(lines_decoded) else ""
                     )
-                    if kind in _OCCURRENCE_KINDS:
-                        line_number = node.start_point[0] + 1
-                        if lines_decoded is None:
-                            lines_decoded = source.decode("utf-8", errors="replace").splitlines()
-                        line_text = (
-                            lines_decoded[line_number - 1]
-                            if line_number <= len(lines_decoded)
-                            else ""
+                    occurrences.append(
+                        Occurrence(
+                            id=make_occurrence_id(file_path, occ_name, node.start_byte),
+                            name=occ_name,
+                            file_path=file_path,
+                            start_byte=node.start_byte,
+                            end_byte=node.end_byte,
+                            line_number=line_number,
+                            line_text=line_text,
+                            kind=kind,
+                            enclosing_symbol_id=_enclosing_id(enclosing_stack),
                         )
-                        occurrences.append(
-                            Occurrence(
-                                id=make_occurrence_id(file_path, occ_name, node.start_byte),
-                                name=occ_name,
-                                file_path=file_path,
-                                start_byte=node.start_byte,
-                                end_byte=node.end_byte,
-                                line_number=line_number,
-                                line_text=line_text,
-                                kind=kind,
-                                enclosing_symbol_id=_enclosing_id(enclosing_stack),
-                            )
-                        )
+                    )
 
         # Push the current symbol onto the enclosing stack before recursing
         child_stack = enclosing_stack

@@ -838,6 +838,10 @@ GO_IMPORT_FIXTURE = textwrap.dedent(
 
     type Config struct{ Name string }
 
+    type StringEncoder = json.Marshaler
+
+    type Holder struct{ W csv.Writer }
+
     func use() {
         fmt.Println("x")
         _ = json.Marshal
@@ -905,3 +909,33 @@ class TestGoImportOccurrences:
     def test_blank_import_yields_no_qualifier_occurrence(self, tmp_path):
         occurrences = self._occurrences(tmp_path)
         assert "embed" not in {o.name for o in occurrences}
+
+    def test_qualified_type_qualifier_is_import(self, tmp_path):
+        """AC3 (type positions): the package qualifier of a qualified_type
+        (alias RHS, struct field type) is an import usage. Grammar: type
+        positions use qualified_type/package_identifier, not
+        selector_expression (probe-verified)."""
+        occurrences = self._occurrences(tmp_path)
+        json_occs = [o for o in occurrences if o.name == "json"]
+        csv_occs = [o for o in occurrences if o.name == "csv"]
+        assert all(o.kind == "import" for o in json_occs)
+        assert all(o.kind == "import" for o in csv_occs)
+        # alias RHS usage + import site + expression usage = at least 3
+        assert len(json_occs) >= 3
+        # field type usage + import site + expression usage = at least 3
+        assert len(csv_occs) >= 3
+
+    def test_qualified_type_member_is_attribute(self, tmp_path):
+        """AC3 mirror parity: the member of a qualified_type (Marshaler,
+        Writer) classifies attribute, mirroring selector members."""
+        occurrences = self._occurrences(tmp_path)
+        marshaler = [o for o in occurrences if o.name == "Marshaler"]
+        writer = [o for o in occurrences if o.name == "Writer"]
+        assert len(marshaler) == 1 and marshaler[0].kind == "attribute"
+        assert len(writer) == 1 and writer[0].kind == "attribute"
+
+    def test_package_clause_identifier_not_collected(self, tmp_path):
+        """C7: package_identifier must only be collected under qualified_type
+        — the `package main` clause identifier is never an occurrence."""
+        occurrences = self._occurrences(tmp_path)
+        assert "main" not in {o.name for o in occurrences}
