@@ -11,6 +11,28 @@ Stale classification (3 reasons):
 - ``unreadable_index_json`` — file missing or JSON unparseable.
 - ``missing_repo_path_field`` — JSON valid but lacks ``repo_path``.
 
+Reclamation classification (2 additional reasons, additive — the strict
+``_INDEX_FILE_RE`` guard is unchanged):
+- ``orphan_sidecar_json`` — ``index_<hash16>.meta.json`` with no matching
+  index (pre-existing orphans, out-of-band index deletion, or the crash
+  window between the two unlinks in ``delete_index``).
+- ``stale_index_tmp``    — writer staging files older than the grace
+  window. Both the legacy deterministic shape (``index_<hash16>.tmp``)
+  and the writer-unique shape (``index_<hash16>[.meta].<pid>.<hex8>.tmp``)
+  are covered. ``.index_<hash16>.lock`` files are NEVER swept: removing a
+  lock inode another process waits on silently breaks mutual exclusion.
+
+Sidecar-cheap classification: when an index has a key-verified sidecar,
+``_classify`` takes ``repo_path`` from it WITHOUT parsing the index body.
+Consequence (accepted, documented): a corrupt index behind a valid
+sidecar is not classified ``unreadable_index_json``. Post-fix writers
+cannot produce torn indexes (writer-unique temp + ``os.replace``), so
+that state requires out-of-band corruption and self-heals on the next
+re-index (``load()`` returns None and the index is rewritten). Legacy
+corrupt indexes have no sidecars and still take the parse path. All
+stale-reason semantics are IDENTICAL to the parse-only implementation
+for sidecar-less indexes.
+
 Non-local entries (``repo_path`` starting with ``github:``) are skipped
 outright — they have no local filesystem path to staleness-check.
 
@@ -45,6 +67,8 @@ import structlog
 from typing_extensions import TypedDict
 
 from lgrep.storage.index_store import DEFAULT_SYMBOLS_DIR as _DEFAULT_SYMBOLS_DIR
+from lgrep.storage.index_store import _read_sidecar_repo_path as _read_sidecar_repo_path
+from lgrep.storage.index_store import _sidecar_for_index as _sidecar_for_index
 from lgrep.tools._meta import make_meta
 
 log = structlog.get_logger()
@@ -57,6 +81,16 @@ log = structlog.get_logger()
 # unrelated files under the storage root from being unlinked.
 _INDEX_FILE_RE = re.compile(r"^index_[0-9a-f]{16}\.json$")
 
+# Reclamation shapes (additive; the index guard above is NOT widened).
+# Sidecars are only reclaimable when orphaned (no matching index) or as
+# companions of a stale index.
+_ORPHAN_SIDECAR_RE = re.compile(r"^index_[0-9a-f]{16}\.meta\.json$")
+# Writer staging files. The legacy deterministic shape
+# (``index_<hash16>.tmp``) and the writer-unique shapes
+# (``index_<hash16>[.meta].<pid>.<hex8>.tmp``) produced by
+# ``index_store._unique_temp_path``.
+_STALE_TMP_RE = re.compile(r"^index_[0-9a-f]{16}(?:\.meta)?(?:\.\d+\.[0-9a-f]{8})?\.tmp$")
+
 # Non-local repo_path prefix. ``github:owner/name@ref`` keys have no
 # local filesystem path to staleness-check; skip them outright.
 _NONLOCAL_PREFIX = "github:"
@@ -65,6 +99,8 @@ StaleReason = Literal[
     "repo_path_enoent",
     "unreadable_index_json",
     "missing_repo_path_field",
+    "orphan_sidecar_json",
+    "stale_index_tmp",
 ]
 
 # Grace window: ambiguous reasons can be produced by an indexer mid-write
@@ -161,13 +197,50 @@ class _StaleIndexResults(list[StaleEntry]):
         self.classified_repo_paths = classified_repo_paths
 
 
+def _classify_by_repo_path(repo_path: str) -> tuple[StaleReason | None, str]:
+    """Classify by ``repo_path`` alone — shared tail of the sidecar fast
+    path and the index-parse path, so both assign reasons identically."""
+    # Non-local entries have no on-disk path to staleness-check. Skip.
+    if repo_path.startswith(_NONLOCAL_PREFIX):
+        return None, repo_path
+
+    try:
+        if not Path(repo_path).is_dir():
+            return "repo_path_enoent", repo_path
+    except PermissionError:
+        # Transient FS error (unmounted drive, EACCES) — preserve.
+        return None, repo_path
+    except OSError:
+        # Same defensive stance as prune_orphans' PermissionError branch:
+        # any OS-level failure checking repo_path existence is treated as
+        # transient and the index is left alone.
+        return None, repo_path
+
+    return None, repo_path
+
+
 def _classify(index_file: Path) -> tuple[StaleReason | None, str | None]:
     """Classify a single ``index_<hash16>.json`` file.
 
     Returns ``(reason, repo_path_from_json)``. ``reason=None`` means the
     file is healthy, non-local (github:), or transiently unreadable on
     the repo_path side; otherwise one of the stable ``StaleReason`` values.
+
+    Sidecar fast path: a key-verified sidecar supplies ``repo_path``
+    without parsing the index body (see module docstring for the accepted
+    corrupt-index blind spot). The existence re-check guards the
+    scan→classify race: if the index vanished after ``iterdir``, there is
+    nothing to classify even if its sidecar lingers.
     """
+    sidecar_repo_path = _read_sidecar_repo_path(index_file)
+    if sidecar_repo_path is not None:
+        try:
+            if not index_file.is_file():
+                return None, None
+        except OSError:
+            return None, None
+        return _classify_by_repo_path(sidecar_repo_path)
+
     try:
         raw = index_file.read_text(encoding="utf-8")
     except OSError:
@@ -189,23 +262,7 @@ def _classify(index_file: Path) -> tuple[StaleReason | None, str | None]:
     if not repo_path or not isinstance(repo_path, str):
         return "missing_repo_path_field", None
 
-    # Non-local entries have no on-disk path to staleness-check. Skip.
-    if repo_path.startswith(_NONLOCAL_PREFIX):
-        return None, repo_path
-
-    try:
-        if not Path(repo_path).is_dir():
-            return "repo_path_enoent", repo_path
-    except PermissionError:
-        # Transient FS error (unmounted drive, EACCES) — preserve.
-        return None, repo_path
-    except OSError:
-        # Same defensive stance as prune_orphans' PermissionError branch:
-        # any OS-level failure checking repo_path existence is treated as
-        # transient and the index is left alone.
-        return None, repo_path
-
-    return None, repo_path
+    return _classify_by_repo_path(repo_path)
 
 
 def _scan_indexes(
@@ -278,6 +335,84 @@ def _scan_indexes(
                 "repo_path": repo_path,
             }
         )
+        # Companion sidecar: a stale index drags its sidecar with it, so the
+        # execute path unlinks both and dry-run accounts for both. It rides
+        # the index's verdict — no independent grace or active-set check.
+        sidecar = _sidecar_for_index(child)
+        try:
+            if sidecar.is_file() and not sidecar.is_symlink():
+                stale.append(
+                    {
+                        "path": str(sidecar),
+                        "reason": reason,
+                        "bytes": sidecar.stat().st_size,
+                        "repo_path": repo_path,
+                    }
+                )
+        except OSError:
+            # Sidecar vanished between checks — nothing extra to reclaim.
+            pass
+
+    # Reclamation pass over the same directory listing. Shapes are additive
+    # and strict; the index guard is unchanged above.
+    names = {child.name for child in entries}
+    for child in entries:
+        if _ORPHAN_SIDECAR_RE.match(child.name):
+            index_name = child.name[: -len(".meta.json")] + ".json"
+            if index_name in names:
+                continue  # legitimate sidecar with a live index
+            try:
+                if child.is_symlink() or not child.is_file():
+                    continue
+            except (PermissionError, OSError):
+                continue
+            # Active set: an in-memory project may be mid-recreate.
+            orphan_repo_path = _read_sidecar_repo_path(
+                child.with_name(index_name)
+            )
+            if orphan_repo_path is not None and orphan_repo_path in active_paths:
+                continue
+            # Grace: a fresh orphan may sit in the tiny delete_index crash
+            # window (index unlinked, sidecar unlink imminent) or a
+            # concurrent prune's unlink path — preserve it.
+            if _mtime_recent(child, grace_seconds):
+                continue
+            try:
+                size = child.stat().st_size
+            except OSError:
+                continue
+            stale.append(
+                {
+                    "path": str(child),
+                    "reason": "orphan_sidecar_json",
+                    "bytes": size,
+                    "repo_path": orphan_repo_path,
+                }
+            )
+        elif _STALE_TMP_RE.match(child.name):
+            try:
+                if child.is_symlink() or not child.is_file():
+                    continue
+            except (PermissionError, OSError):
+                continue
+            # Grace is the ONLY protection for a live writer's staging file.
+            # Writer-unique temps live only for the local write+replace
+            # (seconds); anything older than the window is a crashed writer's
+            # orphan.
+            if _mtime_recent(child, grace_seconds):
+                continue
+            try:
+                size = child.stat().st_size
+            except OSError:
+                continue
+            stale.append(
+                {
+                    "path": str(child),
+                    "reason": "stale_index_tmp",
+                    "bytes": size,
+                    "repo_path": None,
+                }
+            )
 
     return stale, classified_repo_paths
 

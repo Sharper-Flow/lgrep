@@ -638,3 +638,337 @@ def test_logging_unlink_failed(tmp_path, monkeypatch):
     ]
     assert len(matching) == 1
     assert "blocked" in matching[0]["error"]
+
+
+# ---------------------------------------------------------------------------
+# Sidecar-cheap classification + sidecar/tmp reclamation (fixListReposStoreScan)
+#
+# Fixtures here are key-consistent: the index filename key is derived from
+# repo_path exactly as IndexStore.save() derives it, unlike _make_index
+# which keys by an arbitrary label.
+# ---------------------------------------------------------------------------
+
+
+def _store_key(repo_path: str) -> str:
+    from lgrep.storage.index_store import _repo_key, normalize_repo_key
+
+    return _repo_key(normalize_repo_key(repo_path))
+
+
+def _write_index_with_sidecar(
+    storage_root: Path,
+    repo_path: str,
+    *,
+    index_body: str | None = None,
+    corrupt_sidecar: bool = False,
+    sidecar_repo_path: str | None = None,
+    age_seconds: int | None = None,
+) -> tuple[Path, Path]:
+    """Write an index_{key}.json + index_{key}.meta.json pair keyed by repo_path."""
+    key = _store_key(repo_path)
+    index_file = storage_root / f"index_{key}.json"
+    index_file.write_text(
+        index_body
+        if index_body is not None
+        else json.dumps(
+            {
+                "repo_path": repo_path,
+                "files": {},
+                "symbols": {"s": {}},
+                "occurrences": {},
+                "version": "2.1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    sidecar = storage_root / f"index_{key}.meta.json"
+    if corrupt_sidecar:
+        sidecar.write_text("{ not json", encoding="utf-8")
+    else:
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "repo_path": sidecar_repo_path if sidecar_repo_path is not None else repo_path,
+                    "version": "2.1",
+                    "meta_version": 1,
+                    "files": 0,
+                    "symbols": 1,
+                    "occurrences": 0,
+                    "updated_at": _time.time(),
+                }
+            ),
+            encoding="utf-8",
+        )
+    if age_seconds is not None:
+        _age(index_file, age_seconds)
+        _age(sidecar, age_seconds)
+    return index_file, sidecar
+
+
+class TestSidecarCheapClassification:
+    """_classify must not parse the index body when a valid sidecar exists."""
+
+    def test_valid_sidecar_skips_index_parse(self, tmp_path, monkeypatch):
+        import json as json_mod
+
+        from lgrep.tools import prune_symbols as module
+
+        repo = tmp_path / "live-repo"
+        repo.mkdir()
+        index_file, _ = _write_index_with_sidecar(tmp_path, str(repo))
+
+        # Make the index body unparseable-on-read: any full parse attempt
+        # explodes, proving the sidecar path never touches the body.
+        original_loads = json_mod.loads
+
+        def guard_loads(raw, *args, **kwargs):
+            if '"symbols"' in str(raw) and "meta_version" not in str(raw):
+                raise AssertionError("_classify parsed an index body despite valid sidecar")
+            return original_loads(raw, *args, **kwargs)
+
+        monkeypatch.setattr(module.json, "loads", guard_loads)
+        reason, repo_path = module._classify(index_file)
+        assert reason is None  # live repo on disk
+        assert repo_path == str(repo)
+
+    def test_corrupt_index_with_valid_sidecar_is_trusted(self, tmp_path):
+        """Documents the accepted blind spot: a key-verified sidecar is
+        authoritative for repo_path even if the index body is corrupt.
+
+        Post-fix writers cannot produce torn indexes (unique-temp +
+        os.replace), so this state requires out-of-band corruption; the
+        corrupt index self-heals on next re-index. Legacy corrupt indexes
+        have no sidecars and still classify unreadable below.
+        """
+        from lgrep.tools.prune_symbols import _classify
+
+        repo = tmp_path / "live-repo"
+        repo.mkdir()
+        index_file, _ = _write_index_with_sidecar(
+            tmp_path, str(repo), index_body="{ torn garbage"
+        )
+
+        reason, repo_path = _classify(index_file)
+        assert reason is None
+        assert repo_path == str(repo)
+
+    def test_sidecarless_index_uses_parse_path(self, tmp_path):
+        """Legacy indexes (no sidecar) keep EXACTLY today's classification."""
+        from lgrep.tools.prune_symbols import _classify
+
+        repo = tmp_path / "gone-repo"
+        key = _store_key(str(repo))
+        index_file = tmp_path / f"index_{key}.json"
+        index_file.write_text(
+            json.dumps(
+                {
+                    "repo_path": str(repo),
+                    "files": {},
+                    "symbols": {},
+                    "occurrences": {},
+                    "version": "2.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        reason, repo_path = _classify(index_file)
+        assert reason == "repo_path_enoent"
+        assert repo_path == str(repo)
+
+    def test_sidecarless_corrupt_index_still_unreadable(self, tmp_path):
+        from lgrep.tools.prune_symbols import _classify
+
+        index_file = tmp_path / f"index_{_key('torn')}.json"
+        index_file.write_text("{ torn garbage", encoding="utf-8")
+
+        reason, repo_path = _classify(index_file)
+        assert reason == "unreadable_index_json"
+        assert repo_path is None
+
+    def test_foreign_key_sidecar_falls_back_to_parse(self, tmp_path):
+        """A sidecar whose repo_path does not hash to the file key is distrusted."""
+        from lgrep.tools.prune_symbols import _classify
+
+        repo = tmp_path / "gone-repo"  # not created -> enoent via the INDEX body
+        index_file, _ = _write_index_with_sidecar(
+            tmp_path, str(repo), sidecar_repo_path="/some/other/repo"
+        )
+
+        reason, repo_path = _classify(index_file)
+        assert reason == "repo_path_enoent"
+        assert repo_path == str(repo)
+
+    def test_corrupt_sidecar_falls_back_to_parse(self, tmp_path):
+        from lgrep.tools.prune_symbols import _classify
+
+        repo = tmp_path / "gone-repo"
+        index_file, _ = _write_index_with_sidecar(tmp_path, str(repo), corrupt_sidecar=True)
+
+        reason, repo_path = _classify(index_file)
+        assert reason == "repo_path_enoent"
+        assert repo_path == str(repo)
+
+    def test_github_sidecar_skipped_like_parse_path(self, tmp_path):
+        from lgrep.tools.prune_symbols import _classify
+
+        repo = "github:owner/name@main"
+        index_file, _ = _write_index_with_sidecar(tmp_path, repo)
+
+        reason, repo_path = _classify(index_file)
+        assert reason is None
+        assert repo_path == repo
+
+
+class TestSidecarAndTmpReclamation:
+    """AC5: the prune path reclaims orphan sidecars and stale temp files,
+    and removes a stale index's sidecar alongside it."""
+
+    def test_orphan_sidecar_is_reclaimed(self, tmp_path):
+        repo = str(tmp_path / "gone")
+        _, sidecar = _write_index_with_sidecar(tmp_path, repo, age_seconds=7200)
+        # Remove the index -> sidecar is orphaned.
+        for p in tmp_path.glob("index_*.json"):
+            if ".meta." not in p.name:
+                p.unlink()
+
+        monkeypatched = None  # grace via env set below
+        import os as _os
+
+        _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "3600"
+        try:
+            results = find_stale_indexes(storage_dir=tmp_path)
+        finally:
+            _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "0"
+
+        assert any(
+            entry["reason"] == "orphan_sidecar_json" and entry["path"] == str(sidecar)
+            for entry in results
+        ), results
+        assert monkeypatched is None
+
+    def test_orphan_sidecar_within_grace_is_preserved(self, tmp_path):
+        import os as _os
+
+        repo = str(tmp_path / "gone")
+        _write_index_with_sidecar(tmp_path, repo)  # fresh mtimes
+        for p in tmp_path.glob("index_*.json"):
+            if ".meta." not in p.name:
+                p.unlink()
+
+        _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "3600"
+        try:
+            results = find_stale_indexes(storage_dir=tmp_path)
+        finally:
+            _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "0"
+
+        assert not any(entry["reason"] == "orphan_sidecar_json" for entry in results), results
+
+    def test_orphan_sidecar_of_active_repo_is_preserved(self, tmp_path):
+        import os as _os
+
+        repo_dir = tmp_path / "active-repo"
+        repo_dir.mkdir()
+        _, sidecar = _write_index_with_sidecar(tmp_path, str(repo_dir), age_seconds=7200)
+        for p in tmp_path.glob("index_*.json"):
+            if ".meta." not in p.name:
+                p.unlink()
+
+        _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "3600"
+        try:
+            results = find_stale_indexes(
+                storage_dir=tmp_path, active_set=[str(repo_dir)]
+            )
+        finally:
+            _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "0"
+
+        assert not any(entry["path"] == str(sidecar) for entry in results), results
+
+    def test_stale_unique_temp_is_swept(self, tmp_path):
+        tmp = tmp_path / f"index_{_key('x')}.12345.abcdef01.tmp"
+        tmp.write_text("partial", encoding="utf-8")
+        _age(tmp, 7200)
+
+        results = find_stale_indexes(storage_dir=tmp_path)
+
+        assert any(
+            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp)
+            for entry in results
+        ), results
+
+    def test_stale_legacy_temp_is_swept(self, tmp_path):
+        tmp = tmp_path / f"index_{_key('x')}.tmp"
+        tmp.write_text("partial", encoding="utf-8")
+        _age(tmp, 7200)
+
+        results = find_stale_indexes(storage_dir=tmp_path)
+
+        assert any(
+            entry["reason"] == "stale_index_tmp" and entry["path"] == str(tmp)
+            for entry in results
+        ), results
+
+    def test_fresh_temp_is_preserved(self, tmp_path):
+        import os as _os
+
+        tmp = tmp_path / f"index_{_key('x')}.12345.abcdef01.tmp"
+        tmp.write_text("partial", encoding="utf-8")  # fresh mtime
+
+        _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "3600"
+        try:
+            results = find_stale_indexes(storage_dir=tmp_path)
+        finally:
+            _os.environ["LGREP_PRUNE_MIN_AGE_S"] = "0"
+
+        assert not any(entry["reason"] == "stale_index_tmp" for entry in results), results
+
+    def test_lock_file_is_never_swept(self, tmp_path):
+        lock = tmp_path / f".index_{_key('x')}.lock"
+        lock.touch()
+        _age(lock, 7200)
+
+        results = find_stale_indexes(storage_dir=tmp_path)
+
+        assert not any(".lock" in entry["path"] for entry in results), results
+
+    def test_stale_index_removes_its_sidecar_too(self, tmp_path):
+        """Execute must unlink the sidecar riding with a stale index (AC5)."""
+        repo = str(tmp_path / "gone-repo")
+        index_file, sidecar = _write_index_with_sidecar(tmp_path, repo, age_seconds=7200)
+
+        report = prune_symbols(storage_dir=tmp_path, dry_run=False)
+
+        assert not index_file.exists()
+        assert not sidecar.exists(), "sidecar survived prune of its stale index"
+        assert report["deleted_files"] == 2
+        assert report["failures"] == []
+
+    def test_dry_run_reports_sidecar_companion_bytes(self, tmp_path):
+        repo = str(tmp_path / "gone-repo")
+        index_file, sidecar = _write_index_with_sidecar(tmp_path, repo, age_seconds=7200)
+
+        report = prune_symbols(storage_dir=tmp_path, dry_run=True)
+
+        assert index_file.exists() and sidecar.exists(), "dry_run mutated the store"
+        paths = [entry["path"] for entry in report["stale_indexes"]]
+        assert str(index_file) in paths and str(sidecar) in paths, paths
+        expected = index_file.stat().st_size + sidecar.stat().st_size
+        assert report["reclaimed_bytes"] == expected
+
+    def test_symlinked_sidecar_and_tmp_refused_at_scan(self, tmp_path):
+        sidecar_target = tmp_path / "elsewhere-meta"
+        sidecar_target.write_text("x", encoding="utf-8")
+        tmp_target = tmp_path / "elsewhere-tmp"
+        tmp_target.write_text("x", encoding="utf-8")
+        _age(sidecar_target, 7200)
+        _age(tmp_target, 7200)
+
+        sidecar_link = tmp_path / f"index_{_key('y')}.meta.json"
+        tmp_link = tmp_path / f"index_{_key('y')}.12345.abcdef01.tmp"
+        sidecar_link.symlink_to(sidecar_target)
+        tmp_link.symlink_to(tmp_target)
+
+        results = find_stale_indexes(storage_dir=tmp_path)
+
+        assert not any(entry["path"] == str(sidecar_link) for entry in results), results
+        assert not any(entry["path"] == str(tmp_link) for entry in results), results
