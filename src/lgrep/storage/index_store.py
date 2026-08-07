@@ -95,6 +95,72 @@ def _unique_temp_path(target: Path) -> Path:
     return target.with_name(f"{target.stem}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
 
 
+def _sidecar_for_index(index_file: Path) -> Path:
+    """Return the sidecar path paired with an ``index_{key}.json`` file."""
+    return index_file.with_name(f"{index_file.stem}.meta.json")
+
+
+def _read_sidecar_repo_path(index_file: Path) -> str | None:
+    """Read ``repo_path`` from an index's sidecar, with key verification.
+
+    Returns ``None`` — the caller must fall back to parsing the index — when
+    the sidecar is missing, unreadable, corrupt, or carries a ``repo_path``
+    that does not hash back to this index's key. The sidecar is untrusted
+    disk input and advisory only: verifying ``_repo_key(repo_path)`` against
+    the filename key (P33/P38) means a copied or hand-edited sidecar degrades
+    to the authoritative parse path instead of poisoning results.
+    """
+    sidecar = _sidecar_for_index(index_file)
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    repo_path = data.get("repo_path")
+    if not isinstance(repo_path, str) or not repo_path:
+        return None
+    key = index_file.stem[len("index_"):]
+    try:
+        if _repo_key(normalize_repo_key(repo_path)) != key:
+            return None
+    except (OSError, ValueError):
+        return None
+    return repo_path
+
+
+def _write_sidecar(index_file: Path, meta: dict) -> None:
+    """Write an index's sidecar via writer-unique temp + os.replace.
+
+    Best-effort: the sidecar is advisory, so a failed write (read-only or
+    full filesystem) must degrade to "slow but correct" — never raise. The
+    caller's next read takes the parse fallback and retries the backfill.
+    """
+    sidecar = _sidecar_for_index(index_file)
+    tmp = _unique_temp_path(sidecar)
+    try:
+        tmp.write_text(json.dumps(meta, separators=(",", ":")), encoding="utf-8")
+        os.replace(tmp, sidecar)
+    except OSError as e:
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
+        log.warning("index_sidecar_save_failed", path=str(sidecar), error=str(e))
+
+
+def _meta_from_index_body(repo_path: str, data: dict) -> dict:
+    """Build sidecar content from a parsed index body (backfill path)."""
+    occurrences = data.get("occurrences") or {}
+    return {
+        "repo_path": repo_path,
+        "version": data.get("version", "2.0"),
+        "meta_version": 1,
+        "files": len(data.get("files") or {}),
+        "symbols": len(data.get("symbols") or {}),
+        "occurrences": sum(len(v) for v in occurrences.values()),
+        "updated_at": time.time(),
+    }
+
+
 class IndexStore:
     """Persistent symbol index storage.
 
@@ -183,19 +249,7 @@ class IndexStore:
                 "occurrences": sum(len(v) for v in index.occurrences.values()),
                 "updated_at": time.time(),
             }
-            meta_target = self._meta_path(normalized_repo)
-            meta_tmp = _unique_temp_path(meta_target)
-            try:
-                meta_tmp.write_text(json.dumps(meta, separators=(",", ":")), encoding="utf-8")
-                os.replace(meta_tmp, meta_target)
-            except OSError as e:
-                # The sidecar is advisory: a missing one degrades list_repos()
-                # to today's parse path and is backfilled on the next read.
-                # Raising here would falsely report a failed save for an index
-                # that IS durably committed.
-                with contextlib.suppress(OSError):
-                    meta_tmp.unlink(missing_ok=True)
-                log.warning("index_sidecar_save_failed", repo=normalized_repo, error=str(e))
+            _write_sidecar(target, meta)
             stat = target.stat()
             self._cache[target] = (stat.st_mtime_ns, stat.st_size, index)
             log.debug(
@@ -258,16 +312,29 @@ class IndexStore:
 
         repos = []
         for index_file in self._dir.glob("index_*.json"):
-            # The glob also matches index_{key}.meta.json sidecars — exclude
-            # them here so a sidecar is never mistaken for an index. (The
-            # sidecar-first read path replaces this loop entirely downstream.)
+            # Iteration is driven by INDEX files only. Sidecars never enter
+            # the candidate set, so an orphaned sidecar (index deleted out
+            # of band) can never surface as a live repo — AC9 is a property
+            # of this loop, not a runtime check.
             if ".meta." in index_file.name:
                 continue
-            try:
-                data = json.loads(index_file.read_text(encoding="utf-8"))
-                repos.append(data["repo_path"])
-            except (json.JSONDecodeError, KeyError, OSError):
-                pass
+            repo_path = _read_sidecar_repo_path(index_file)
+            if repo_path is None:
+                # Missing / corrupt / foreign-key sidecar: authoritative path.
+                try:
+                    data = json.loads(index_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                candidate = data.get("repo_path")
+                if not isinstance(candidate, str) or not candidate:
+                    continue
+                repo_path = candidate
+                # Backfill so the NEXT list_repos() is cheap. Best-effort;
+                # failure here must never break listing.
+                _write_sidecar(index_file, _meta_from_index_body(repo_path, data))
+            repos.append(repo_path)
 
         return repos
 

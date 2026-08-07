@@ -674,3 +674,234 @@ class TestDeleteRemovesSidecar:
         store.delete_index("/repo/locked")
 
         assert lock_file.is_file(), "delete_index() removed the lock file"
+
+
+class TestSidecarListRepos:
+    """list_repos() must read sidecars, never index bodies (AC1/AC2/AC3/AC9)."""
+
+    def test_result_set_matches_parse_baseline(self, tmp_path):
+        """AC2: same repos as a store written by the pre-sidecar version."""
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        expected = []
+        for name in ("alpha", "bravo", "charlie"):
+            repo = f"/repo/{name}"
+            expected.append(repo)
+            key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+            # Legacy pretty-printed index, NO sidecar (pre-change store shape).
+            (tmp_path / f"index_{key}.json").write_text(
+                json.dumps(
+                    {
+                        "repo_path": repo,
+                        "files": {"a.py": "h"},
+                        "symbols": {"s": {}},
+                        "occurrences": {},
+                        "version": "2.0",
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+        repos = IndexStore(storage_dir=tmp_path).list_repos()
+        assert sorted(repos) == sorted(expected)
+
+    def test_missing_sidecar_is_backfilled(self, tmp_path):
+        """AC3: legacy index without sidecar is still listed, then backfilled."""
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        repo = "/repo/backfill"
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": repo,
+                    "files": {},
+                    "symbols": {"s": {}},
+                    "occurrences": {},
+                    "version": "2.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+        meta = tmp_path / f"index_{key}.meta.json"
+        assert not meta.exists(), "precondition: no sidecar"
+
+        store = IndexStore(storage_dir=tmp_path)
+        assert store.list_repos() == [repo]
+        assert meta.is_file(), "list_repos() did not backfill the sidecar"
+
+        sidecar = json.loads(meta.read_text(encoding="utf-8"))
+        assert sidecar["repo_path"] == repo
+        assert sidecar["symbols"] == 1
+
+    def test_sidecar_without_index_is_not_listed(self, tmp_path):
+        """AC9: an orphaned sidecar must never surface as a live repo."""
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        meta = tmp_path / "index_0123456789abcdef.meta.json"
+        meta.write_text(
+            json.dumps(
+                {
+                    "repo_path": "/repo/phantom",
+                    "version": "2.0",
+                    "meta_version": 1,
+                    "files": 0,
+                    "symbols": 0,
+                    "occurrences": 0,
+                    "updated_at": 1.0,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert IndexStore(storage_dir=tmp_path).list_repos() == []
+
+    def test_corrupt_sidecar_falls_back_to_parse(self, tmp_path):
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        repo = "/repo/corrupt-meta"
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": repo,
+                    "files": {},
+                    "symbols": {},
+                    "occurrences": {},
+                    "version": "2.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / f"index_{key}.meta.json").write_text("{ not valid json", encoding="utf-8")
+
+        assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
+
+    def test_foreign_key_sidecar_falls_back_to_parse(self, tmp_path):
+        """A sidecar whose repo_path hashes to a DIFFERENT key must be distrusted."""
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        repo = "/repo/rightful"
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        (tmp_path / f"index_{key}.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": repo,
+                    "files": {},
+                    "symbols": {},
+                    "occurrences": {},
+                    "version": "2.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+        # Valid JSON, but repo_path does NOT hash to this file's key —
+        # simulates a copied/hand-edited sidecar (P38 unvalidated join).
+        (tmp_path / f"index_{key}.meta.json").write_text(
+            json.dumps(
+                {
+                    "repo_path": "/repo/intruder",
+                    "version": "2.0",
+                    "meta_version": 1,
+                    "files": 0,
+                    "symbols": 0,
+                    "occurrences": 0,
+                    "updated_at": 1.0,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert IndexStore(storage_dir=tmp_path).list_repos() == [repo]
+
+    def test_list_repos_never_reads_index_bodies(self, tmp_path, monkeypatch):
+        """AC1 (mechanism): when every sidecar is healthy, zero index parses."""
+        import json
+
+        from lgrep.storage import index_store as module
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        for i in range(4):
+            store.save(CodeIndex(repo_path=f"/repo/{i}", files={}, symbols={"s": {}}))
+
+        original_loads = json.loads
+
+        def tracking_loads(raw, *args, **kwargs):
+            obj = original_loads(raw, *args, **kwargs)
+            # Index bodies carry "files"+"symbols"; sidecars carry meta_version.
+            assert "meta_version" in obj, "list_repos() parsed an index body"
+            return obj
+
+        monkeypatch.setattr(module.json, "loads", tracking_loads)
+        repos = IndexStore(storage_dir=tmp_path).list_repos()
+        assert len(repos) == 4
+
+    def test_list_repos_latency_independent_of_index_size(self, tmp_path):
+        """AC1 (scale): a fat index must not slow listing.
+
+        Uses in-store structure rather than wall-clock thresholds — wall-clock
+        thresholds are flaky under load. A parse-driven implementation's cost
+        is proportional to payload bytes; a sidecar-driven one is not. The
+        8MB fat index would make a parse-driven implementation materially
+        slower, so a generous ratio still discriminates.
+        """
+        import time
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        fat_symbols = {f"s{i}": {"docstring": "x" * 2000} for i in range(4000)}  # ~8MB body
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(CodeIndex(repo_path="/repo/fat", files={}, symbols=fat_symbols))
+        for i in range(20):
+            store.save(CodeIndex(repo_path=f"/repo/thin-{i}", files={}, symbols={"s": {}}))
+
+        timings = []
+        for _ in range(3):
+            t0 = time.monotonic()
+            repos = IndexStore(storage_dir=tmp_path).list_repos()
+            timings.append(time.monotonic() - t0)
+        assert len(repos) == 21
+        assert max(timings) < 1.0, f"list_repos too slow with sidecars present: {timings}"
+
+    def test_read_only_dir_returns_results_without_backfill(self, tmp_path):
+        """Backfill failure must never break listing (read-only FS simulation)."""
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(CodeIndex(repo_path="/repo/ro", files={}, symbols={"s": {}}))
+
+        import lgrep.storage.index_store as module
+
+        original_replace = module.os.replace
+
+        def exploding_replace(src, dst):
+            if str(dst).endswith(".meta.json"):
+                raise OSError("read-only file system")
+            return original_replace(src, dst)
+
+        try:
+            module.os.replace = exploding_replace
+            # Delete the sidecar written by save, then force backfill to fail.
+            for p in tmp_path.glob("*.meta.json"):
+                p.unlink()
+            repos = IndexStore(storage_dir=tmp_path).list_repos()
+        finally:
+            module.os.replace = original_replace
+
+        assert repos == ["/repo/ro"]
