@@ -192,6 +192,33 @@ def test_prune_skips_active_set_entries(tmp_path):
     assert dry_run["stale_indexes"] == []
 
 
+def test_prune_classifies_each_index_once(tmp_path, monkeypatch):
+    """AC6: one classification pass serves active accounting and pruning."""
+    from lgrep.tools import prune_symbols as module
+
+    index_count = 3
+    for index in range(index_count):
+        _make_index(
+            tmp_path,
+            f"classification-count-{index}",
+            repo_path=str(tmp_path / f"missing-repo-{index}"),
+        )
+
+    original_classify = module._classify
+    classified_files = []
+
+    def counting_classify(index_file):
+        classified_files.append(index_file)
+        return original_classify(index_file)
+
+    monkeypatch.setattr(module, "_classify", counting_classify)
+
+    report = module.prune_symbols(storage_dir=tmp_path, dry_run=True)
+
+    assert len(classified_files) == index_count
+    assert len(report["stale_indexes"]) == index_count
+
+
 # ---------------------------------------------------------------------------
 # Symlink refusal (AC6) — scan and delete time
 # ---------------------------------------------------------------------------

@@ -149,6 +149,18 @@ class PruneSymbolsReport(TypedDict):
     _meta: dict
 
 
+class _StaleIndexResults(list[StaleEntry]):
+    """List-compatible stale results carrying the single-pass classifications."""
+
+    def __init__(
+        self,
+        entries: list[StaleEntry],
+        classified_repo_paths: list[str],
+    ) -> None:
+        super().__init__(entries)
+        self.classified_repo_paths = classified_repo_paths
+
+
 def _classify(index_file: Path) -> tuple[StaleReason | None, str | None]:
     """Classify a single ``index_<hash16>.json`` file.
 
@@ -196,39 +208,20 @@ def _classify(index_file: Path) -> tuple[StaleReason | None, str | None]:
     return None, repo_path
 
 
-def find_stale_indexes(
-    storage_dir: Path | None = None,
-    active_set: list[str] | tuple[str, ...] = (),
-    grace_seconds: int | None = None,
-) -> list[StaleEntry]:
-    """Scan the symbol store for stale ``index_*.json`` files.
-
-    A file is stale iff its name matches ``index_<hash16>.json`` and one
-    of the three ``StaleReason`` values applies. Non-local (``github:``)
-    entries, transient FS errors, and currently-active in-memory projects
-    are preserved.
-
-    ``grace_seconds`` suppresses stale entries whose on-disk mtime is
-    within the window — used to avoid racing an in-flight indexer.
-    Defaults to the process-level default (see ``_grace_seconds``). Pass
-    ``0`` to disable. ``repo_path_enoent`` and ``missing_repo_path_field``
-    bypass the grace check (they are unambiguous).
-    """
-    root = _resolve_storage_dir(storage_dir)
-    if not root.is_dir():
-        return []
-
-    if grace_seconds is None:
-        grace_seconds = _grace_seconds()
-
-    active_paths = {str(p) for p in active_set}
-    stale: list[StaleEntry] = []
-
+def _scan_indexes(
+    root: Path,
+    active_paths: set[str],
+    grace_seconds: int,
+) -> tuple[list[StaleEntry], list[str]]:
+    """Classify index files once for stale detection and active accounting."""
     try:
         entries = list(root.iterdir())
     except OSError:
-        # Unreadable storage root — treat as empty rather than raise.
-        return []
+        # Unreadable storage root — treat it as empty rather than raise.
+        return [], []
+
+    stale: list[StaleEntry] = []
+    classified_repo_paths: list[str] = []
 
     for child in entries:
         # Refuse anything that does not look like a canonical symbol
@@ -249,6 +242,11 @@ def find_stale_indexes(
             continue
 
         reason, repo_path = _classify(child)
+        if (
+            repo_path is not None
+            and repo_path not in classified_repo_paths
+        ):
+            classified_repo_paths.append(repo_path)
         if reason is None:
             continue
 
@@ -281,7 +279,37 @@ def find_stale_indexes(
             }
         )
 
-    return stale
+    return stale, classified_repo_paths
+
+
+def find_stale_indexes(
+    storage_dir: Path | None = None,
+    active_set: list[str] | tuple[str, ...] = (),
+    grace_seconds: int | None = None,
+) -> list[StaleEntry]:
+    """Scan the symbol store for stale ``index_*.json`` files.
+
+    A file is stale iff its name matches ``index_<hash16>.json`` and one
+    of the three ``StaleReason`` values applies. Non-local (``github:``)
+    entries, transient FS errors, and currently-active in-memory projects
+    are preserved.
+
+    ``grace_seconds`` suppresses stale entries whose on-disk mtime is
+    within the window — used to avoid racing an in-flight indexer.
+    Defaults to the process-level default (see ``_grace_seconds``). Pass
+    ``0`` to disable. ``repo_path_enoent`` and ``missing_repo_path_field``
+    bypass the grace check (they are unambiguous).
+    """
+    root = _resolve_storage_dir(storage_dir)
+    if not root.is_dir():
+        return []
+
+    if grace_seconds is None:
+        grace_seconds = _grace_seconds()
+
+    active_paths = {str(p) for p in active_set}
+    stale, classified_repo_paths = _scan_indexes(root, active_paths, grace_seconds)
+    return _StaleIndexResults(stale, classified_repo_paths)
 
 
 def _count_index_shaped_files(root: Path) -> int:
@@ -337,27 +365,18 @@ def prune_symbols(
     except OSError:
         root_resolved = root
     active_paths = {str(p) for p in active_set}
+    if grace_seconds is None:
+        grace_seconds = _grace_seconds()
     # ``skipped_active`` lists active repo_paths that have an index file
     # on disk (whether stale or healthy). Active projects without an
     # on-disk index are not reported here because there is nothing to skip.
-    skipped_active: list[str] = []
-    try:
-        for child in root.iterdir():
-            if not _INDEX_FILE_RE.match(child.name):
-                continue
-            classified = _classify(child)[1]
-            if (
-                classified is not None
-                and classified in active_paths
-                and classified not in skipped_active
-            ):
-                skipped_active.append(classified)
-    except OSError:
-        # Unreadable root — skipped_active stays empty; find_stale_indexes
-        # will also return [] for the same root.
-        pass
-
     stale = find_stale_indexes(root, active_set=active_set, grace_seconds=grace_seconds)
+    classified_repo_paths = getattr(stale, "classified_repo_paths", [])
+    skipped_active = [
+        repo_path
+        for repo_path in classified_repo_paths
+        if repo_path in active_paths
+    ]
     failures: list[FailureEntry] = []
     deleted_files = 0
     reclaimed_bytes = 0
