@@ -1001,3 +1001,26 @@ class TestSidecarAndTmpReclamation:
         assert index_file.exists()
         assert report["deleted_files"] == 0
         assert report["failures"] == []
+
+    def test_orphan_recheck_oserror_is_reported_without_deletion(self, tmp_path, monkeypatch):
+        """An unreadable recreated-index check must not silently hide a failure."""
+        from lgrep.tools import prune_symbols as module
+
+        repo = tmp_path / "recheck-error-repo"
+        repo.mkdir()
+        _, sidecar = _write_index_with_sidecar(tmp_path, str(repo), age_seconds=7200)
+        stale_entry = {
+            "path": str(sidecar),
+            "reason": "orphan_sidecar_json",
+            "bytes": sidecar.stat().st_size,
+            "repo_path": str(repo),
+        }
+        monkeypatch.setattr(module, "find_stale_indexes", lambda *a, **k: [stale_entry])
+        monkeypatch.setattr(Path, "exists", lambda _self: (_ for _ in ()).throw(OSError("EIO")))
+
+        report = module.prune_symbols(storage_dir=tmp_path, dry_run=False)
+        monkeypatch.undo()
+
+        assert sidecar.exists()
+        assert report["deleted_files"] == 0
+        assert report["failures"] == [{"path": str(sidecar), "error": "EIO"}]

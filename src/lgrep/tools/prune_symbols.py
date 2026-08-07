@@ -535,7 +535,14 @@ def prune_symbols(
                 try:
                     if (entry_path.parent / index_name).exists():
                         continue
-                except OSError:
+                except OSError as exc:
+                    log.warning(
+                        "prune_orphan_recheck_failed",
+                        path=str(entry_path),
+                        store="symbols",
+                        error=str(exc),
+                    )
+                    failures.append({"path": str(entry_path), "error": str(exc)})
                     continue
             # TOCTOU guard: a symlink could have been swapped in between
             # scan and delete. Refuse to follow symlinks out of the
