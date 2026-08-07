@@ -242,16 +242,17 @@ def _go_type_kind(node) -> str:
 
 
 def _find_type_identifier(node):
-    """Return the first type_identifier descendant within two levels (direct
-    child, or wrapped under pointer_type/qualified_type), else None."""
+    """Return the first type_identifier descendant, else None.
+
+    Go receiver types may be wrapped in pointer_type and generic_type nodes,
+    so a bounded child-depth scan would miss ``*Receiver[T]``.
+    """
     if node.type == "type_identifier":
         return node
     for child in node.children:
-        if child.type == "type_identifier":
-            return child
-        for grandchild in child.children:
-            if grandchild.type == "type_identifier":
-                return grandchild
+        found = _find_type_identifier(child)
+        if found is not None:
+            return found
     return None
 
 

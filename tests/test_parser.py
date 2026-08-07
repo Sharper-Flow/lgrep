@@ -571,6 +571,8 @@ GO_FIXTURE = textwrap.dedent(
 
     type Person struct{ Name string }
 
+    type Box[T any] struct{}
+
     func (p *Person) Greet(name string) string {
         return fmt.Sprintf("hi %s", name)
     }
@@ -578,6 +580,8 @@ GO_FIXTURE = textwrap.dedent(
     func (p *Person) Reset() {}
 
     func (b Buffer) String() string { return "b" }
+
+    func (b *Box[T]) String() string { return "box" }
 
     func (p *Person) String() string { return "p" }
 
@@ -630,15 +634,25 @@ class TestGoExtraction:
         assert methods["Greet"].parent == "Person"
         assert methods["Reset"].parent == "Person"
 
+    def test_go_generic_receiver_uses_declaring_type_as_parent(self, tmp_path):
+        """C4: pointer generic receivers retain their declaring type in IDs."""
+        box_string = next(
+            s
+            for s in self._symbols(tmp_path)
+            if s.name == "String" and s.kind == "method" and s.parent == "Box"
+        )
+        assert box_string.id == "sample.go:method:Box.String"
+
     def test_go_same_named_methods_get_unique_ids(self, tmp_path):
         """C4: String() on Buffer and Person must not collide on symbol ID."""
         symbols = self._symbols(tmp_path)
         strings = [s for s in symbols if s.name == "String" and s.kind == "method"]
         ids = {s.id for s in strings}
-        assert len(strings) == 2
-        assert len(ids) == 2
+        assert len(strings) == 3
+        assert len(ids) == 3
         assert "sample.go:method:Person.String" in ids
         assert "sample.go:method:Buffer.String" in ids
+        assert "sample.go:method:Box.String" in ids
 
     def test_go_struct_is_class_interface_is_interface(self, tmp_path):
         """AC3: struct_type -> class, interface_type -> interface."""
