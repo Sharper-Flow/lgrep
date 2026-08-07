@@ -192,9 +192,10 @@ def _occurrence_kind(node, parent) -> str:
     return "reference"
 
 
-def _go_occurrence_kind(node, parent) -> str:
+def _go_occurrence_kind(node, parent, occ_name: str = "", import_qualifiers=frozenset()) -> str:
     """Classify a Go candidate occurrence (identifier / field_identifier /
-    type_identifier) by its AST context. Mirrors the Python kinds."""
+    type_identifier) by its AST context. Mirrors the Python kinds; a
+    selector operand matching the file's import table classifies import."""
     if parent is None:
         return "reference"
 
@@ -208,11 +209,51 @@ def _go_occurrence_kind(node, parent) -> str:
     ):
         return "attribute"
 
+    # Selector operand matching the import table: the package qualifier of
+    # `qualifier.Member` (plain or aliased import) — an import usage, not an
+    # ordinary reference.
+    if parent.type == "selector_expression" and occ_name in import_qualifiers:
+        operand = parent.child_by_field_name("operand")
+        operand_id = operand.id if operand is not None else parent.children[0].id
+        if operand_id == node.id:
+            return "import"
+
     # Plain call target: identifier is the called expression of a call.
     if parent.type == "call_expression" and parent.children and parent.children[0].id == node.id:
         return "call"
 
     return "reference"
+
+
+def _go_parse_import_spec(spec_node, source: bytes):
+    """Return (qualifier, alias_node) for one Go import_spec.
+
+    qualifier = explicit package_identifier alias when present, else the
+    last path segment. blank_identifier and dot aliases yield (None, None)
+    — no qualifier exists. alias_node is the package_identifier for
+    explicitly aliased imports (import-site occurrence anchor), else None.
+    """
+    alias_node = None
+    path_node = None
+    for child in spec_node.children:
+        if child.type == "package_identifier":
+            alias_node = child
+        elif child.type in ("interpreted_string_literal", "raw_string_literal"):
+            path_node = child
+        elif child.type in ("blank_identifier", "dot"):
+            return None, None
+    if path_node is None:
+        return None, None
+    if alias_node is not None:
+        qualifier = source[alias_node.start_byte : alias_node.end_byte].decode(
+            "utf-8", errors="replace"
+        )
+        return qualifier, alias_node
+    raw = source[path_node.start_byte : path_node.end_byte].decode("utf-8", errors="replace")
+    path = raw.strip('"`')
+    if not path:
+        return None, None
+    return path.rsplit("/", 1)[-1], None
 
 
 def _is_go_excluded_identifier(node, parent) -> bool:
@@ -330,6 +371,48 @@ def _extract_symbols_and_occurrences_from_tree(
     occurrences: list[Occurrence] = []
     lines_decoded: list[str] | None = None
 
+    # Go import table pre-pass (root children only — Go imports are always
+    # file-top-level). Builds the qualifier set used by _go_occurrence_kind
+    # and emits import-site occurrences for explicit aliases in this
+    # controlled context (package_identifier must stay out of the main gate
+    # — it would catch the `package main` clause identifier).
+    go_import_qualifiers: set[str] = set()
+    if spec.name == "go":
+        for top in root_node.children:
+            if top.type != "import_declaration":
+                continue
+            spec_nodes = []
+            for child in top.children:
+                if child.type == "import_spec":
+                    spec_nodes.append(child)
+                elif child.type == "import_spec_list":
+                    spec_nodes.extend(c for c in child.children if c.type == "import_spec")
+            for spec_node in spec_nodes:
+                qualifier, alias_node = _go_parse_import_spec(spec_node, source)
+                if not qualifier:
+                    continue
+                go_import_qualifiers.add(qualifier)
+                if alias_node is not None:
+                    line_number = alias_node.start_point[0] + 1
+                    if lines_decoded is None:
+                        lines_decoded = source.decode("utf-8", errors="replace").splitlines()
+                    line_text = (
+                        lines_decoded[line_number - 1] if line_number <= len(lines_decoded) else ""
+                    )
+                    occurrences.append(
+                        Occurrence(
+                            id=make_occurrence_id(file_path, qualifier, alias_node.start_byte),
+                            name=qualifier,
+                            file_path=file_path,
+                            start_byte=alias_node.start_byte,
+                            end_byte=alias_node.end_byte,
+                            line_number=line_number,
+                            line_text=line_text,
+                            kind="import",
+                            enclosing_symbol_id=None,
+                        )
+                    )
+
     def _enclosing_id(stack: list[tuple]) -> str | None:
         for _, sym_id in reversed(stack):
             if sym_id is not None:
@@ -428,34 +511,41 @@ def _extract_symbols_and_occurrences_from_tree(
             if not _is_definition_name(node, parent, spec) and not (
                 is_go_occ and _is_go_excluded_identifier(node, parent)
             ):
-                kind = (
-                    _occurrence_kind(node, parent)
-                    if is_python_occ
-                    else _go_occurrence_kind(node, parent)
+                occ_name = source[node.start_byte : node.end_byte].decode(
+                    "utf-8", errors="replace"
                 )
-                if kind in _OCCURRENCE_KINDS:
-                    line_number = node.start_point[0] + 1
-                    if lines_decoded is None:
-                        lines_decoded = source.decode("utf-8", errors="replace").splitlines()
-                    line_text = (
-                        lines_decoded[line_number - 1] if line_number <= len(lines_decoded) else ""
+                # The blank identifier `_` (a plain `identifier` outside
+                # import specs) is never a candidate occurrence.
+                if is_go_occ and occ_name == "_":
+                    pass
+                else:
+                    kind = (
+                        _occurrence_kind(node, parent)
+                        if is_python_occ
+                        else _go_occurrence_kind(node, parent, occ_name, go_import_qualifiers)
                     )
-                    occ_name = source[node.start_byte : node.end_byte].decode(
-                        "utf-8", errors="replace"
-                    )
-                    occurrences.append(
-                        Occurrence(
-                            id=make_occurrence_id(file_path, occ_name, node.start_byte),
-                            name=occ_name,
-                            file_path=file_path,
-                            start_byte=node.start_byte,
-                            end_byte=node.end_byte,
-                            line_number=line_number,
-                            line_text=line_text,
-                            kind=kind,
-                            enclosing_symbol_id=_enclosing_id(enclosing_stack),
+                    if kind in _OCCURRENCE_KINDS:
+                        line_number = node.start_point[0] + 1
+                        if lines_decoded is None:
+                            lines_decoded = source.decode("utf-8", errors="replace").splitlines()
+                        line_text = (
+                            lines_decoded[line_number - 1]
+                            if line_number <= len(lines_decoded)
+                            else ""
                         )
-                    )
+                        occurrences.append(
+                            Occurrence(
+                                id=make_occurrence_id(file_path, occ_name, node.start_byte),
+                                name=occ_name,
+                                file_path=file_path,
+                                start_byte=node.start_byte,
+                                end_byte=node.end_byte,
+                                line_number=line_number,
+                                line_text=line_text,
+                                kind=kind,
+                                enclosing_symbol_id=_enclosing_id(enclosing_stack),
+                            )
+                        )
 
         # Push the current symbol onto the enclosing stack before recursing
         child_stack = enclosing_stack

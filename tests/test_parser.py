@@ -726,11 +726,13 @@ class TestGoOccurrences:
         assert "String" not in names
         assert "Collection" not in names
 
-    def test_go_selector_operand_is_reference(self, tmp_path):
+    def test_go_import_qualifier_is_import(self, tmp_path):
+        """AC3 (amended by fixGoExtractionGaps): an operand matching the
+        file's import table classifies kind=import, not reference."""
         occurrences = self._occurrences(tmp_path)
         fmt_occs = [o for o in occurrences if o.name == "fmt"]
         assert len(fmt_occs) >= 2
-        assert all(o.kind == "reference" for o in fmt_occs)
+        assert all(o.kind == "import" for o in fmt_occs)
 
     def test_go_occurrence_positions_and_enclosing(self, tmp_path):
         occurrences = self._occurrences(tmp_path)
@@ -820,3 +822,86 @@ class TestGoTypeDeclarationGaps:
         # aliased types and type parameters remain usages
         assert "float64" in names
         assert "int" in names
+
+
+GO_IMPORT_FIXTURE = textwrap.dedent(
+    """\
+    package main
+
+    import "fmt"
+    import json "encoding/json"
+    import _ "embed"
+    import (
+        "strings"
+        csv "encoding/csv"
+    )
+
+    type Config struct{ Name string }
+
+    func use() {
+        fmt.Println("x")
+        _ = json.Marshal
+        _ = strings.TrimSpace(" y ")
+        _ = csv.NewReader
+        var local Config
+        local.Name = "z"
+        x, _ := pair()
+        _ = x
+    }
+
+    func pair() (int, error) { return 0, nil }
+    """
+)
+
+
+class TestGoImportOccurrences:
+    """AC3: import-qualified selector operands classify kind=import (plain,
+    aliased, and grouped imports); the explicit alias at the import site is
+    an import occurrence; non-import operands stay reference.
+    AC4: the blank identifier `_` is never collected."""
+
+    def _occurrences(self, tmp_path):
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "main.go"
+        src_file.write_text(GO_IMPORT_FIXTURE)
+        _, occurrences = SymbolExtractor().extract_full(src_file, repo_root=tmp_path)
+        return occurrences
+
+    def test_plain_import_qualifier_is_import(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        fmt_occs = [o for o in occurrences if o.name == "fmt"]
+        assert len(fmt_occs) >= 1
+        assert all(o.kind == "import" for o in fmt_occs)
+
+    def test_aliased_import_qualifier_and_site_are_import(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        json_occs = [o for o in occurrences if o.name == "json"]
+        # import-site alias occurrence (pre-pass) + usage-site operand
+        assert len(json_occs) >= 2
+        assert all(o.kind == "import" for o in json_occs)
+        site = [o for o in json_occs if "encoding/json" in o.line_text]
+        assert len(site) == 1
+
+    def test_grouped_import_qualifiers_are_import(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        strings_occs = [o for o in occurrences if o.name == "strings"]
+        csv_occs = [o for o in occurrences if o.name == "csv"]
+        assert len(strings_occs) >= 1
+        assert all(o.kind == "import" for o in strings_occs)
+        assert len(csv_occs) >= 2  # alias site + usage
+        assert all(o.kind == "import" for o in csv_occs)
+
+    def test_non_import_selector_operand_stays_reference(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        local_occs = [o for o in occurrences if o.name == "local"]
+        assert len(local_occs) >= 1
+        assert all(o.kind == "reference" for o in local_occs)
+
+    def test_blank_identifier_never_collected(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        assert "_" not in {o.name for o in occurrences}
+
+    def test_blank_import_yields_no_qualifier_occurrence(self, tmp_path):
+        occurrences = self._occurrences(tmp_path)
+        assert "embed" not in {o.name for o in occurrences}
