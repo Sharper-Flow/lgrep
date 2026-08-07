@@ -359,7 +359,7 @@ class TestConcurrentSaveIntegrity:
 
         assert not errors, f"save() raised under concurrency: {errors}"
 
-        index_files = list(tmp_path.glob("index_*.json"))
+        index_files = [p for p in tmp_path.glob("index_*.json") if ".meta." not in p.name]
         assert len(index_files) == 1, f"expected exactly one index, got {index_files}"
 
         # The committed file must be exactly ONE writer's complete output.
@@ -433,7 +433,7 @@ class TestConcurrentSaveIntegrity:
             out, err = p.communicate(timeout=180)
             assert p.returncode == 0, f"writer failed: {err.decode()[:500]}"
 
-        index_files = list(store_dir.glob("index_*.json"))
+        index_files = [p for p in store_dir.glob("index_*.json") if ".meta." not in p.name]
         assert len(index_files) == 1, f"expected exactly one index, got {index_files}"
 
         data = json.loads(index_files[0].read_text(encoding="utf-8"))
@@ -473,3 +473,136 @@ class TestConcurrentSaveIntegrity:
         assert len(set(index_temps)) == len(index_temps), (
             f"temp path is shared between writers (root cause of the torn-write race): {index_temps}"
         )
+
+
+class TestSidecarWrite:
+    """save() must emit index_{key}.meta.json beside every index (AC3/AC7 foundation).
+
+    The sidecar carries the one load-bearing field (repo_path) plus
+    informational counts so list_repos() never needs to parse the index body.
+    """
+
+    def test_save_writes_sidecar_with_repo_path_and_counts(self, tmp_path):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        idx = CodeIndex(
+            repo_path="/repo/with-sidecar",
+            files={"src/a.py": "h1", "src/b.py": "h2"},
+            symbols={"s1": {"name": "s1"}, "s2": {"name": "s2"}, "s3": {"name": "s3"}},
+            occurrences={"foo": [{"file_path": "src/a.py"}]},
+        )
+        store.save(idx)
+
+        import hashlib
+        import json
+
+        key = hashlib.sha256("/repo/with-sidecar".encode()).hexdigest()[:16]
+        meta = tmp_path / f"index_{key}.meta.json"
+        assert meta.is_file(), f"sidecar not written: {sorted(p.name for p in tmp_path.iterdir())}"
+
+        sidecar = json.loads(meta.read_text(encoding="utf-8"))
+        assert sidecar["repo_path"] == "/repo/with-sidecar"
+        assert sidecar["files"] == 2
+        assert sidecar["symbols"] == 3
+        assert sidecar["occurrences"] == 1
+        assert sidecar["meta_version"] == 1
+        assert sidecar["version"] == idx.version
+        assert isinstance(sidecar["updated_at"], float | int)
+
+    def test_index_written_before_sidecar(self, tmp_path):
+        """Crash ordering: index must be committed BEFORE the sidecar.
+
+        Sidecar-first would leave sidecar-without-index, a state the reader
+        cannot handle. Index-first leaves index-without-sidecar, which falls
+        back to the existing parse path.
+        """
+        import os
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        targets: list[str] = []
+
+        real_replace = os.replace
+
+        def spy(src, dst):
+            targets.append(str(dst))
+            return real_replace(src, dst)
+
+        import lgrep.storage.index_store as mod
+
+        original = mod.os.replace
+        try:
+            mod.os.replace = spy
+            store.save(CodeIndex(repo_path="/repo/ordered", files={}, symbols={"s": {}}))
+        finally:
+            mod.os.replace = original
+
+        index_targets = [t for t in targets if t.endswith(".json") and ".meta.json" not in t]
+        sidecar_targets = [t for t in targets if t.endswith(".meta.json")]
+        assert len(index_targets) == 1, targets
+        assert len(sidecar_targets) == 1, targets
+        assert targets.index(index_targets[0]) < targets.index(sidecar_targets[0]), (
+            f"sidecar committed before index: {targets}"
+        )
+
+    def test_sidecar_temp_name_does_not_collide_with_index_temp(self, tmp_path):
+        """Both writes stage via writer-unique temps; the names must differ."""
+        from lgrep.storage.index_store import CodeIndex, IndexStore, _unique_temp_path
+
+        key = "0123456789abcdef"
+        index_target = tmp_path / f"index_{key}.json"
+        sidecar_target = tmp_path / f"index_{key}.meta.json"
+        it = _unique_temp_path(index_target)
+        st = _unique_temp_path(sidecar_target)
+        assert it.name != st.name
+        assert ".meta." in st.name
+
+
+class TestCompactSerialization:
+    """Newly written indexes must be compact (AC7).
+
+    Measured 19.1% of stored bytes were pretty-print whitespace on the real
+    2.5GB store (~480MB). Read path is whitespace-agnostic, so existing
+    pretty-printed indexes must keep loading unchanged.
+    """
+
+    def test_new_index_is_compact(self, tmp_path):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(CodeIndex(repo_path="/repo/compact", files={"a": "1"}, symbols={"s": {}}))
+
+        index_files = [p for p in tmp_path.glob("index_*.json") if ".meta.json" not in p.name]
+        assert len(index_files) == 1
+        raw = index_files[0].read_text(encoding="utf-8")
+        assert "\n  " not in raw, f"index still contains indent padding: {raw[:200]!r}"
+
+    def test_pretty_printed_legacy_index_still_loads(self, tmp_path):
+        import hashlib
+        import json
+
+        from lgrep.storage.index_store import IndexStore
+
+        key = hashlib.sha256("/repo/legacy".encode()).hexdigest()[:16]
+        legacy = tmp_path / f"index_{key}.json"
+        legacy.write_text(
+            json.dumps(
+                {
+                    "repo_path": "/repo/legacy",
+                    "files": {"a.py": "h"},
+                    "symbols": {"s": {"kind": "function"}},
+                    "occurrences": {},
+                    "version": "2.0",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        store = IndexStore(storage_dir=tmp_path)
+        loaded = store.load("/repo/legacy")
+        assert loaded is not None
+        assert loaded.repo_path == "/repo/legacy"
+        assert loaded.files == {"a.py": "h"}
