@@ -107,7 +107,13 @@ class TestSymbolToolResponses:
         assert data["occurrences_indexed"] == 0
 
     @pytest.mark.asyncio
-    async def test_list_repos_returns_json_with_meta(self, tmp_path):
+    async def test_list_repos_returns_json_with_meta(self, tmp_path, monkeypatch):
+        # list_repos() backfills sidecars on read, so it is no longer
+        # side-effect-free: without this patch the test would write into the
+        # REAL default symbol store (~/.cache/lgrep/symbols).
+        from lgrep.storage import index_store as index_store_mod
+
+        monkeypatch.setattr(index_store_mod, "DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
         fn = self._get_tool_fn("list_repos")
         result = await fn()
         data = result
