@@ -23,10 +23,23 @@ _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
 
 def _get_node_name(node, source: bytes) -> str | None:
     """Extract the name from a named node (function/class/method definition)."""
-    # Try common name child node types
+    # Try common name child node types. field_identifier is included for Go:
+    # tree-sitter-go puts method names in field_identifier nodes, and no other
+    # registered language emits field_identifier as a direct child of a
+    # definition node (verified against grammar source + executable probe).
     for child in node.children:
-        if child.type in ("identifier", "name", "type_identifier", "property_identifier"):
+        if child.type in ("identifier", "name", "type_identifier", "property_identifier", "field_identifier"):
             return source[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
+    # Go type_declaration: the declared name is the type_spec's type_identifier
+    # child (a grandchild of the type_declaration node).
+    if node.type == "type_declaration":
+        for child in node.children:
+            if child.type == "type_spec":
+                for grandchild in child.children:
+                    if grandchild.type == "type_identifier":
+                        return source[grandchild.start_byte : grandchild.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
     return None
 
 
@@ -135,7 +148,14 @@ def _is_definition_name(node, parent, spec: LanguageSpec) -> bool:
         return False
     if parent.type in (*spec.function_kinds, *spec.class_kinds):
         for child in parent.children:
-            if child.type in ("identifier", "name", "type_identifier"):
+            if child.type in ("identifier", "name", "type_identifier", "field_identifier"):
+                return child.id == node.id
+    # Go: the declared type name is the first type_identifier under type_spec.
+    # Its parent is type_spec, not the type_declaration, so the branch above
+    # cannot catch it.
+    if parent.type == "type_spec" and node.type == "type_identifier":
+        for child in parent.children:
+            if child.type == "type_identifier":
                 return child.id == node.id
     return False
 
@@ -165,6 +185,55 @@ def _occurrence_kind(node, parent) -> str:
         return "call"
 
     return "reference"
+
+
+def _go_type_kind(node) -> str:
+    """Classify a Go type_declaration by scanning type_spec children by node
+    type (ordinal positions break on generics, which insert
+    type_parameter_list). struct_type -> class, interface_type -> interface;
+    type aliases and other forms keep the pre-existing class fallback."""
+    for child in node.children:
+        if child.type == "type_spec":
+            for grandchild in child.children:
+                if grandchild.type == "struct_type":
+                    return "class"
+                if grandchild.type == "interface_type":
+                    return "interface"
+    return "class"
+
+
+def _find_type_identifier(node):
+    """Return the first type_identifier descendant within two levels (direct
+    child, or wrapped under pointer_type/qualified_type), else None."""
+    if node.type == "type_identifier":
+        return node
+    for child in node.children:
+        if child.type == "type_identifier":
+            return child
+        for grandchild in child.children:
+            if grandchild.type == "type_identifier":
+                return grandchild
+    return None
+
+
+def _go_receiver_type_name(node, source: bytes) -> str | None:
+    """Return the receiver type name of a Go method_declaration.
+
+    The receiver is the FIRST parameter_list child (grammar-required, ahead
+    of the method name). Its type is a type_identifier, possibly wrapped in
+    pointer_type. Returns None when no receiver type resolves.
+    """
+    for child in node.children:
+        if child.type == "parameter_list":
+            for param in child.children:
+                if param.type == "parameter_declaration":
+                    found = _find_type_identifier(param)
+                    if found is not None:
+                        return source[found.start_byte : found.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
+            return None
+    return None
 
 
 def _extract_symbols_and_occurrences_from_tree(
@@ -202,7 +271,14 @@ def _extract_symbols_and_occurrences_from_tree(
         if is_function or is_class or is_method or is_interface:
             name = _get_node_name(node, source)
             if name:
-                if is_class:
+                if spec.name == "go" and node_type == "type_declaration":
+                    kind = _go_type_kind(node)
+                elif spec.name == "go" and node_type == "method_declaration":
+                    # tree-sitter-go guarantees a receiver parameter_list on
+                    # method_declaration; _is_inside_class never matches
+                    # top-level Go methods.
+                    kind = "method"
+                elif is_class:
                     kind = "class"
                 elif is_interface and not is_class:
                     kind = "interface"
@@ -213,7 +289,13 @@ def _extract_symbols_and_occurrences_from_tree(
                 else:
                     kind = "symbol"
 
-                parent_name = _get_enclosing_class_name(node, source) if kind == "method" else None
+                if kind == "method":
+                    if spec.name == "go" and node_type == "method_declaration":
+                        parent_name = _go_receiver_type_name(node, source)
+                    else:
+                        parent_name = _get_enclosing_class_name(node, source)
+                else:
+                    parent_name = None
                 sym_id_for_children = make_symbol_id(file_path, kind, name, parent=parent_name)
 
                 # Extract docstring (Python only for now)

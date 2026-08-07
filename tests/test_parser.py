@@ -557,3 +557,90 @@ class TestRepoOutline:
         for file_outline in outline["files"]:
             assert "file_path" in file_outline
             assert "symbols" in file_outline
+
+
+GO_FIXTURE = textwrap.dedent(
+    '''\
+    package sample
+
+    import "fmt"
+
+    type Greeter interface{ Greet(name string) string }
+
+    type Collection[T any] interface{ Len() int }
+
+    type Person struct{ Name string }
+
+    func (p *Person) Greet(name string) string {
+        return fmt.Sprintf("hi %s", name)
+    }
+
+    func (p *Person) Reset() {}
+
+    func (b Buffer) String() string { return "b" }
+
+    func (p *Person) String() string { return "p" }
+
+    func helper() { fmt.Println("x") }
+    '''
+)
+
+
+class TestGoExtraction:
+    """Go symbols must extract with correct names, kinds, and receiver parents.
+
+    Pins AC1-AC3 of addGoOccurrenceExtraction plus the C4 ID-uniqueness
+    invariant for same-named methods on different receivers.
+    """
+
+    def _symbols(self, tmp_path):
+        from lgrep.parser.extractor import SymbolExtractor
+
+        src_file = tmp_path / "sample.go"
+        src_file.write_text(GO_FIXTURE)
+        return SymbolExtractor().extract(src_file, repo_root=tmp_path)
+
+    def test_go_function_extracted(self, tmp_path):
+        """AC1: top-level function extracts as kind=function with its name."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        assert by_name["helper"].kind == "function"
+
+    def test_go_methods_named_by_method_not_return_type(self, tmp_path):
+        """AC2: method names come from field_identifier, never the return type."""
+        symbols = self._symbols(tmp_path)
+        names = {s.name for s in symbols}
+        assert "Greet" in names
+        assert "string" not in names, "method named after its return type"
+
+    def test_go_method_without_return_type_extracted(self, tmp_path):
+        """AC2: a method with no return type is not dropped."""
+        by_name = {s.name: s for s in self._symbols(tmp_path) if s.kind == "method"}
+        assert by_name["Reset"].name == "Reset"
+
+    def test_go_method_kind_and_receiver_parent(self, tmp_path):
+        """AC2/C4: methods are kind=method with parent = receiver type name."""
+        symbols = self._symbols(tmp_path)
+        methods = {s.name: s for s in symbols if s.kind == "method"}
+        assert methods["Greet"].parent == "Person"
+        assert methods["Reset"].parent == "Person"
+
+    def test_go_same_named_methods_get_unique_ids(self, tmp_path):
+        """C4: String() on Buffer and Person must not collide on symbol ID."""
+        symbols = self._symbols(tmp_path)
+        strings = [s for s in symbols if s.name == "String" and s.kind == "method"]
+        ids = {s.id for s in strings}
+        assert len(strings) == 2
+        assert len(ids) == 2
+        assert "sample.go:method:Person.String" in ids
+        assert "sample.go:method:Buffer.String" in ids
+
+    def test_go_struct_is_class_interface_is_interface(self, tmp_path):
+        """AC3: struct_type -> class, interface_type -> interface."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        assert by_name["Person"].kind == "class"
+        assert by_name["Greeter"].kind == "interface"
+
+    def test_go_generic_interface_extracted_as_interface(self, tmp_path):
+        """AC3/C2: type_parameter_list must not break interface disambiguation."""
+        by_name = {s.name: s for s in self._symbols(tmp_path)}
+        assert by_name["Collection"].kind == "interface"
