@@ -93,134 +93,146 @@ def index_folder(
     store = IndexStore(storage_dir=storage_dir)
     resolved_root = str(root.resolve())
 
-    # Load existing index for incremental comparison
-    existing_index = store.load(resolved_root) if incremental else None
-    existing_files = existing_index.files if existing_index else {}
-    existing_symbols = dict(existing_index.symbols) if existing_index else {}
-    existing_occurrences = dict(existing_index.occurrences) if existing_index else {}
+    # Serialize the whole load -> walk -> merge -> save window per repo
+    # (AC10). Incremental indexing is a read-modify-write ACROSS the
+    # IndexStore API: load() above, a second load() inside detect_changes()
+    # below, then save(). Without this lock two concurrent runs interleave
+    # A-load, B-load, A-save, B-save and the second save, computed from a
+    # stale snapshot, silently discards the first run's symbols. The lock
+    # deliberately covers the (slow) walk as well: detect_changes() and
+    # the merge consume the walk's output, so the snapshot must stay
+    # coherent for the entire window. Per-key — unrelated repos never
+    # serialize. index_repo is NOT locked: it performs no load() and
+    # writes github: keys, a namespace disjoint from local paths.
+    with store.repo_lock(resolved_root):
+        # Load existing index for incremental comparison
+        existing_index = store.load(resolved_root) if incremental else None
+        existing_files = existing_index.files if existing_index else {}
+        existing_symbols = dict(existing_index.symbols) if existing_index else {}
+        existing_occurrences = dict(existing_index.occurrences) if existing_index else {}
 
-    # Safe refresh migration: old indexes without occurrence data must be
-    # fully re-parsed before callers can trust occurrence results. This is
-    # bounded by max_files and preserves the existing file hash map.
-    needs_occurrence_refresh = (
-        existing_index is None
-        or _version_tuple(existing_index.version) < _MIN_VERSION_FOR_OCCURRENCES
-    )
+        # Safe refresh migration: old indexes without occurrence data must be
+        # fully re-parsed before callers can trust occurrence results. This is
+        # bounded by max_files and preserves the existing file hash map.
+        needs_occurrence_refresh = (
+            existing_index is None
+            or _version_tuple(existing_index.version) < _MIN_VERSION_FOR_OCCURRENCES
+        )
 
-    # Walk source files
-    from lgrep.discovery import FileDiscovery
+        # Walk source files
+        from lgrep.discovery import FileDiscovery
 
-    discovery = FileDiscovery(root)
-    files_dict: dict[str, str] = dict(existing_files)  # start from existing
-    symbols_dict: dict[str, dict] = dict(existing_symbols)
-    occurrences_dict: dict[str, list[dict]] = {
-        name: list(occs) for name, occs in (existing_occurrences or {}).items()
-    }
+        discovery = FileDiscovery(root)
+        files_dict: dict[str, str] = dict(existing_files)  # start from existing
+        symbols_dict: dict[str, dict] = dict(existing_symbols)
+        occurrences_dict: dict[str, list[dict]] = {
+            name: list(occs) for name, occs in (existing_occurrences or {}).items()
+        }
 
-    # Track every code file we observed on disk in this walk so we can detect
-    # deletions after the loop. Distinct from `files_dict` (the post-state)
-    # because files_dict still carries entries from prior indexes that may no
-    # longer exist on disk.
-    walked_files: dict[str, str] = {}
-    walk_truncated = False
+        # Track every code file we observed on disk in this walk so we can detect
+        # deletions after the loop. Distinct from `files_dict` (the post-state)
+        # because files_dict still carries entries from prior indexes that may no
+        # longer exist on disk.
+        walked_files: dict[str, str] = {}
+        walk_truncated = False
 
-    files_processed = 0
-    files_skipped = 0
-    for file_path in discovery.find_files():
-        if files_processed + files_skipped >= max_files:
-            walk_truncated = True
-            break
-        if get_language_spec(file_path.suffix.lower()) is None:
-            continue
+        files_processed = 0
+        files_skipped = 0
+        for file_path in discovery.find_files():
+            if files_processed + files_skipped >= max_files:
+                walk_truncated = True
+                break
+            if get_language_spec(file_path.suffix.lower()) is None:
+                continue
 
-        try:
-            content = file_path.read_bytes()
-        except OSError:
-            continue
+            try:
+                content = file_path.read_bytes()
+            except OSError:
+                continue
 
-        rel_path = str(file_path.relative_to(root))
-        file_hash = hashlib.sha256(content).hexdigest()
-        walked_files[rel_path] = file_hash
+            rel_path = str(file_path.relative_to(root))
+            file_hash = hashlib.sha256(content).hexdigest()
+            walked_files[rel_path] = file_hash
 
-        # Incremental skip: file unchanged and occurrence data is current
-        if (
-            incremental
-            and existing_files.get(rel_path) == file_hash
-            and not needs_occurrence_refresh
-        ):
-            files_skipped += 1
-            continue
+            # Incremental skip: file unchanged and occurrence data is current
+            if (
+                incremental
+                and existing_files.get(rel_path) == file_hash
+                and not needs_occurrence_refresh
+            ):
+                files_skipped += 1
+                continue
 
-        files_dict[rel_path] = file_hash
+            files_dict[rel_path] = file_hash
 
-        # Remove old symbols and occurrences for this file before re-parsing
-        if incremental:
-            symbols_dict = {
-                sid: sdata
-                for sid, sdata in symbols_dict.items()
-                if sdata.get("file_path") != rel_path
-            }
-            occurrences_dict = {
-                name: [occ for occ in occs if occ.get("file_path") != rel_path]
-                for name, occs in occurrences_dict.items()
-            }
-            # Drop empty occurrence buckets
-            occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
+            # Remove old symbols and occurrences for this file before re-parsing
+            if incremental:
+                symbols_dict = {
+                    sid: sdata
+                    for sid, sdata in symbols_dict.items()
+                    if sdata.get("file_path") != rel_path
+                }
+                occurrences_dict = {
+                    name: [occ for occ in occs if occ.get("file_path") != rel_path]
+                    for name, occs in occurrences_dict.items()
+                }
+                # Drop empty occurrence buckets
+                occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
 
-        symbols, occurrences = _extractor.extract_full(file_path, repo_root=root)
-        for sym in symbols:
-            symbol_id = sym.id
-            if symbol_id in symbols_dict:
-                symbol_id = f"{sym.id}@{sym.start_byte}"
+            symbols, occurrences = _extractor.extract_full(file_path, repo_root=root)
+            for sym in symbols:
+                symbol_id = sym.id
+                if symbol_id in symbols_dict:
+                    symbol_id = f"{sym.id}@{sym.start_byte}"
 
-            symbols_dict[symbol_id] = {
-                "id": symbol_id,
-                "name": sym.name,
-                "kind": sym.kind,
-                "file_path": sym.file_path,
-                "start_byte": sym.start_byte,
-                "end_byte": sym.end_byte,
-                "docstring": sym.docstring,
-                "decorators": sym.decorators,
-                "parent": sym.parent,
-            }
+                symbols_dict[symbol_id] = {
+                    "id": symbol_id,
+                    "name": sym.name,
+                    "kind": sym.kind,
+                    "file_path": sym.file_path,
+                    "start_byte": sym.start_byte,
+                    "end_byte": sym.end_byte,
+                    "docstring": sym.docstring,
+                    "decorators": sym.decorators,
+                    "parent": sym.parent,
+                }
 
-        for occ in occurrences:
-            occs = occurrences_dict.setdefault(occ.name, [])
-            occs.append(_occurrence_to_dict(occ, rel_path))
+            for occ in occurrences:
+                occs = occurrences_dict.setdefault(occ.name, [])
+                occs.append(_occurrence_to_dict(occ, rel_path))
 
-        files_processed += 1
+            files_processed += 1
 
-    # Detect files that disappeared from disk since the last index and prune
-    # them. Only safe to do when we walked the full tree — if max_files
-    # truncated the walk, unscanned files would falsely appear "deleted".
-    files_deleted = 0
-    if incremental and not walk_truncated:
-        changes = store.detect_changes(resolved_root, walked_files)
-        deleted_set = set(changes.get("deleted", []))
-        if deleted_set:
-            for path in deleted_set:
-                files_dict.pop(path, None)
-            symbols_dict = {
-                sid: sdata
-                for sid, sdata in symbols_dict.items()
-                if sdata.get("file_path") not in deleted_set
-            }
-            occurrences_dict = {
-                name: [occ for occ in occs if occ.get("file_path") not in deleted_set]
-                for name, occs in occurrences_dict.items()
-            }
-            occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
-            files_deleted = len(deleted_set)
+        # Detect files that disappeared from disk since the last index and prune
+        # them. Only safe to do when we walked the full tree — if max_files
+        # truncated the walk, unscanned files would falsely appear "deleted".
+        files_deleted = 0
+        if incremental and not walk_truncated:
+            changes = store.detect_changes(resolved_root, walked_files)
+            deleted_set = set(changes.get("deleted", []))
+            if deleted_set:
+                for path in deleted_set:
+                    files_dict.pop(path, None)
+                symbols_dict = {
+                    sid: sdata
+                    for sid, sdata in symbols_dict.items()
+                    if sdata.get("file_path") not in deleted_set
+                }
+                occurrences_dict = {
+                    name: [occ for occ in occs if occ.get("file_path") not in deleted_set]
+                    for name, occs in occurrences_dict.items()
+                }
+                occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
+                files_deleted = len(deleted_set)
 
-    index = CodeIndex(
-        repo_path=resolved_root,
-        files=files_dict,
-        symbols=symbols_dict,
-        occurrences=occurrences_dict,
-        version=_INDEX_VERSION,
-    )
-    store.save(index)
+        index = CodeIndex(
+            repo_path=resolved_root,
+            files=files_dict,
+            symbols=symbols_dict,
+            occurrences=occurrences_dict,
+            version=_INDEX_VERSION,
+        )
+        store.save(index)
 
     occurrence_count = sum(len(occs) for occs in occurrences_dict.values())
     tokens_saved = estimate_savings(len(symbols_dict) + occurrence_count)

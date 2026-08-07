@@ -161,6 +161,9 @@ def _meta_from_index_body(repo_path: str, data: dict) -> dict:
     }
 
 
+_fcntl_unavailable_warned = False
+
+
 class IndexStore:
     """Persistent symbol index storage.
 
@@ -204,6 +207,80 @@ class IndexStore:
         """
         key = _repo_key(repo_path)
         return self._dir / f"index_{key}.meta.json"
+
+    @contextlib.contextmanager
+    def repo_lock(self, repo_path: str):
+        """Serialize read-modify-write sequences for one repo key.
+
+        ``save()`` alone cannot prevent a lost update: a caller that does
+        ``load()`` -> mutate -> ``save()`` (``index_folder(incremental=True)``
+        does exactly this) computes its write from a snapshot that a
+        concurrent run may have already replaced. Holding this lock across
+        the whole window serializes those sequences so every writer merges
+        on top of the previous writer's committed output.
+
+        Mechanism (mirrors ``_chunk_store.write_project_meta``):
+
+        - ``fcntl.flock(LOCK_EX)`` on a dedicated sibling file
+          ``.index_{key}.lock`` — never on the index or sidecar, because
+          ``os.replace`` swaps the inode and would invalidate lock identity.
+        - A FRESH fd per acquisition. Per flock(2), fds from separate
+          ``open()`` calls are treated independently and block each other —
+          including two threads in one process (verified empirically and in
+          the man page) — while fds duplicated via fork/dup share one lock,
+          so an fd must never be cached across acquisitions. This one
+          mechanism therefore covers both threads and processes.
+        - The lock file is NEVER deleted: unlinking an inode another process
+          is waiting on silently breaks mutual exclusion.
+        - Non-POSIX platforms (no ``fcntl``): warn once and proceed
+          unguarded, matching the degraded-support stance in
+          ``_chunk_store``.
+        - Per-key granularity: unrelated repos never serialize.
+
+        Deliberately NOT held inside ``save()`` itself: the hazard is the
+        caller's stale read, which a lock inside ``save()`` cannot reach,
+        and a lock there would not be re-entrant with the caller's hold.
+        """
+        global _fcntl_unavailable_warned
+        normalized_repo = normalize_repo_key(repo_path)
+        key = _repo_key(normalized_repo)
+        lock_path = self._dir / f".index_{key}.lock"
+
+        fcntl_mod = None
+        try:
+            import fcntl as _fcntl
+
+            fcntl_mod = _fcntl
+        except ImportError:
+            if not _fcntl_unavailable_warned:
+                _fcntl_unavailable_warned = True
+                log.warning(
+                    "fcntl_unavailable_repo_lock_unguarded",
+                    note="non-POSIX platform; incremental symbol indexing unguarded across processes",
+                )
+
+        if fcntl_mod is None:
+            yield
+            return
+
+        self._dir.mkdir(parents=True, exist_ok=True)
+        lock_fd = None
+        try:
+            lock_fd = open(lock_path, "a+")  # noqa: SIM115 — closed in finally
+            fcntl_mod.flock(lock_fd.fileno(), fcntl_mod.LOCK_EX)
+        except OSError:
+            log.warning("flock_setup_failed", repo=normalized_repo)
+            if lock_fd is not None:
+                lock_fd.close()
+                lock_fd = None
+
+        try:
+            yield
+        finally:
+            if lock_fd is not None:
+                with contextlib.suppress(OSError):
+                    fcntl_mod.flock(lock_fd.fileno(), fcntl_mod.LOCK_UN)
+                lock_fd.close()
 
     def save(self, index: CodeIndex) -> None:
         """Save a CodeIndex to disk atomically.

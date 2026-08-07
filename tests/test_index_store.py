@@ -905,3 +905,291 @@ class TestSidecarListRepos:
             module.os.replace = original_replace
 
         assert repos == ["/repo/ro"]
+
+
+class TestRepoLock:
+    """repo_lock serializes load->save sequences across threads and processes (AC10).
+
+    The hazard: index_folder(incremental=True) does load() -> mutate -> save()
+    across the IndexStore API. Two concurrent runs interleave as
+    A-load, B-load, A-save, B-save; B's save is computed from a stale snapshot
+    and silently discards A's symbols. Each save() is individually atomic —
+    unique temp paths cannot help because the INPUT was stale.
+    """
+
+    import pytest
+
+    @pytest.mark.xfail(
+        reason=(
+            "documents the hazard repo_lock prevents: an UNLOCKED load->save "
+            "rendezvous deterministically loses updates (all loads happen "
+            "before any save, so last-writer-wins). Strict: if this ever "
+            "passes, the rendezvous no longer demonstrates the hazard and "
+            "the paired locked test loses its meaning."
+        ),
+        strict=True,
+    )
+    def test_concurrent_rmw_loses_updates_without_lock(self, tmp_path):
+        """Deterministic hazard demonstration: 4 threads load the same
+        snapshot, last save wins. The paired test applies repo_lock and
+        asserts the union; this one proves the lock is load-bearing."""
+        import threading
+        import time
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        repo = "/repo/rmw"
+        markers = ("m1", "m2", "m3", "m4")
+        barrier = threading.Barrier(len(markers))
+
+        def writer(marker: str) -> None:
+            barrier.wait(timeout=30)
+            existing = store.load(repo)
+            symbols = dict(existing.symbols) if existing else {}
+            time.sleep(0.2)  # every thread's load happens before any save
+            symbols[marker] = {"name": marker}
+            store.save(CodeIndex(repo_path=repo, files={}, symbols=symbols))
+
+        threads = [threading.Thread(target=writer, args=(m,)) for m in markers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=60)
+
+        loaded = IndexStore(storage_dir=tmp_path).load(repo)
+        assert loaded is not None
+        # WITHOUT a lock only one writer's marker survives — this assertion is
+        # expected to FAIL until index_folder's RMW window is serialized.
+        assert set(loaded.symbols) == set(markers), (
+            f"lost update: expected {sorted(markers)}, got {sorted(loaded.symbols)}"
+        )
+
+    def test_repo_lock_serializes_concurrent_rmw(self, tmp_path):
+        """Same rendezvous under repo_lock: every writer must observe prior output."""
+        import threading
+        import time
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        repo = "/repo/rmw-locked"
+        markers = ("m1", "m2", "m3", "m4")
+        barrier = threading.Barrier(len(markers))
+
+        def writer(marker: str) -> None:
+            barrier.wait(timeout=30)
+            with store.repo_lock(repo):
+                existing = store.load(repo)
+                symbols = dict(existing.symbols) if existing else {}
+                time.sleep(0.2)
+                symbols[marker] = {"name": marker}
+                store.save(CodeIndex(repo_path=repo, files={}, symbols=symbols))
+
+        threads = [threading.Thread(target=writer, args=(m,)) for m in markers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=60)
+
+        loaded = IndexStore(storage_dir=tmp_path).load(repo)
+        assert loaded is not None
+        assert set(loaded.symbols) == set(markers)
+
+    def test_repo_lock_serializes_across_subprocesses(self, tmp_path):
+        """No in-process mechanism could cover this — flock must do it alone."""
+        import subprocess
+        import sys
+        import textwrap
+
+        repo = "/repo/rmw-proc"
+        script = textwrap.dedent(
+            """
+            import sys, time
+            from lgrep.storage.index_store import CodeIndex, IndexStore
+
+            storage_dir, repo, marker = sys.argv[1], sys.argv[2], sys.argv[3]
+            store = IndexStore(storage_dir=storage_dir)
+            with store.repo_lock(repo):
+                existing = store.load(repo)
+                symbols = dict(existing.symbols) if existing else {}
+                time.sleep(0.2)
+                symbols[marker] = {"name": marker}
+                store.save(CodeIndex(repo_path=repo, files={}, symbols=symbols))
+            """
+        )
+        script_path = tmp_path / "_rmw_writer.py"
+        script_path.write_text(script, encoding="utf-8")
+        store_dir = tmp_path / "store"
+        store_dir.mkdir()
+
+        import os as _os
+
+        child_env = dict(_os.environ)
+        child_env["PYTHONPATH"] = _os.pathsep.join(p for p in sys.path if p)
+
+        markers = ("p1", "p2", "p3", "p4")
+        procs = [
+            subprocess.Popen(  # noqa: S603
+                [sys.executable, str(script_path), str(store_dir), repo, marker],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=child_env,
+            )
+            for marker in markers
+        ]
+        for p in procs:
+            _, err = p.communicate(timeout=120)
+            assert p.returncode == 0, f"writer failed: {err.decode()[:500]}"
+
+        from lgrep.storage.index_store import IndexStore
+
+        loaded = IndexStore(storage_dir=store_dir).load(repo)
+        assert loaded is not None
+        assert set(loaded.symbols) == set(markers), (
+            f"cross-process lost update: expected {sorted(markers)}, got {sorted(loaded.symbols)}"
+        )
+
+    def test_repo_lock_leaves_lock_file_in_place(self, tmp_path):
+        """Lock files are never deleted (unlinking an inode another process
+        waits on silently breaks mutual exclusion — design §2b)."""
+        import hashlib
+
+        from lgrep.storage.index_store import IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        repo = "/repo/lockfile"
+        with store.repo_lock(repo):
+            pass
+
+        key = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        assert (tmp_path / f".index_{key}.lock").is_file()
+
+    def test_repo_lock_per_key_independence(self, tmp_path):
+        """Locks for DIFFERENT repos must not serialize against each other."""
+        import threading
+        import time
+
+        from lgrep.storage.index_store import IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        order: list[str] = []
+
+        def holder(repo: str, hold: float) -> None:
+            with store.repo_lock(repo):
+                order.append(f"acquire-{repo}")
+                time.sleep(hold)
+                order.append(f"release-{repo}")
+
+        t1 = threading.Thread(target=holder, args=("/repo/one", 0.3))
+        t2 = threading.Thread(target=holder, args=("/repo/two", 0.0))
+        t1.start()
+        time.sleep(0.05)  # t1 holds /repo/one's lock
+        t2.start()
+        t1.join(timeout=30)
+        t2.join(timeout=30)
+
+        # /repo/two must NOT have waited for /repo/one's release.
+        assert order.index("acquire-/repo/two") < order.index("release-/repo/one"), order
+
+    def test_repo_lock_degrades_when_fcntl_unavailable(self, tmp_path, monkeypatch):
+        """Non-POSIX: warn and proceed unguarded rather than fail (C1 parity)."""
+        import builtins
+
+        from lgrep.storage.index_store import IndexStore
+
+        real_import = builtins.__import__
+
+        def no_fcntl(name, *args, **kwargs):
+            if name == "fcntl":
+                raise ImportError("simulated non-POSIX platform")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", no_fcntl)
+
+        store = IndexStore(storage_dir=tmp_path)
+        with store.repo_lock("/repo/no-fcntl"):
+            pass  # must not raise
+
+
+class TestIndexFolderRmwGuard:
+    """index_folder(incremental=True) must hold repo_lock across its full
+    read-modify-write window (AC10).
+
+    The storage-level tests prove the mechanism; this proves the wiring:
+    two concurrent index_folder runs on the same repo must never interleave
+    their load..save windows. RED state is silent symbol loss — so the
+    assertion targets the interleaving itself, not the absence of errors.
+    """
+
+    def test_concurrent_index_folder_windows_never_interleave(self, tmp_path, monkeypatch):
+        import threading
+        import time
+
+        from lgrep.storage import index_store as module
+        from lgrep.storage.index_store import IndexStore
+        from lgrep.tools.index_folder import index_folder
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        for i in range(6):
+            (repo / f"file_{i}.py").write_text(
+                f"def fn_{i}(x):\n    return x + {i}\n", encoding="utf-8"
+            )
+
+        events: list[tuple[str, str, float]] = []
+
+        real_load = IndexStore.load
+        real_save = IndexStore.save
+
+        def logged_load(self, repo_path):
+            result = real_load(self, repo_path)
+            events.append((threading.current_thread().name, "load", time.monotonic()))
+            time.sleep(0.15)  # widen the RMW window so interleaving is deterministic
+            return result
+
+        def logged_save(self, index):
+            events.append((threading.current_thread().name, "save", time.monotonic()))
+            return real_save(self, index)
+
+        monkeypatch.setattr(IndexStore, "load", logged_load)
+        monkeypatch.setattr(IndexStore, "save", logged_save)
+
+        storage = tmp_path / "store"
+        results: list[dict] = []
+        errors: list[Exception] = []
+
+        def run() -> None:
+            try:
+                results.append(index_folder(str(repo), storage_dir=storage))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        t_a = threading.Thread(target=run, name="runA")
+        t_b = threading.Thread(target=run, name="runB")
+        # Both threads start within microseconds; the 0.15s load sleeps make
+        # the RMW windows wide enough that lock-free interleaving is certain.
+        t_a.start()
+        t_b.start()
+        t_a.join(timeout=120)
+        t_b.join(timeout=120)
+
+        assert not errors, f"index_folder raised: {errors}"
+
+        def window(name: str) -> tuple[float, float]:
+            loads = [t for n, op, t in events if n == name and op == "load"]
+            saves = [t for n, op, t in events if n == name and op == "save"]
+            assert loads and saves, f"no window recorded for {name}: {events}"
+            return min(loads), max(saves)
+
+        a_start, a_end = window("runA")
+        b_start, b_end = window("runB")
+
+        # RED (no lock): B's load lands inside A's window (A.load, B.load, ...,
+        # A.save) — the exact interleaving that silently discards one run's
+        # symbols. GREEN: windows are strictly disjoint.
+        b_inside_a = a_start < b_start < a_end
+        a_inside_b = b_start < a_start < b_end
+        assert not (b_inside_a or a_inside_b), (
+            f"RMW windows interleaved (lost-update hazard live): {events}"
+        )
