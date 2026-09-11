@@ -206,6 +206,7 @@ class TestStaleFileDeletionGuard:
         embed_result = MagicMock()
         embed_result.embeddings = [[0.0] * EMBEDDING_DIM]
         embed_result.token_usage = 0
+        embed_result.model = "voyage-code-4"
         embedder.embed_documents.return_value = embed_result
 
         indexer = Indexer(project, store, embedder)
@@ -256,6 +257,7 @@ class TestStaleFileDeletionGuard:
         embed_result = MagicMock()
         embed_result.embeddings = [[0.0] * EMBEDDING_DIM]
         embed_result.token_usage = 0
+        embed_result.model = "voyage-code-4"
         embedder.embed_documents.return_value = embed_result
 
         indexer = Indexer(project, store, embedder)

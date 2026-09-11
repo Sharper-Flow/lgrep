@@ -18,7 +18,6 @@ import structlog
 
 from lgrep.chunking import CodeChunker
 from lgrep.discovery import FileDiscovery
-from lgrep.embeddings import MODEL_NAME
 from lgrep.exceptions import OperationCancelled
 from lgrep.storage import CodeChunk
 
@@ -323,7 +322,7 @@ class Indexer:
         embeddings: list[list[float]],
         rel_path: str,
         file_hash: str,
-        embedding_model: str = MODEL_NAME,
+        embedding_model: str,
     ) -> list[CodeChunk]:
         """Create CodeChunk objects from chunk info and embedding vectors."""
         now = time.time()
@@ -397,15 +396,12 @@ class Indexer:
         if cancel_event is not None and cancel_event.is_set():
             raise OperationCancelled("index_file cancelled before storage")
         self.storage.delete_by_file(rel_path)
-        embedding_model = getattr(embed_result, "model", MODEL_NAME)
-        if not isinstance(embedding_model, str):
-            embedding_model = MODEL_NAME
         code_chunks = self._build_code_chunks(
             chunk_result.chunks,
             embed_result.embeddings,
             rel_path,
             file_hash,
-            embedding_model=embedding_model,
+            embedding_model=embed_result.model,
         )
         self.storage.add_chunks(code_chunks)
 

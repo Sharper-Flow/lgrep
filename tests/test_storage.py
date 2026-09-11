@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import lancedb
 import pytest
 
 from lgrep.storage import (
@@ -196,6 +197,23 @@ class TestChunkStoreLifecycle:
         """A table with vectors from an older model must reopen empty."""
         old_store = ChunkStore(temp_db_path)
         old_store.add_chunks([make_chunk(embedding_model="voyage-code-3")])
+
+        current_store = ChunkStore(temp_db_path)
+
+        assert current_store.count_chunks() == 0
+        assert "embedding_model" in current_store.table.schema.names
+
+    def test_legacy_schema_missing_model_forces_rebuild(self, temp_db_path):
+        """A legacy table without model provenance must reopen empty."""
+        schema = CodeChunk.to_arrow_schema()
+        legacy_schema = schema.remove(schema.get_field_index("embedding_model"))
+        legacy_table = lancedb.connect(str(temp_db_path)).create_table(
+            CHUNKS_TABLE,
+            schema=legacy_schema,
+        )
+        legacy_row = make_chunk().model_dump()
+        legacy_row.pop("embedding_model")
+        legacy_table.add([legacy_row])
 
         current_store = ChunkStore(temp_db_path)
 
