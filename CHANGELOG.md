@@ -1,3 +1,12 @@
+## 2026-09-11 (v3.3.0)
+
+- Merge pull request #14 from Sharper-Flow/work/work-025854009c977d3922099851
+- Merge branch 'main' into work/work-025854009c977d3922099851
+- fix(indexing): read embedding provenance from the embedding result
+- feat(embeddings): migrate to voyage-code-4 with schema-carried provenance
+- docs(knowledge): declare the lgrep Domain registry
+- docs: update changelog for v3.2.8
+
 ## Unreleased
 
 - Upgrade semantic embeddings to Voyage Code 4 at $0.12 per million tokens.
