@@ -1,3 +1,8 @@
+## Unreleased
+
+- Upgrade semantic embeddings to Voyage Code 4 at $0.12 per million tokens.
+- Rebuild cached chunk tables when the stored embedding model is absent or stale.
+
 ## 2026-08-07 (v3.2.8)
 
 - chore(adv): checkpoint tk-bbd3fa515816

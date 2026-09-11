@@ -322,6 +322,7 @@ class Indexer:
         embeddings: list[list[float]],
         rel_path: str,
         file_hash: str,
+        embedding_model: str,
     ) -> list[CodeChunk]:
         """Create CodeChunk objects from chunk info and embedding vectors."""
         now = time.time()
@@ -336,6 +337,7 @@ class Indexer:
                 vector=vector,
                 file_hash=file_hash,
                 indexed_at=now,
+                embedding_model=embedding_model,
             )
             for i, (chunk_info, vector) in enumerate(zip(chunk_infos, embeddings, strict=False))
         ]
@@ -395,7 +397,11 @@ class Indexer:
             raise OperationCancelled("index_file cancelled before storage")
         self.storage.delete_by_file(rel_path)
         code_chunks = self._build_code_chunks(
-            chunk_result.chunks, embed_result.embeddings, rel_path, file_hash
+            chunk_result.chunks,
+            embed_result.embeddings,
+            rel_path,
+            file_hash,
+            embedding_model=embed_result.model,
         )
         self.storage.add_chunks(code_chunks)
 

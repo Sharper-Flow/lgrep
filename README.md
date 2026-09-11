@@ -43,7 +43,7 @@ That is the whole pitch: fewer bad searches, less wasted context, faster underst
 
 `lgrep` combines two complementary engines in one MCP server for local repositories:
 
-- **Semantic engine** - natural-language code search using Voyage Code 3 embeddings with local LanceDB storage
+- **Semantic engine** - natural-language code search using Voyage Code 4 embeddings with local LanceDB storage
 - **Symbol engine** - exact symbol, outline, and text tools using tree-sitter parsing with a local JSON index
 
 Use the semantic engine to answer questions like:
@@ -122,7 +122,7 @@ flowchart LR
     B[OpenCode Session 2] --> M
     C[OpenCode Session N] --> M
 
-    M --> S[Semantic Engine\nVoyage Code 3 + LanceDB]
+    M --> S[Semantic Engine\nVoyage Code 4 + LanceDB]
     M --> Y[Symbol Engine\ntree-sitter + JSON index]
 
     S --> V[(Local vector store)]
@@ -138,7 +138,7 @@ Agent -> lgrep MCP server -> semantic engine + symbol engine
 
 1. Discover files while respecting `.gitignore`
 2. Chunk code with AST-aware boundaries
-3. Embed chunks with Voyage Code 3
+3. Embed chunks with Voyage Code 4
 4. Store vectors locally in LanceDB
 5. Search with hybrid retrieval and reranking
 

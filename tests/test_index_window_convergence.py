@@ -34,7 +34,7 @@ def mock_embedder():
         return EmbeddingResult(
             embeddings=[[0.1] * 1024 for _ in texts],
             token_usage=len(texts) * 10,
-            model="voyage-code-3",
+            model="voyage-code-4",
         )
 
     embedder.embed_documents.side_effect = side_effect
