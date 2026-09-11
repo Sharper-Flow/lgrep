@@ -1,0 +1,26 @@
+{
+  "dispositions": [],
+  "exclusions": [],
+  "indexed_kinds": [
+    "work_note",
+    "constitution",
+    "decision",
+    "spec",
+    "lesson",
+    "reference",
+    "research"
+  ],
+  "knowledge_roots": [
+    "docs/"
+  ],
+  "schema_version": "1.2",
+  "supported_kinds": [
+    "work_note",
+    "constitution",
+    "decision",
+    "spec",
+    "lesson",
+    "reference",
+    "research"
+  ]
+}

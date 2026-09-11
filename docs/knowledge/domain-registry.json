@@ -1,0 +1,54 @@
+{
+  "domains": [
+    {
+      "architecture_relations": [],
+      "domain_id": "product-root:lgrep",
+      "name": "lgrep",
+      "purpose": "Product-wide lgrep law: the dual-engine contract that pairs semantic retrieval with exact symbol lookup, the retrieval guarantees agents depend on, and decisions that bind every child Domain rather than any single one.",
+      "status": "current"
+    },
+    {
+      "architecture_relations": [],
+      "domain_id": "semantic-retrieval",
+      "name": "Semantic retrieval",
+      "parent_domain_id": "product-root:lgrep",
+      "purpose": "Owns the embedding model contract and vector-space integrity: the Voyage client and its batching and cost accounting, AST-aware chunking, the LanceDB chunk store, and the hybrid semantic search path with its staleness pre-flight.",
+      "status": "current"
+    },
+    {
+      "architecture_relations": [],
+      "domain_id": "symbol-intelligence",
+      "name": "Symbol intelligence",
+      "parent_domain_id": "product-root:lgrep",
+      "purpose": "Owns exact symbol and occurrence lookup: tree-sitter language support, symbol and hierarchy extraction, the on-disk symbol index and its version gates, and the symbol indexing and query tools.",
+      "status": "current"
+    },
+    {
+      "architecture_relations": [],
+      "domain_id": "corpus-ingestion",
+      "name": "Corpus ingestion",
+      "parent_domain_id": "product-root:lgrep",
+      "purpose": "Owns what enters the corpus and when: file discovery, gitignore and lgrepignore rule handling, the background file watcher, and the content-hash change detection both engines consume.",
+      "status": "current"
+    },
+    {
+      "architecture_relations": [],
+      "domain_id": "agent-surface",
+      "name": "Agent surface",
+      "parent_domain_id": "product-root:lgrep",
+      "purpose": "Owns the MCP plane agents call: server bootstrap and lifecycle, the runtime and its cancellation contract, typed tool and response schemas, diagnostics, the command-line entry point, and host installation.",
+      "status": "current"
+    },
+    {
+      "architecture_relations": [],
+      "domain_id": "store-lifecycle",
+      "name": "Store lifecycle",
+      "parent_domain_id": "product-root:lgrep",
+      "purpose": "Owns durable cache custody across both engines: cache directory layout and repository keying, worktree deduplication, invalidation, orphan and symbol pruning, and the path-confinement, symlink, and grace-window guards those reclamations enforce.",
+      "status": "current"
+    }
+  ],
+  "product_key": "lgrep",
+  "root_domain_id": "product-root:lgrep",
+  "schema_version": "1.0"
+}
