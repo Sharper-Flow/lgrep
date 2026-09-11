@@ -27,6 +27,7 @@ def make_chunk(
     vector=None,
     file_hash="hash",
     indexed_at=123.456,
+    embedding_model="voyage-code-4",
 ):
     """Helper to create a CodeChunk."""
     if vector is None:
@@ -41,6 +42,7 @@ def make_chunk(
         vector=vector,
         file_hash=file_hash,
         indexed_at=indexed_at,
+        embedding_model=embedding_model,
     )
 
 
@@ -75,12 +77,14 @@ class TestCodeChunkModel:
         assert chunk.file_path == "test.py"
         assert len(chunk.vector) == EMBEDDING_DIM
         assert isinstance(chunk.id, str)
+        assert chunk.embedding_model == "voyage-code-4"
 
     def test_arrow_schema(self):
         """Should export valid arrow schema."""
         schema = CodeChunk.to_arrow_schema()
         assert "file_path" in schema.names
         assert "vector" in schema.names
+        assert "embedding_model" in schema.names
 
 
 class TestDbPathResolution:
@@ -187,6 +191,16 @@ class TestChunkStoreLifecycle:
             db_path = Path(tmpdir) / "deep" / "nested" / "db"
             ChunkStore(db_path)
             assert db_path.exists()
+
+    def test_model_mismatch_forces_rebuild(self, temp_db_path):
+        """A table with vectors from an older model must reopen empty."""
+        old_store = ChunkStore(temp_db_path)
+        old_store.add_chunks([make_chunk(embedding_model="voyage-code-3")])
+
+        current_store = ChunkStore(temp_db_path)
+
+        assert current_store.count_chunks() == 0
+        assert "embedding_model" in current_store.table.schema.names
 
     def test_add_chunks(self, chunk_store, sample_chunks):
         """Should add chunks to the database."""

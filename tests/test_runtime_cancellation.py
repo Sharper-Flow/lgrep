@@ -41,7 +41,7 @@ def mock_embedder():
         return EmbeddingResult(
             embeddings=[[0.1] * 1024 for _ in texts],
             token_usage=len(texts) * 10,
-            model="voyage-code-3",
+            model="voyage-code-4",
         )
 
     embedder.embed_documents.side_effect = side_effect
@@ -371,7 +371,7 @@ def test_index_file_raises_before_storage_on_cancel(tmp_project):
         return EmbeddingResult(
             embeddings=[[0.1] * 1024 for _ in texts],
             token_usage=len(texts) * 10,
-            model="voyage-code-3",
+            model="voyage-code-4",
         )
 
     indexer.embedder.embed_documents.side_effect = embed_then_cancel
@@ -448,7 +448,7 @@ async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch
         return EmbeddingResult(
             embeddings=[[0.1] * 1024 for _ in texts],
             token_usage=len(texts) * 10,
-            model="voyage-code-3",
+            model="voyage-code-4",
         )
 
     embedder.embed_documents.side_effect = fake_embed

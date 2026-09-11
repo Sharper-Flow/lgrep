@@ -43,7 +43,7 @@ class TestVoyageEmbedder:
 
             assert result.embeddings == []
             assert result.token_usage == 0
-            assert result.model == "voyage-code-3"
+            assert result.model == "voyage-code-4"
 
     def test_embed_documents_single_batch(self) -> None:
         """Should embed documents in a single batch."""
@@ -63,7 +63,7 @@ class TestVoyageEmbedder:
             assert result.token_usage == 100
             mock_client.embed.assert_called_once_with(
                 texts=["doc1", "doc2"],
-                model="voyage-code-3",
+                model="voyage-code-4",
                 input_type="document",
             )
 
@@ -103,7 +103,7 @@ class TestVoyageEmbedder:
             assert len(result) == 1024
             mock_client.embed.assert_called_once_with(
                 texts=["find authentication code"],
-                model="voyage-code-3",
+                model="voyage-code-4",
                 input_type="query",
             )
 
@@ -111,8 +111,8 @@ class TestVoyageEmbedder:
         """Should log warning when cost exceeds $5 threshold."""
         mock_response = MagicMock()
         mock_response.embeddings = [[0.1] * 1024]
-        # Voyage Code 3 = $0.18/1M tokens, so $5 = ~27.8M tokens
-        mock_response.total_tokens = 28_000_000
+        # Voyage Code 4 = $0.12/1M tokens, so $5 = ~41.7M tokens
+        mock_response.total_tokens = 42_000_000
 
         with patch("voyageai.Client") as mock_client_class:
             mock_client = MagicMock()
@@ -122,7 +122,7 @@ class TestVoyageEmbedder:
             embedder = VoyageEmbedder(api_key="test-key")
             embedder.embed_documents(["doc1"])
 
-            assert embedder.total_tokens_used == 28_000_000
+            assert embedder.total_tokens_used == 42_000_000
             assert embedder.estimated_cost_usd > 5.0
             assert embedder.cost_warning_5_fired
 
@@ -130,7 +130,7 @@ class TestVoyageEmbedder:
         """Should log warning when cost exceeds $10 threshold."""
         mock_response = MagicMock()
         mock_response.embeddings = [[0.1] * 1024]
-        mock_response.total_tokens = 56_000_000  # ~$10.08
+        mock_response.total_tokens = 84_000_000  # ~$10.08
 
         with patch("voyageai.Client") as mock_client_class:
             mock_client = MagicMock()
@@ -144,7 +144,7 @@ class TestVoyageEmbedder:
             assert embedder.cost_warning_10_fired
 
     def test_cost_calculation_accuracy(self) -> None:
-        """Should calculate cost accurately at Voyage Code 3 pricing."""
+        """Should calculate cost accurately at Voyage Code 4 pricing."""
         mock_response = MagicMock()
         mock_response.embeddings = [[0.1] * 1024]
         mock_response.total_tokens = 1_000_000  # exactly 1M tokens
@@ -157,8 +157,8 @@ class TestVoyageEmbedder:
             embedder = VoyageEmbedder(api_key="test-key")
             embedder.embed_documents(["doc1"])
 
-            # $0.18 per 1M tokens
-            assert abs(embedder.estimated_cost_usd - 0.18) < 0.001
+            # $0.12 per 1M tokens
+            assert abs(embedder.estimated_cost_usd - 0.12) < 0.001
 
     def test_retry_on_transient_failure_then_success(self) -> None:
         """Should retry on transient failures and succeed."""
@@ -247,8 +247,8 @@ class TestEmbeddingResult:
         result = EmbeddingResult(
             embeddings=[[0.1, 0.2]],
             token_usage=100,
-            model="voyage-code-3",
+            model="voyage-code-4",
         )
         assert result.embeddings == [[0.1, 0.2]]
         assert result.token_usage == 100
-        assert result.model == "voyage-code-3"
+        assert result.model == "voyage-code-4"

@@ -44,7 +44,7 @@ class TestEmbedQueryAsync:
         assert result[0] == 0.1
         mock_client.embed.assert_called_once_with(
             texts=["test query"],
-            model="voyage-code-3",
+            model="voyage-code-4",
             input_type="query",
         )
 

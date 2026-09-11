@@ -22,6 +22,8 @@ from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
 from pydantic import Field
 
+from lgrep.embeddings import MODEL_NAME
+
 if TYPE_CHECKING:
     from lancedb import DBConnection
     from lancedb.table import Table
@@ -31,7 +33,7 @@ log = structlog.get_logger()
 # Default cache directory
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "lgrep"
 
-# Voyage Code 3 embedding dimensions
+# Voyage Code 4 embedding dimensions
 EMBEDDING_DIM = 1024
 
 # Table name
@@ -64,9 +66,13 @@ class CodeChunk(LanceModel):
     start_line: int = Field(description="Starting line number (1-indexed)")
     end_line: int = Field(description="Ending line number (inclusive)")
     content: str = Field(description="Chunk text content")
-    vector: Vector(EMBEDDING_DIM) = Field(description="Voyage Code 3 embedding")  # type: ignore[valid-type]
+    vector: Vector(EMBEDDING_DIM) = Field(description="Voyage Code 4 embedding")  # type: ignore[valid-type]
     file_hash: str = Field(description="Hash of source file for invalidation")
     indexed_at: float = Field(description="Unix timestamp of indexing")
+    embedding_model: str = Field(
+        default=MODEL_NAME,
+        description="Model that produced the embedding vector",
+    )
 
 
 @dataclass
@@ -402,6 +408,14 @@ class ChunkStore:
                 # breaks `in` operator checks.
                 self._table = self.db.open_table(CHUNKS_TABLE)
                 log.debug("chunk_table_opened", rows=self._table.count_rows())
+                if self._table_needs_rebuild():
+                    self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
+                    self._table = self.db.create_table(
+                        CHUNKS_TABLE,
+                        schema=CodeChunk.to_arrow_schema(),
+                    )
+                    created = True
+                    log.info("chunk_table_recreated_after_model_mismatch")
             except (FileNotFoundError, ValueError) as _not_found:
                 # Table doesn't exist yet — normal first-run path
                 self._table = self.db.create_table(
@@ -430,6 +444,30 @@ class ChunkStore:
             if not created:
                 self._probe_existing_indexes()
         return self._table
+
+    def _table_needs_rebuild(self) -> bool:
+        """Return whether the opened table lacks or uses a stale model schema."""
+        if self._table is None:
+            return False
+
+        if "embedding_model" not in self._table.schema.names:
+            log.info("chunk_table_schema_missing_embedding_model")
+            return True
+
+        row_count = self._table.count_rows()
+        if row_count == 0:
+            return False
+
+        arrow_table = self._table.search().select(["embedding_model"]).limit(row_count).to_arrow()
+        models = set(arrow_table.column("embedding_model").to_pylist())
+        if models != {MODEL_NAME}:
+            log.info(
+                "chunk_table_embedding_model_mismatch",
+                stored_models=sorted(str(model) for model in models),
+                configured_model=MODEL_NAME,
+            )
+            return True
+        return False
 
     def _probe_existing_indexes(self) -> None:
         """Best-effort probe for indexes persisted by LanceDB.

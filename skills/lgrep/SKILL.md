@@ -12,7 +12,7 @@ metadata:
 
 lgrep provides **two complementary search engines**:
 
-1. **Semantic engine** (`lgrep_search_semantic`) — understands code *meaning*. Uses Voyage Code 3 embeddings (92% retrieval quality) with local LanceDB storage.
+1. **Semantic engine** (`lgrep_search_semantic`) — understands code *meaning*. Uses Voyage Code 4 embeddings with local LanceDB storage.
 2. **Symbol engine** (`lgrep_search_symbols`, `lgrep_get_file_outline`, etc.) — understands code *structure*. Exact function/class/method lookup via tree-sitter AST. No API key needed.
 
 Use this first-action policy:

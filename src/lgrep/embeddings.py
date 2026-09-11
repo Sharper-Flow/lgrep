@@ -1,6 +1,6 @@
 """Voyage AI embedding client for lgrep.
 
-Uses voyage-code-3 model for code-optimized embeddings.
+Uses voyage-code-4 model for code-optimized embeddings.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-# Voyage Code 3 specifications
-MODEL_NAME = "voyage-code-3"
+# Voyage Code 4 specifications
+MODEL_NAME = "voyage-code-4"
 DEFAULT_DIMENSIONS = 1024  # Matryoshka: 256-2048
 MAX_BATCH_SIZE = 128
 MAX_BATCH_TOKENS = 100_000  # Voyage limit is 120k; use 100k for safety margin
@@ -35,8 +35,8 @@ BASE_DELAY = 1.0
 QUERY_MAX_RETRIES = 2
 QUERY_BASE_DELAY = 0.5
 
-# Voyage Code 3 pricing: $0.18 per 1M tokens
-COST_PER_MILLION_TOKENS = 0.18
+# Voyage Code 4 pricing: $0.12 per 1M tokens
+COST_PER_MILLION_TOKENS = 0.12
 COST_THRESHOLD_5 = 5.0
 COST_THRESHOLD_10 = 10.0
 
@@ -53,7 +53,7 @@ class EmbeddingResult:
 class VoyageEmbedder:
     """Voyage AI embedding client for code search.
 
-    Uses voyage-code-3 model which achieves 92% retrieval quality on code benchmarks.
+    Uses voyage-code-4 model for code-optimized embeddings.
     Includes retry logic with exponential backoff and batching.
     """
 
