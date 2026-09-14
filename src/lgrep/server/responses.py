@@ -178,6 +178,8 @@ class IndexSymbolsRepoResult(TypedDict):
     files_indexed: int
     symbols_indexed: int
     repo: str
+    truncated: bool
+    truncation_reason: str | None
     _meta: _Meta
 
 

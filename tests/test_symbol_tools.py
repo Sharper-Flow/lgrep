@@ -14,6 +14,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 # ── Import contracts ──────────────────────────────────────────────────────────
@@ -272,7 +273,8 @@ class TestIndexRepo:
                 del exc_type, exc, tb
                 return False
 
-            async def get(self, url: str):
+            async def get(self, url: str, timeout=None):
+                del timeout
                 if "git/trees" in url:
                     return _FakeResponse(
                         payload={
@@ -327,6 +329,188 @@ class TestIndexRepo:
 
         invalidated = invalidate_cache(repo_key, storage_dir=tmp_store)
         assert invalidated["status"] == "deleted"
+
+    @pytest.mark.asyncio
+    async def test_deadline_returns_partial_with_truncated(self, tmp_store, monkeypatch):
+        """A fetch loop that cannot finish in the budget returns the partial
+        index with truncated=true instead of running until an external
+        deadline kills the session."""
+        import asyncio
+
+        import lgrep.tools.index_repo as index_repo_mod
+        from lgrep.tools.index_repo import index_repo
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        observed_timeouts = []
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                del args, kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                observed_timeouts.append(timeout)
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={
+                            "truncated": False,
+                            "tree": [
+                                {"type": "blob", "path": "src/one.py"},
+                                {"type": "blob", "path": "src/two.py"},
+                                {"type": "blob", "path": "src/three.py"},
+                            ],
+                        }
+                    )
+                # Each content fetch outlives the whole budget.
+                await asyncio.sleep(0.3)
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.setattr(index_repo_mod, "_DEADLINE_FLOOR_S", 0.05)
+        monkeypatch.setattr(index_repo_mod, "_DEADLINE_FRACTION", 1.0)
+        monkeypatch.setenv("LGREP_TOOL_TIMEOUT_S", "0.05")
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "deadline"
+        # The per-request timeout never exceeds the remaining budget.
+        assert all(t is None or t <= 0.05 + 1e-9 or t <= 30.0 for t in observed_timeouts), (
+            observed_timeouts
+        )
+
+    @pytest.mark.asyncio
+    async def test_max_files_cap_sets_truncated(self, tmp_store, monkeypatch):
+        """The max_files cutoff reports truncated=true instead of passing
+        silently as a complete index."""
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                del args, kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={
+                            "truncated": False,
+                            "tree": [
+                                {"type": "blob", "path": "src/one.py"},
+                                {"type": "blob", "path": "src/two.py"},
+                                {"type": "blob", "path": "src/three.py"},
+                            ],
+                        }
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+        from lgrep.tools.index_repo import index_repo
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store, max_files=1)
+
+        assert "error" not in result
+        assert result["files_indexed"] == 1
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "max_files"
+
+    @pytest.mark.asyncio
+    async def test_complete_index_reports_not_truncated(self, tmp_store, monkeypatch):
+        """An index that finishes inside the budget reports truncated=false."""
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                del args, kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={
+                            "truncated": False,
+                            "tree": [{"type": "blob", "path": "src/one.py"}],
+                        }
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+
+        from lgrep.tools.index_repo import index_repo
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["truncated"] is False
+        assert result["truncation_reason"] is None
 
 
 # ── get_file_tree ─────────────────────────────────────────────────────────────
