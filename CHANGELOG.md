@@ -1,3 +1,9 @@
+## 2026-09-14 (v3.3.1)
+
+- fix(tests): stub the bounded-window path in the background-reindex shutdown test (#16)
+- refactor(storage): require embedding_model and drop the duplicated changelog section (#15)
+- docs: update changelog for v3.3.0
+
 ## 2026-09-11 (v3.3.0)
 
 - Merge pull request #14 from Sharper-Flow/work/work-025854009c977d3922099851
