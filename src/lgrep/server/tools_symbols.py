@@ -117,7 +117,14 @@ async def index_symbols_repo(
     ] = "HEAD",
     max_files: Annotated[
         int,
-        Field(description="Maximum files to fetch and parse from the remote repository."),
+        Field(
+            description=(
+                "Maximum files to fetch and parse from the remote repository. "
+                "The operation also stops at an internal time budget derived from "
+                "LGREP_TOOL_TIMEOUT_S; either stop returns the partial index with "
+                "truncated=true."
+            ),
+        ),
     ] = 500,
     github_token: Annotated[
         str | None,
@@ -140,6 +147,8 @@ async def index_symbols_repo(
         files_indexed=result["files_indexed"],
         symbols_indexed=result["symbols_indexed"],
         repo=result["repo"],
+        truncated=result.get("truncated", False),
+        truncation_reason=result.get("truncation_reason"),
         _meta=make_meta(time.monotonic(), "index_symbols_repo"),
     )
 

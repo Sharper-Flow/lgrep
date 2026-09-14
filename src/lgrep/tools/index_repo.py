@@ -6,6 +6,7 @@ Indexes symbols from a GitHub repository via the GitHub REST API (no git clone).
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 from pathlib import Path
 
@@ -16,6 +17,21 @@ from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._meta import error_response, make_meta
 
 log = structlog.get_logger()
+
+# The fetch loop must finish strictly inside the tool wrapper's
+# asyncio.wait_for(TOOL_TIMEOUT_S) and inside the MCP proxy's provider
+# deadline, which starts earlier. Both clocks are lost races for an
+# unbounded loop: the wrapper's structured timeout error never reaches the
+# caller because the proxy tears the stdio session down first, and a stdio
+# server exits on stdin EOF. The budget keeps a margin below both.
+_DEADLINE_FRACTION = 0.8
+_DEADLINE_FLOOR_S = 5.0
+
+
+def _deadline_budget_s() -> float:
+    """Total-operation budget as a fraction of the configured tool timeout."""
+    timeout_s = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
+    return max(_DEADLINE_FLOOR_S, _DEADLINE_FRACTION * timeout_s)
 
 
 async def index_repo(
@@ -74,12 +90,17 @@ async def index_repo(
     files_dict: dict[str, str] = {}
     symbols_dict: dict[str, dict] = {}
     files_processed = 0
+    truncated = False
+    truncation_reason: str | None = None
+
+    budget_s = _deadline_budget_s()
+    deadline = t0 + budget_s
 
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         # Get the file tree from GitHub
         tree_url = f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1"
         try:
-            resp = await client.get(tree_url)
+            resp = await client.get(tree_url, timeout=min(30.0, budget_s))
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return error_response(
@@ -100,6 +121,21 @@ async def index_repo(
 
         for item in blob_items:
             if files_processed >= max_files:
+                truncated = True
+                truncation_reason = "max_files"
+                break
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                truncated = True
+                truncation_reason = "deadline"
+                log.info(
+                    "index_repo_deadline_reached",
+                    repo=repo,
+                    budget_s=round(budget_s, 2),
+                    files_indexed=files_processed,
+                    symbols_indexed=len(symbols_dict),
+                )
                 break
 
             file_path = item["path"]
@@ -108,10 +144,11 @@ async def index_repo(
             if spec is None:
                 continue
 
-            # Fetch file content
+            # Fetch file content. The per-request timeout never exceeds the
+            # remaining budget, so one hanging fetch cannot overrun it.
             content_url = f"https://raw.githubusercontent.com/{repo}/{ref}/{file_path}"
             try:
-                content_resp = await client.get(content_url)
+                content_resp = await client.get(content_url, timeout=min(30.0, remaining))
                 content_resp.raise_for_status()
                 content = content_resp.content
             except (httpx.HTTPStatusError, httpx.RequestError) as e:
@@ -160,5 +197,7 @@ async def index_repo(
         "ref": ref,
         "files_indexed": files_processed,
         "symbols_indexed": len(symbols_dict),
+        "truncated": truncated,
+        "truncation_reason": truncation_reason,
         "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }
