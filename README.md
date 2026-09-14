@@ -442,6 +442,7 @@ Security notes:
 | `LGREP_AUTO_WARM_DISK` | No | `true` | Auto-load all discoverable disk caches on startup when no explicit warm paths are set. Set `false` for large shared machines. |
 | `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
+| `LGREP_GITHUB_TOKEN` | No | unset | GitHub token used by `index_symbols_repo` when no token is passed to the call. Lifts remote indexing from the anonymous 60/hour rate limit (shared across all sessions) to the authenticated 5000/hour limit. `GITHUB_TOKEN` is used as a fallback; an explicit `github_token` argument wins over both. |
 | `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |

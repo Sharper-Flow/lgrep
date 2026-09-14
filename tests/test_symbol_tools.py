@@ -377,13 +377,19 @@ class TestIndexRepo:
                         payload={
                             "truncated": False,
                             "tree": [
-                                {"type": "blob", "path": "src/one.py"},
-                                {"type": "blob", "path": "src/two.py"},
-                                {"type": "blob", "path": "src/three.py"},
+                                {"type": "blob", "path": f"src/f{i:02d}.py"} for i in range(20)
                             ],
                         }
                     )
-                # Each content fetch outlives the whole budget.
+                # Honor the per-request timeout like real httpx: when the
+                # capped timeout elapses, the fetch fails instead of
+                # outliving the budget.
+                if timeout is not None and timeout < 0.3:
+                    await asyncio.sleep(timeout)
+                    raise httpx.ReadTimeout(
+                        "simulated budget-capped timeout",
+                        request=httpx.Request("GET", url),
+                    )
                 await asyncio.sleep(0.3)
                 return _FakeResponse(content=b"def f():\n    return 1\n")
 
@@ -401,6 +407,279 @@ class TestIndexRepo:
         assert all(t is None or t <= 0.05 + 1e-9 or t <= 30.0 for t in observed_timeouts), (
             observed_timeouts
         )
+
+    @pytest.mark.asyncio
+    async def test_index_repo_token_from_env_supplies_header(self, tmp_store, monkeypatch):
+        """LGREP_GITHUB_TOKEN supplies the Authorization header when the
+        parameter is absent, and wins over GITHUB_TOKEN."""
+        from lgrep.tools.index_repo import index_repo
+
+        captured_headers = {}
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured_headers.update(kwargs.get("headers") or {})
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={"truncated": False, "tree": [{"type": "blob", "path": "src/a.py"}]}
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.setenv("LGREP_GITHUB_TOKEN", "env-token")
+        monkeypatch.setenv("GITHUB_TOKEN", "generic-token")
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert captured_headers.get("Authorization") == "token env-token"
+
+    @pytest.mark.asyncio
+    async def test_index_repo_param_overrides_env_token(self, tmp_store, monkeypatch):
+        from lgrep.tools.index_repo import index_repo
+
+        captured_headers = {}
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured_headers.update(kwargs.get("headers") or {})
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={"truncated": False, "tree": [{"type": "blob", "path": "src/a.py"}]}
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.setenv("LGREP_GITHUB_TOKEN", "env-token")
+
+        result = await index_repo(
+            "owner/repo", ref="main", storage_dir=tmp_store, github_token="param-token"
+        )
+
+        assert "error" not in result
+        assert captured_headers.get("Authorization") == "token param-token"
+
+    @pytest.mark.asyncio
+    async def test_index_repo_no_token_no_header(self, tmp_store, monkeypatch):
+        from lgrep.tools.index_repo import index_repo
+
+        captured_headers = {}
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured_headers.update(kwargs.get("headers") or {})
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={"truncated": False, "tree": [{"type": "blob", "path": "src/a.py"}]}
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.delenv("LGREP_GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert "Authorization" not in captured_headers
+
+    @pytest.mark.asyncio
+    async def test_index_repo_github_token_env_fallback(self, tmp_store, monkeypatch):
+        """GITHUB_TOKEN is used when LGREP_GITHUB_TOKEN is absent."""
+        from lgrep.tools.index_repo import index_repo
+
+        captured_headers = {}
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured_headers.update(kwargs.get("headers") or {})
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={"truncated": False, "tree": [{"type": "blob", "path": "src/a.py"}]}
+                    )
+                return _FakeResponse(content=b"def f():\n    return 1\n")
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.delenv("LGREP_GITHUB_TOKEN", raising=False)
+        monkeypatch.setenv("GITHUB_TOKEN", "generic-token")
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert captured_headers.get("Authorization") == "token generic-token"
+
+    @pytest.mark.asyncio
+    async def test_index_repo_concurrent_fetch_bounded(self, tmp_store, monkeypatch):
+        """Content fetches run concurrently under the configured cap and
+        every file still lands in the index."""
+        import asyncio
+
+        import lgrep.tools.index_repo as index_repo_mod
+        from lgrep.tools.index_repo import index_repo
+
+        class _FakeResponse:
+            def __init__(self, *, payload=None, content=b"", status_code=200):
+                self._payload = payload
+                self.content = content
+                self.status_code = status_code
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        "http error",
+                        request=httpx.Request("GET", "https://example.invalid"),
+                        response=httpx.Response(self.status_code),
+                    )
+
+            def json(self):
+                return self._payload
+
+        in_flight = 0
+        max_in_flight = 0
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                del args, kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, url: str, timeout=None):
+                nonlocal in_flight, max_in_flight
+                if "git/trees" in url:
+                    return _FakeResponse(
+                        payload={
+                            "truncated": False,
+                            "tree": [
+                                {"type": "blob", "path": f"src/f{i:02d}.py"} for i in range(12)
+                            ],
+                        }
+                    )
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+                try:
+                    await asyncio.sleep(0.05)
+                    return _FakeResponse(content=b"def f():\n    return 1\n")
+                finally:
+                    in_flight -= 1
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+        monkeypatch.setattr(index_repo_mod, "_FETCH_CONCURRENCY", 4)
+
+        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["files_indexed"] == 12
+        assert result["truncated"] is False
+        assert 1 <= max_in_flight <= 4, max_in_flight
 
     @pytest.mark.asyncio
     async def test_max_files_cap_sets_truncated(self, tmp_store, monkeypatch):

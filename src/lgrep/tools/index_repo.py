@@ -5,6 +5,7 @@ Indexes symbols from a GitHub repository via the GitHub REST API (no git clone).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import time
@@ -27,11 +28,28 @@ log = structlog.get_logger()
 _DEADLINE_FRACTION = 0.8
 _DEADLINE_FLOOR_S = 5.0
 
+# File contents are fetched in concurrent waves of this size. The wave
+# boundary is where the budget check counts unattempted files, so the
+# deadline semantics stay exact under concurrency.
+_FETCH_CONCURRENCY = 8
+
 
 def _deadline_budget_s() -> float:
     """Total-operation budget as a fraction of the configured tool timeout."""
     timeout_s = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
     return max(_DEADLINE_FLOOR_S, _DEADLINE_FRACTION * timeout_s)
+
+
+def _resolve_github_token(github_token: str | None) -> str | None:
+    """Explicit parameter wins, then LGREP_GITHUB_TOKEN, then GITHUB_TOKEN.
+
+    The anonymous rate limit (60/hour, shared across every session on the
+    host) is the binding constraint for large indexes, so a deployment-level
+    token lifts the ceiling without any per-call plumbing.
+    """
+    if github_token:
+        return github_token
+    return os.environ.get("LGREP_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
 
 
 async def index_repo(
@@ -81,8 +99,9 @@ async def index_repo(
     from lgrep.parser.languages import get_language_spec
 
     headers = {"Accept": "application/vnd.github.v3+json"}
-    if github_token:
-        headers["Authorization"] = f"token {github_token}"
+    resolved_token = _resolve_github_token(github_token)
+    if resolved_token:
+        headers["Authorization"] = f"token {resolved_token}"
 
     store = IndexStore(storage_dir=storage_dir)
     repo_key = f"github:{repo}@{ref}"
@@ -119,11 +138,35 @@ async def index_repo(
 
         blob_items = [item for item in tree_data.get("tree", []) if item.get("type") == "blob"]
 
+        # Select indexable files in tree order up to max_files. When the tree
+        # holds more indexable files than the cap allows, the run is
+        # truncated by max_files rather than silently incomplete.
+        eligible: list[tuple[str, object]] = []
+        eligible_exhausted = True
         for item in blob_items:
-            if files_processed >= max_files:
-                truncated = True
-                truncation_reason = "max_files"
+            file_path = item["path"]
+            spec = get_language_spec(Path(file_path).suffix.lower())
+            if spec is None:
+                continue
+            if len(eligible) >= max_files:
+                eligible_exhausted = False
                 break
+            eligible.append((file_path, spec))
+        if not eligible_exhausted:
+            truncated = True
+            truncation_reason = "max_files"
+
+        async def _fetch(file_path: str, timeout: float):
+            content_url = f"https://raw.githubusercontent.com/{repo}/{ref}/{file_path}"
+            content_resp = await client.get(content_url, timeout=timeout)
+            content_resp.raise_for_status()
+            return file_path, content_resp.content
+
+        # Fetch in bounded waves. The wave boundary is where the budget is
+        # checked: expired with unattempted files means stop, save the
+        # partial index, and report truncated with the deadline reason.
+        for wave_start in range(0, len(eligible), _FETCH_CONCURRENCY):
+            wave = eligible[wave_start : wave_start + _FETCH_CONCURRENCY]
 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -135,54 +178,55 @@ async def index_repo(
                     budget_s=round(budget_s, 2),
                     files_indexed=files_processed,
                     symbols_indexed=len(symbols_dict),
+                    files_unattempted=len(eligible) - wave_start,
                 )
                 break
 
-            file_path = item["path"]
-            suffix = Path(file_path).suffix.lower()
-            spec = get_language_spec(suffix)
-            if spec is None:
-                continue
+            wave_timeout = min(30.0, remaining)
+            results = await asyncio.gather(
+                *(_fetch(file_path, wave_timeout) for file_path, _spec in wave),
+                return_exceptions=True,
+            )
 
-            # Fetch file content. The per-request timeout never exceeds the
-            # remaining budget, so one hanging fetch cannot overrun it.
-            content_url = f"https://raw.githubusercontent.com/{repo}/{ref}/{file_path}"
-            try:
-                content_resp = await client.get(content_url, timeout=min(30.0, remaining))
-                content_resp.raise_for_status()
-                content = content_resp.content
-            except (httpx.HTTPStatusError, httpx.RequestError) as e:
-                log.warning("github_file_fetch_failed", file=file_path, error=str(e))
-                continue
+            for (file_path, spec), result in zip(wave, results, strict=True):
+                if isinstance(result, BaseException):
+                    if isinstance(result, (httpx.HTTPStatusError, httpx.RequestError)):
+                        log.warning("github_file_fetch_failed", file=file_path, error=str(result))
+                    else:
+                        log.warning(
+                            "github_file_fetch_unexpected", file=file_path, error=str(result)
+                        )
+                    continue
 
-            file_hash = hashlib.sha256(content).hexdigest()
-            files_dict[file_path] = file_hash
+                _file_path, content = result
+                file_hash = hashlib.sha256(content).hexdigest()
+                files_dict[file_path] = file_hash
 
-            # Parse symbols
-            try:
-                parser = get_parser(spec.name)
-                tree = parser.parse(content)
-                syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
-                for sym in syms:
-                    symbol_id = sym.id
-                    if symbol_id in symbols_dict:
-                        symbol_id = f"{sym.id}@{sym.start_byte}"
+                # Parse symbols
+                try:
+                    parser = get_parser(spec.name)
+                    tree = parser.parse(content)
+                    syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
+                    for sym in syms:
+                        symbol_id = sym.id
+                        if symbol_id in symbols_dict:
+                            symbol_id = f"{sym.id}@{sym.start_byte}"
 
-                    symbols_dict[symbol_id] = {
-                        "id": symbol_id,
-                        "name": sym.name,
-                        "kind": sym.kind,
-                        "file_path": sym.file_path,
-                        "start_byte": sym.start_byte,
-                        "end_byte": sym.end_byte,
-                        "docstring": sym.docstring,
-                        "decorators": sym.decorators,
-                        "parent": sym.parent,
-                    }
-            except Exception as e:
-                log.warning("github_parse_failed", file=file_path, error=str(e))
+                        symbols_dict[symbol_id] = {
+                            "id": symbol_id,
+                            "name": sym.name,
+                            "kind": sym.kind,
+                            "file_path": sym.file_path,
+                            "start_byte": sym.start_byte,
+                            "end_byte": sym.end_byte,
+                            "docstring": sym.docstring,
+                            "decorators": sym.decorators,
+                            "parent": sym.parent,
+                        }
+                except Exception as e:
+                    log.warning("github_parse_failed", file=file_path, error=str(e))
 
-            files_processed += 1
+                files_processed += 1
 
     index = CodeIndex(
         repo_path=repo_key,
