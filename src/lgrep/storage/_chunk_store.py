@@ -70,7 +70,6 @@ class CodeChunk(LanceModel):
     file_hash: str = Field(description="Hash of source file for invalidation")
     indexed_at: float = Field(description="Unix timestamp of indexing")
     embedding_model: str = Field(
-        default=MODEL_NAME,
         description="Model that produced the embedding vector",
     )
 

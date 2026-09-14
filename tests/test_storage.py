@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import lancedb
 import pytest
+from pydantic import ValidationError
 
 from lgrep.storage import (
     CHUNKS_TABLE,
@@ -86,6 +87,26 @@ class TestCodeChunkModel:
         assert "file_path" in schema.names
         assert "vector" in schema.names
         assert "embedding_model" in schema.names
+
+    def test_embedding_model_has_no_default(self):
+        """Omitting the model must raise, never inherit the running one.
+
+        The column exists to name the model that produced the vector. A
+        default would let a caller that never saw the embedding result write
+        a plausible, unchecked name into it.
+        """
+        with pytest.raises(ValidationError):
+            CodeChunk(
+                id="c1",
+                file_path="test.py",
+                chunk_index=0,
+                start_line=1,
+                end_line=5,
+                content="print('hello')",
+                vector=[0.1] * EMBEDDING_DIM,
+                file_hash="hash",
+                indexed_at=123.456,
+            )
 
 
 class TestDbPathResolution:

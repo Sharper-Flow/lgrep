@@ -1478,6 +1478,7 @@ class TestStalenessPreflight:
         import hashlib
         import time as _time
 
+        from lgrep.embeddings import MODEL_NAME
         from lgrep.storage import CodeChunk
 
         content = f.read_bytes()
@@ -1493,6 +1494,7 @@ class TestStalenessPreflight:
             vector=[0.1] * 1024,
             file_hash=file_hash,
             indexed_at=future,
+            embedding_model=MODEL_NAME,
         )
         db.add_chunks([chunk])
 
@@ -1658,6 +1660,7 @@ class TestBackgroundReindex:
         import hashlib
         import time as _time
 
+        from lgrep.embeddings import MODEL_NAME
         from lgrep.indexing import Indexer
         from lgrep.storage import ChunkStore, CodeChunk, get_project_db_path
 
@@ -1684,6 +1687,7 @@ class TestBackgroundReindex:
             vector=[0.1] * 1024,
             file_hash=file_hash,
             indexed_at=future,
+            embedding_model=MODEL_NAME,
         )
         db.add_chunks([chunk])
 
