@@ -1,3 +1,8 @@
+## 2026-09-14 (v3.4.0)
+
+- feat(index-repo): token from the environment and bounded-concurrent fetches (#19)
+- docs: update changelog for v3.3.3
+
 ## 2026-09-14 (v3.3.3)
 
 - fix(search-symbols): refresh a stale index before it answers (#18)
