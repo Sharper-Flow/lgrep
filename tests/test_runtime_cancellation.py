@@ -454,8 +454,11 @@ async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch
     embedder.embed_documents.side_effect = fake_embed
     indexer.embedder = embedder
 
-    # Slow index_all that cooperatively exits once cancel_event is set.
-    def slow_index_all(cancel_event=None):
+    # Slow index_window that cooperatively exits once cancel_event is set.
+    # The background path runs _auto_index_project_single_flight, which calls
+    # index_window (never index_all), so this is the seam that keeps the
+    # background job genuinely in flight until shutdown cancels it.
+    def slow_index_window(cancel_event=None, pending_files=None):
         for _ in range(200):
             if cancel_event is not None and cancel_event.is_set():
                 from lgrep.exceptions import OperationCancelled
@@ -464,7 +467,7 @@ async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch
             time.sleep(0.01)
         return MagicMock(file_count=1, chunk_count=1, duration_ms=10.0)
 
-    indexer.index_all = slow_index_all
+    indexer.index_window = slow_index_window
 
     state = ProjectState(db=indexer.storage, indexer=indexer)
     app_ctx.projects[project_path] = state
@@ -472,17 +475,21 @@ async def test_background_reindex_cancelled_on_shutdown(tmp_project, monkeypatch
     # Schedule a background reindex.
     await _schedule_background_reindex(app_ctx, project_path, project_root)
 
-    # Wait until the runtime job has actually been submitted.
-    # _schedule_background_reindex creates the asyncio task synchronously, but
-    # snapshot_active_jobs() only reflects it after the coroutine self-registers
-    # on its first time slice. A generous deadline absorbs CI scheduling jitter;
-    # the job registers deterministically (asyncio.create_task guarantees it runs),
-    # so this is not masking a bug — only widening a wall-clock window that was
-    # too tight (2.0s) under loaded CI runners.
+    # Wait until the long-running index_window job is active. Waiting for this
+    # job specifically (not for any active job) matters: the single-flight
+    # coroutine first submits a short-lived compute_pending_files job, and a
+    # generic wait could observe that transient job, proceed to shutdown, and
+    # cancel the task before the cancellable window work ever starts. The
+    # slow stub guarantees the index_window job cannot finish first, so the
+    # wait terminates deterministically; the deadline only absorbs scheduler
+    # jitter on loaded CI runners.
+    def _window_job_active():
+        return any(j["kind"] == "index_window" for j in app_ctx.runtime.snapshot_active_jobs())
+
     deadline = time.monotonic() + 10.0
-    while time.monotonic() < deadline and not app_ctx.runtime.snapshot_active_jobs():
+    while time.monotonic() < deadline and not _window_job_active():
         await asyncio.sleep(0.01)
-    assert app_ctx.runtime.snapshot_active_jobs(), "background job was never submitted"
+    assert _window_job_active(), "background index_window job was never submitted"
 
     # Shutdown must cancel and await the background task.
     await _shutdown(app_ctx)
