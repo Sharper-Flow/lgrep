@@ -1,3 +1,8 @@
+## 2026-09-14 (v3.3.2)
+
+- fix(index-repo): budget the fetch loop inside both external deadlines (#17)
+- docs: update changelog for v3.3.1
+
 ## 2026-09-14 (v3.3.1)
 
 - fix(tests): stub the bounded-window path in the background-reindex shutdown test (#16)
