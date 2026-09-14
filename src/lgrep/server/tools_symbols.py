@@ -128,7 +128,13 @@ async def index_symbols_repo(
     ] = 500,
     github_token: Annotated[
         str | None,
-        Field(description="Optional token for private repos or higher GitHub API limits."),
+        Field(
+            description=(
+                "Optional token for private repos or higher GitHub API limits. "
+                "When omitted, LGREP_GITHUB_TOKEN then GITHUB_TOKEN from the "
+                "environment is used."
+            ),
+        ),
     ] = None,
 ) -> IndexSymbolsRepoResult:
     """Index symbols from a GitHub repository via the REST API (no git clone).
