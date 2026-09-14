@@ -181,6 +181,7 @@ class TestStaleFileDeletionGuard:
         stale_chunk.file_hash = "abc123"
         import uuid
 
+        from lgrep.embeddings import MODEL_NAME
         from lgrep.storage import CodeChunk
 
         store.add_chunks(
@@ -195,6 +196,7 @@ class TestStaleFileDeletionGuard:
                     vector=[0.1] * EMBEDDING_DIM,
                     file_hash="abc123",
                     indexed_at=1000.0,
+                    embedding_model=MODEL_NAME,
                 )
             ]
         )
@@ -226,6 +228,7 @@ class TestStaleFileDeletionGuard:
 
         import uuid
 
+        from lgrep.embeddings import MODEL_NAME
         from lgrep.indexing import Indexer
         from lgrep.storage import EMBEDDING_DIM, ChunkStore, CodeChunk, get_project_db_path
 
@@ -249,6 +252,7 @@ class TestStaleFileDeletionGuard:
                     vector=[0.1] * EMBEDDING_DIM,
                     file_hash="abc123",
                     indexed_at=1000.0,
+                    embedding_model=MODEL_NAME,
                 )
             ]
         )
