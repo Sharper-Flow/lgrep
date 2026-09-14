@@ -337,6 +337,7 @@ async def search_symbols(
     return SearchSymbolsResult(
         results=result["results"],
         total_matches=result["total_matches"],
+        index_refreshed=result.get("index_refreshed", False),
         _meta=make_meta(time.monotonic(), "search_symbols"),
     )
 

@@ -673,6 +673,88 @@ class TestGetRepoOutline:
 # ── search_symbols ────────────────────────────────────────────────────────────
 
 
+class TestSearchSymbolsFreshness:
+    """The index must not be known-behind the working tree when it answers."""
+
+    def _index(self, tmp_repo, tmp_store):
+        from lgrep.tools.index_folder import index_folder
+
+        result = index_folder(str(tmp_repo), storage_dir=tmp_store)
+        assert "error" not in result
+
+    def test_search_symbols_finds_new_file_without_explicit_reindex(self, tmp_repo, tmp_store):
+        from lgrep.tools.search_symbols import search_symbols
+
+        self._index(tmp_repo, tmp_store)
+
+        (tmp_repo / "src" / "newmod.py").write_text("def brand_new_symbol():\n    return 42\n")
+
+        result = search_symbols("brand_new_symbol", str(tmp_repo), storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["total_matches"] == 1
+        assert result["index_refreshed"] is True
+
+    def test_search_symbols_detects_modified_file(self, tmp_repo, tmp_store):
+        import os
+        import time
+
+        from lgrep.tools.search_symbols import search_symbols
+
+        self._index(tmp_repo, tmp_store)
+
+        target = tmp_repo / "src" / "utils.py"
+        target.write_text("def helper():\n    pass\n\n\ndef second_helper():\n    pass\n")
+        # Same file set, changed content: only the mtime branch can fire.
+        os.utime(target, (time.time() + 100, time.time() + 100))
+
+        result = search_symbols("second_helper", str(tmp_repo), storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["total_matches"] == 1
+        assert result["index_refreshed"] is True
+
+    def test_search_symbols_drops_deleted_file_symbols(self, tmp_repo, tmp_store):
+        from lgrep.tools.search_symbols import search_symbols
+
+        self._index(tmp_repo, tmp_store)
+        assert search_symbols("helper", str(tmp_repo), storage_dir=tmp_store)["total_matches"] == 1
+
+        (tmp_repo / "src" / "utils.py").unlink()
+
+        result = search_symbols("helper", str(tmp_repo), storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["total_matches"] == 0
+        assert result["index_refreshed"] is True
+
+    def test_search_symbols_fresh_index_no_refresh(self, tmp_repo, tmp_store):
+        from lgrep.tools.search_symbols import search_symbols
+
+        self._index(tmp_repo, tmp_store)
+
+        result = search_symbols("authenticate", str(tmp_repo), storage_dir=tmp_store)
+
+        assert "error" not in result
+        assert result["total_matches"] >= 1
+        assert result["index_refreshed"] is False
+
+    def test_search_symbols_auto_refresh_disabled(self, tmp_repo, tmp_store, monkeypatch):
+        from lgrep.tools.search_symbols import search_symbols
+
+        monkeypatch.setenv("LGREP_AUTO_REFRESH", "0")
+        self._index(tmp_repo, tmp_store)
+
+        (tmp_repo / "src" / "newmod.py").write_text("def brand_new_symbol():\n    return 42\n")
+
+        result = search_symbols("brand_new_symbol", str(tmp_repo), storage_dir=tmp_store)
+
+        assert "error" not in result
+        # Old behavior: the stale index answers, and says it was not refreshed.
+        assert result["total_matches"] == 0
+        assert result["index_refreshed"] is False
+
+
 class TestSearchSymbols:
     def test_returns_dict(self, tmp_repo, tmp_store):
         from lgrep.tools.index_folder import index_folder

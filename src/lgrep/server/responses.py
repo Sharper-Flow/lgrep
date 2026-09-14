@@ -222,6 +222,7 @@ class SearchSymbolsResult(TypedDict):
 
     results: list[Any]
     total_matches: int
+    index_refreshed: bool
     _meta: _Meta
 
 
