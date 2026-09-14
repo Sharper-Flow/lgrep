@@ -355,6 +355,18 @@ class IndexStore:
                 tmp.unlink(missing_ok=True)
             raise
 
+    def last_indexed_at(self, repo_path: str) -> float | None:
+        """Return the persisted index file's mtime, or None when unindexed.
+
+        The mtime of the atomically-saved index file is the moment the last
+        index window completed, so freshness gates compare working-tree file
+        mtimes against it.
+        """
+        try:
+            return self._index_path(normalize_repo_key(repo_path)).stat().st_mtime
+        except OSError:
+            return None
+
     def load(self, repo_path: str) -> CodeIndex | None:
         """Load a CodeIndex from disk.
 

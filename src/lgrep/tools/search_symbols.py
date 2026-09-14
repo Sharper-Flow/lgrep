@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.storage.token_tracker import estimate_savings
+from lgrep.tools._index_freshness import refresh_stale_index
 from lgrep.tools._meta import error_response, make_meta
 
 if TYPE_CHECKING:
@@ -49,6 +50,9 @@ def search_symbols(
     store = IndexStore(storage_dir=storage_dir)
 
     repo_key = normalize_repo_key(repo_path)
+    # Serve no answer from an index known to be behind the working tree:
+    # refresh first when the gate fires, then load the post-refresh index.
+    refresh = refresh_stale_index(repo_path, storage_dir=storage_dir)
     index = store.load(repo_key)
     if index is None:
         return error_response(
@@ -73,5 +77,6 @@ def search_symbols(
     return {
         "results": results,
         "total_matches": len(results),
+        "index_refreshed": refresh is not None,
         "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }
