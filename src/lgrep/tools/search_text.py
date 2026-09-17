@@ -5,12 +5,11 @@ Performs literal text search across source files in a repository.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import structlog
 
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 log = structlog.get_logger()
 
@@ -30,21 +29,18 @@ def search_text(
         case_sensitive: Whether to perform case-sensitive matching (default: False)
 
     Returns:
-        Dict with results list (file_path, line_number, line) and _meta envelope.
+        Dict with results list (file_path, line_number, line).
         Returns error dict if the path does not exist.
     """
-    t0 = time.monotonic()
-
     # Input validation
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
+        return error_response("query must not be empty")
 
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.discovery import FileDiscovery
@@ -81,5 +77,4 @@ def search_text(
     return {
         "results": results,
         "total_matches": len(results),
-        "_meta": make_meta(t0, __name__),
     }

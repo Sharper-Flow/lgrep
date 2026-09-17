@@ -1,7 +1,7 @@
 """lgrep storage package.
 
 Re-exports the semantic chunk store (formerly storage.py) alongside
-the new symbol storage modules (token_tracker, index_store).
+the symbol index store.
 
 Existing imports like `from lgrep.storage import ChunkStore` continue to work.
 """

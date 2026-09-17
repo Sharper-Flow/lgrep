@@ -14,8 +14,7 @@ from pathlib import Path
 import structlog
 
 from lgrep.storage.index_store import CodeIndex, IndexStore
-from lgrep.storage.token_tracker import estimate_savings
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 log = structlog.get_logger()
 
@@ -69,14 +68,12 @@ async def index_repo(
         github_token: Optional GitHub personal access token for private repos
 
     Returns:
-        Dict with files_indexed, symbols_indexed, repo, and _meta envelope
+        Dict with files_indexed, symbols_indexed, and repo
     """
     t0 = time.monotonic()
-
     if "/" not in repo or repo.count("/") != 1:
         return error_response(
             f"Invalid repo format. Expected 'owner/name', got: {repo!r}",
-            _meta=make_meta(t0, __name__),
         )
 
     try:
@@ -84,7 +81,6 @@ async def index_repo(
     except ImportError:
         return error_response(
             "httpx is required for GitHub repo indexing. Install with: pip install httpx",
-            _meta=make_meta(t0, __name__),
         )
 
     try:
@@ -92,7 +88,6 @@ async def index_repo(
     except ImportError:
         return error_response(
             "tree-sitter-language-pack is required. Install with: pip install tree-sitter-language-pack",
-            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.parser.extractor import _extract_symbols_from_tree
@@ -124,12 +119,10 @@ async def index_repo(
         except httpx.HTTPStatusError as e:
             return error_response(
                 f"GitHub API error: {e.response.status_code} for {repo}",
-                _meta=make_meta(t0, __name__),
             )
         except httpx.RequestError as e:
             return error_response(
                 f"Network error fetching {repo}: {e}",
-                _meta=make_meta(t0, __name__),
             )
 
         tree_data = resp.json()
@@ -235,7 +228,6 @@ async def index_repo(
     )
     store.save(index)
 
-    tokens_saved = estimate_savings(len(symbols_dict))
     return {
         "repo": repo,
         "ref": ref,
@@ -243,5 +235,4 @@ async def index_repo(
         "symbols_indexed": len(symbols_dict),
         "truncated": truncated,
         "truncation_reason": truncation_reason,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

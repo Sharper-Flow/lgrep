@@ -7,7 +7,6 @@ persists to IndexStore.
 from __future__ import annotations
 
 import hashlib
-import time
 from pathlib import Path
 
 import structlog
@@ -15,8 +14,7 @@ import structlog
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.parser.languages import get_language_spec
 from lgrep.storage.index_store import CodeIndex, IndexStore, _version_tuple
-from lgrep.storage.token_tracker import estimate_savings
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 log = structlog.get_logger()
 
@@ -78,20 +76,17 @@ def index_folder(
 
     Returns:
         Dict with files_indexed, symbols_indexed, occurrences_indexed,
-        files_skipped, repo_path, and _meta envelope.
+        files_skipped, and repo_path.
     """
-    t0 = time.monotonic()
-
     # Input validation
     if not repo_path or not repo_path.strip():
-        return error_response("repo_path must not be empty", _meta=make_meta(t0, __name__))
+        return error_response("repo_path must not be empty")
 
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0, __name__),
         )
 
     store = IndexStore(storage_dir=storage_dir)
@@ -239,7 +234,6 @@ def index_folder(
         store.save(index)
 
     occurrence_count = sum(len(occs) for occs in occurrences_dict.values())
-    tokens_saved = estimate_savings(len(symbols_dict) + occurrence_count)
     log.info(
         "index_folder_complete",
         repo=str(root),
@@ -259,5 +253,4 @@ def index_folder(
         "files_deleted": files_deleted,
         "symbols_indexed": len(symbols_dict),
         "occurrences_indexed": occurrence_count,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

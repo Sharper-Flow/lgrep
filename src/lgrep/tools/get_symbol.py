@@ -5,14 +5,12 @@ Retrieves full symbol metadata and source code by symbol ID.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import structlog
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
-from lgrep.storage.token_tracker import estimate_savings
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 log = structlog.get_logger()
 
@@ -75,14 +73,12 @@ def get_symbol(
         storage_dir: Optional override for the symbol index storage directory
 
     Returns:
-        Dict with symbol dict (including source field) and _meta envelope.
+        Dict with symbol dict including the source field.
         Returns error dict if the repo is not indexed or the symbol is not found.
     """
-    t0 = time.monotonic()
-
     # Input validation
     if not symbol_id or not symbol_id.strip():
-        return error_response("symbol_id must not be empty", _meta=make_meta(t0, __name__))
+        return error_response("symbol_id must not be empty")
 
     store = IndexStore(storage_dir=storage_dir)
 
@@ -91,14 +87,12 @@ def get_symbol(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0, __name__),
         )
 
     sym_data = index.symbols.get(symbol_id)
     if sym_data is None:
         return error_response(
             f"Symbol not found: {symbol_id}",
-            _meta=make_meta(t0, __name__),
         )
 
     # Retrieve source bytes
@@ -106,10 +100,8 @@ def get_symbol(
     source_bytes = _get_source_bytes(store, repo_key, sym_data)
     sym_data["source"] = source_bytes.decode("utf-8", errors="replace") if source_bytes else None
 
-    tokens_saved = estimate_savings(1)
     return {
         "symbol": sym_data,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }
 
 
@@ -126,10 +118,9 @@ def get_symbols(
         storage_dir: Optional override for the symbol index storage directory
 
     Returns:
-        Dict with symbols list and _meta envelope.
+        Dict with a symbols list.
         Returns error dict if the repo is not indexed.
     """
-    t0 = time.monotonic()
     store = IndexStore(storage_dir=storage_dir)
 
     repo_key = normalize_repo_key(repo_path)
@@ -137,7 +128,6 @@ def get_symbols(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0, __name__),
         )
 
     symbols = []
@@ -154,8 +144,6 @@ def get_symbols(
         )
         symbols.append(sym_data)
 
-    tokens_saved = estimate_savings(len(symbols))
     return {
         "symbols": symbols,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

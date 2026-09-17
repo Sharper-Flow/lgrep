@@ -31,10 +31,6 @@ class _Meta(TypedDict):
 
     tool: str
     timing_ms: float
-    tokens_saved: int
-    session_tokens: int
-    total_tokens: int
-    cost_avoided_usd: float
 
 
 # --------------------------------------------------------------------------- #

@@ -5,11 +5,9 @@ Removes the symbol index for a repository, forcing a full re-index on next use.
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
-from lgrep.tools._meta import make_meta
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,9 +27,8 @@ def invalidate_cache(
         storage_dir: Optional override for the symbol index storage directory
 
     Returns:
-        Dict with status ("deleted" or "not_found") and _meta envelope
+        Dict with status ("deleted" or "not_found")
     """
-    t0 = time.monotonic()
     store = IndexStore(storage_dir=storage_dir)
 
     repo_key = normalize_repo_key(repo_path)
@@ -41,12 +38,10 @@ def invalidate_cache(
         return {
             "status": "not_found",
             "repo_path": repo_key,
-            "_meta": make_meta(t0, __name__),
         }
 
     store.delete_index(repo_key)
     return {
         "status": "deleted",
         "repo_path": repo_key,
-        "_meta": make_meta(t0, __name__),
     }
