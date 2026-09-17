@@ -4,7 +4,7 @@ Tests cover:
 - Happy path for each tool
 - Missing index error (repo not indexed)
 - Invalid repo error
-- _meta envelope presence and field shapes
+- Plain result field shapes
 - search_symbols result field shapes
 - get_symbol source retrieval
 - get_symbols batch
@@ -104,32 +104,12 @@ class TestIndexFolder:
         result = index_folder(str(tmp_repo), storage_dir=tmp_store)
         assert isinstance(result, dict)
 
-    def test_has_meta_envelope(self, tmp_repo, tmp_store):
+    def test_returns_plain_result_without_meta(self, tmp_repo, tmp_store):
         from lgrep.tools.index_folder import index_folder
 
         result = index_folder(str(tmp_repo), storage_dir=tmp_store)
-        assert "_meta" in result
 
-    def test_meta_has_timing(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
-
-        result = index_folder(str(tmp_repo), storage_dir=tmp_store)
-        assert "timing_ms" in result["_meta"]
-        assert isinstance(result["_meta"]["timing_ms"], (int, float))
-
-    def test_meta_has_tokens_saved(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
-
-        result = index_folder(str(tmp_repo), storage_dir=tmp_store)
-        assert "tokens_saved" in result["_meta"]
-
-    def test_meta_has_persistent_token_fields(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
-
-        result = index_folder(str(tmp_repo), storage_dir=tmp_store)
-        assert "session_tokens" in result["_meta"]
-        assert "total_tokens" in result["_meta"]
-        assert "cost_avoided_usd" in result["_meta"]
+        assert "_meta" not in result
 
     def test_reports_indexed_files(self, tmp_repo, tmp_store):
         from lgrep.tools.index_folder import index_folder
@@ -225,12 +205,6 @@ class TestListRepos:
         index_folder(str(tmp_repo), storage_dir=tmp_store)
         result = list_repos(storage_dir=tmp_store)
         assert str(tmp_repo) in result["repos"]
-
-    def test_has_meta_envelope(self, tmp_store):
-        from lgrep.tools.list_repos import list_repos
-
-        result = list_repos(storage_dir=tmp_store)
-        assert "_meta" in result
 
 
 # ── index_repo ────────────────────────────────────────────────────────────────
@@ -821,12 +795,6 @@ class TestGetFileTree:
         # Should find at least the .py files we created
         assert any(f.endswith(".py") for f in result["files"])
 
-    def test_has_meta_envelope(self, tmp_repo):
-        from lgrep.tools.get_file_tree import get_file_tree
-
-        result = get_file_tree(str(tmp_repo))
-        assert "_meta" in result
-
     def test_invalid_path_returns_error(self):
         from lgrep.tools.get_file_tree import get_file_tree
 
@@ -879,12 +847,6 @@ class TestGetFileOutline:
         assert "name" in sym
         assert "kind" in sym
 
-    def test_has_meta_envelope(self, tmp_repo):
-        from lgrep.tools.get_file_outline import get_file_outline
-
-        result = get_file_outline(str(tmp_repo / "src" / "auth.py"))
-        assert "_meta" in result
-
     def test_invalid_path_returns_error(self):
         from lgrep.tools.get_file_outline import get_file_outline
 
@@ -935,12 +897,6 @@ class TestGetRepoOutline:
         result = get_repo_outline(str(tmp_repo))
         assert "total_symbols" in result
         assert result["total_symbols"] >= 1
-
-    def test_has_meta_envelope(self, tmp_repo):
-        from lgrep.tools.get_repo_outline import get_repo_outline
-
-        result = get_repo_outline(str(tmp_repo))
-        assert "_meta" in result
 
     def test_invalid_path_returns_error(self):
         from lgrep.tools.get_repo_outline import get_repo_outline
@@ -1073,14 +1029,6 @@ class TestSearchSymbols:
         assert "kind" in sym
         assert "file_path" in sym
 
-    def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
-        from lgrep.tools.search_symbols import search_symbols
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        result = search_symbols("authenticate", str(tmp_repo), storage_dir=tmp_store)
-        assert "_meta" in result
-
     def test_missing_index_returns_error(self, tmp_repo, tmp_store):
         from lgrep.tools.search_symbols import search_symbols
 
@@ -1143,12 +1091,6 @@ class TestSearchText:
         assert "line_number" in r
         assert "line" in r
 
-    def test_has_meta_envelope(self, tmp_repo):
-        from lgrep.tools.search_text import search_text
-
-        result = search_text("authenticate", str(tmp_repo))
-        assert "_meta" in result
-
     def test_no_match_returns_empty_list(self, tmp_repo):
         from lgrep.tools.search_text import search_text
 
@@ -1193,15 +1135,6 @@ class TestGetSymbol:
         result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
         assert "source" in result["symbol"]
         assert "authenticate" in result["symbol"]["source"]
-
-    def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = "src/auth.py:function:authenticate"
-        result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
-        assert "_meta" in result
 
     def test_missing_index_returns_error(self, tmp_repo, tmp_store):
         from lgrep.tools.get_symbol import get_symbol
@@ -1290,15 +1223,6 @@ class TestGetSymbols:
         result = get_symbols(ids, str(tmp_repo), storage_dir=tmp_store)
         assert len(result["symbols"]) == 2
 
-    def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbols
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        ids = ["src/auth.py:function:authenticate"]
-        result = get_symbols(ids, str(tmp_repo), storage_dir=tmp_store)
-        assert "_meta" in result
-
     def test_missing_index_returns_error(self, tmp_repo, tmp_store):
         from lgrep.tools.get_symbol import get_symbols
 
@@ -1338,14 +1262,6 @@ class TestInvalidateCache:
 
         invalidate_cache(str(tmp_repo), storage_dir=tmp_store)
         assert str(tmp_repo) not in list_repos(storage_dir=tmp_store)["repos"]
-
-    def test_has_meta_envelope(self, tmp_repo, tmp_store):
-        from lgrep.tools.index_folder import index_folder
-        from lgrep.tools.invalidate_cache import invalidate_cache
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        result = invalidate_cache(str(tmp_repo), storage_dir=tmp_store)
-        assert "_meta" in result
 
     def test_nonexistent_repo_returns_ok(self, tmp_store):
         from lgrep.tools.invalidate_cache import invalidate_cache

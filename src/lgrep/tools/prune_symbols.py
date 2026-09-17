@@ -69,7 +69,6 @@ from typing_extensions import TypedDict
 from lgrep.storage.index_store import DEFAULT_SYMBOLS_DIR as _DEFAULT_SYMBOLS_DIR
 from lgrep.storage.index_store import _read_sidecar_repo_path as _read_sidecar_repo_path
 from lgrep.storage.index_store import _sidecar_for_index as _sidecar_for_index
-from lgrep.tools._meta import make_meta
 
 log = structlog.get_logger()
 
@@ -182,7 +181,6 @@ class PruneSymbolsReport(TypedDict):
     deleted_files: int
     reclaimed_bytes: int
     failures: list[FailureEntry]
-    _meta: dict
 
 
 class _StaleIndexResults(list[StaleEntry]):
@@ -488,7 +486,6 @@ def prune_symbols(
     ``stat().st_size``) in ``reclaimed_bytes`` so operators can preview
     savings before running with ``dry_run=False``.
     """
-    t0 = time.monotonic()
     root = _resolve_storage_dir(storage_dir)
     try:
         root_resolved = root.resolve()
@@ -612,5 +609,4 @@ def prune_symbols(
         "deleted_files": deleted_files,
         "reclaimed_bytes": reclaimed_bytes,
         "failures": failures,
-        "_meta": make_meta(t0, __name__),
     }

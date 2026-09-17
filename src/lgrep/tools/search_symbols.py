@@ -5,13 +5,11 @@ Searches for symbols by name (substring/prefix match) within an indexed reposito
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
-from lgrep.storage.token_tracker import estimate_savings
 from lgrep.tools._index_freshness import refresh_stale_index
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -36,14 +34,12 @@ def search_symbols(
         kind: Optional filter by symbol kind (function, class, method, etc.)
 
     Returns:
-        Dict with results list, total_matches, and _meta envelope.
+        Dict with results list and total_matches.
         Returns error dict if the repo has not been indexed.
     """
-    t0 = time.monotonic()
-
     # Input validation
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
+        return error_response("query must not be empty")
     if limit < 0:
         limit = 1
 
@@ -57,7 +53,6 @@ def search_symbols(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0, __name__),
         )
 
     query_lower = query.lower()
@@ -73,10 +68,8 @@ def search_symbols(
         if len(results) >= limit:
             break
 
-    tokens_saved = estimate_savings(len(results))
     return {
         "results": results,
         "total_matches": len(results),
         "index_refreshed": refresh is not None,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

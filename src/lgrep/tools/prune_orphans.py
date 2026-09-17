@@ -19,7 +19,6 @@ from lgrep.storage import (
     get_project_db_path,
     read_project_meta,
 )
-from lgrep.tools._meta import make_meta
 
 log = structlog.get_logger()
 
@@ -102,7 +101,6 @@ class PruneReport(TypedDict):
     deleted_dirs: int
     reclaimed_bytes: int
     failures: list[FailureEntry]
-    _meta: dict
 
 
 def _resolve_cache_dir(cache_dir: Path | None = None) -> Path:
@@ -302,7 +300,6 @@ def prune_orphans(
     ``reclaimed_bytes`` so operators can preview savings before running
     with ``dry_run=False``.
     """
-    t0 = time.monotonic()
     root = _resolve_cache_dir(cache_dir)
     try:
         root_resolved = root.resolve()
@@ -403,7 +400,6 @@ def prune_orphans(
         "deleted_dirs": deleted_dirs,
         "reclaimed_bytes": reclaimed_bytes,
         "failures": failures,
-        "_meta": make_meta(t0, __name__),
     }
 
 
@@ -412,7 +408,6 @@ class GcWorktreeMetaReport(TypedDict):
     checked: int
     aliases_removed: int
     dirs_updated: int
-    _meta: dict
 
 
 def gc_worktree_meta(
@@ -436,7 +431,6 @@ def gc_worktree_meta(
     cache directories updated.
     """
 
-    t0 = time.monotonic()
     root = _resolve_cache_dir(cache_dir)
 
     if not root.is_dir():
@@ -445,7 +439,6 @@ def gc_worktree_meta(
             "checked": 0,
             "aliases_removed": 0,
             "dirs_updated": 0,
-            "_meta": make_meta(t0, __name__),
         }
 
     checked = 0
@@ -460,7 +453,6 @@ def gc_worktree_meta(
             "checked": 0,
             "aliases_removed": 0,
             "dirs_updated": 0,
-            "_meta": make_meta(t0, __name__),
         }
 
     for child in entries:
@@ -527,5 +519,4 @@ def gc_worktree_meta(
         "checked": checked,
         "aliases_removed": aliases_removed,
         "dirs_updated": dirs_updated,
-        "_meta": make_meta(t0, __name__),
     }

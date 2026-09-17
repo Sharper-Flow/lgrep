@@ -8,13 +8,11 @@ non-exhaustive disclaimers. Supports production-first and test filtering.
 from __future__ import annotations
 
 import hashlib
-import time
 from pathlib import Path
 
 from lgrep.discovery import MAX_FILE_SIZE_BYTES
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
-from lgrep.storage.token_tracker import estimate_savings
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 _USAGE_FILTERS = frozenset({"production_first", "include_tests", "tests_only"})
 _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
@@ -98,25 +96,21 @@ def search_references(
 
     Returns:
         Dict with query, usage_filter, total_matches, results list,
-        candidate_names, disclaimer, and _meta envelope.
+        candidate_names, and disclaimer.
         Returns an error dict for invalid input or missing/stale index.
     """
-    t0 = time.monotonic()
-
     if not query or not query.strip():
-        return error_response("query must not be empty", _meta=make_meta(t0, __name__))
+        return error_response("query must not be empty")
     query = query.strip()
 
     if usage_filter not in _USAGE_FILTERS:
         return error_response(
             f"usage_filter must be one of {sorted(_USAGE_FILTERS)}; got {usage_filter!r}",
-            _meta=make_meta(t0, __name__),
         )
 
     if kind is not None and kind not in _OCCURRENCE_KINDS:
         return error_response(
             f"kind must be one of {sorted(_OCCURRENCE_KINDS)}; got {kind!r}",
-            _meta=make_meta(t0, __name__),
         )
 
     if limit < 1:
@@ -129,7 +123,6 @@ def search_references(
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-            _meta=make_meta(t0, __name__),
         )
 
     # Stale/invalid index: occurrence data is required for this tool.
@@ -137,7 +130,6 @@ def search_references(
         return error_response(
             f"Symbol index is missing candidate occurrence data for {repo_path}. "
             "Run lgrep_index_symbols_folder to refresh.",
-            _meta=make_meta(t0, __name__),
         )
 
     query_lower = query.lower()
@@ -156,7 +148,6 @@ def search_references(
             "results": [],
             "candidate_names": [],
             "disclaimer": _DISCLAIMER,
-            "_meta": make_meta(t0, __name__, tokens_saved=estimate_savings(0)),
         }
 
     matches: list[dict] = []
@@ -202,7 +193,6 @@ def search_references(
     returned_tests = sum(1 for m in results if m.get("is_test_file"))
     results, stale_file_count = _annotate_staleness(results, Path(repo_path), index.files)
 
-    tokens_saved = estimate_savings(len(results))
     return {
         "query": query,
         "usage_filter": usage_filter,
@@ -215,5 +205,4 @@ def search_references(
         "results": results,
         "candidate_names": candidate_names,
         "disclaimer": _DISCLAIMER,
-        "_meta": make_meta(t0, __name__, tokens_saved=tokens_saved),
     }

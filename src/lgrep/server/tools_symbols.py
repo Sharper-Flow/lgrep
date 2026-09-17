@@ -83,6 +83,7 @@ async def index_symbols_folder(
     Returns:
         Files indexed, skipped, symbols count, and repo path.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(
         _index_folder, path, max_files=max_files, incremental=incremental
     )
@@ -93,7 +94,7 @@ async def index_symbols_folder(
         symbols_indexed=result["symbols_indexed"],
         occurrences_indexed=result["occurrences_indexed"],
         repo_path=result["repo_path"],
-        _meta=make_meta(time.monotonic(), "index_symbols_folder"),
+        _meta=make_meta(t0, "index_symbols_folder"),
     )
 
 
@@ -148,6 +149,7 @@ async def index_symbols_repo(
     Returns:
         Files indexed, symbols count, repo, and meta envelope.
     """
+    t0 = time.monotonic()
     result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
     return IndexSymbolsRepoResult(
         files_indexed=result["files_indexed"],
@@ -155,7 +157,7 @@ async def index_symbols_repo(
         repo=result["repo"],
         truncated=result.get("truncated", False),
         truncation_reason=result.get("truncation_reason"),
-        _meta=make_meta(time.monotonic(), "index_symbols_repo"),
+        _meta=make_meta(t0, "index_symbols_repo"),
     )
 
 
@@ -174,10 +176,11 @@ async def list_repos() -> ListReposResult:
     Returns:
         Repos list and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_list_repos)
     return ListReposResult(
         repos=result["repos"],
-        _meta=make_meta(time.monotonic(), "list_repos"),
+        _meta=make_meta(t0, "list_repos"),
     )
 
 
@@ -209,11 +212,12 @@ async def get_file_tree(
     Returns:
         Files list, total count, and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_get_file_tree, path, max_files=max_files)
     return GetFileTreeResult(
         files=result["files"],
         total_files=result["total_files"],
-        _meta=make_meta(time.monotonic(), "get_file_tree"),
+        _meta=make_meta(t0, "get_file_tree"),
     )
 
 
@@ -245,12 +249,13 @@ async def get_file_outline(
     Returns:
         File path, symbols list, count, and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_get_file_outline, path, repo_root=repo_root)
     return GetFileOutlineResult(
         file_path=result["file_path"],
         symbols=result["symbols"],
         symbol_count=result["symbol_count"],
-        _meta=make_meta(time.monotonic(), "get_file_outline"),
+        _meta=make_meta(t0, "get_file_outline"),
     )
 
 
@@ -282,13 +287,14 @@ async def get_repo_outline(
     Returns:
         Repo path, files list, counts, and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_get_repo_outline, path, max_files=max_files)
     return GetRepoOutlineResult(
         repo_path=result["repo_path"],
         files=result["files"],
         total_files=result["total_files"],
         total_symbols=result["total_symbols"],
-        _meta=make_meta(time.monotonic(), "get_repo_outline"),
+        _meta=make_meta(t0, "get_repo_outline"),
     )
 
 
@@ -337,6 +343,7 @@ async def search_symbols(
     Returns:
         Results list, total matches, and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
     if "error" in result:
         return error_response(result["error"])
@@ -344,7 +351,7 @@ async def search_symbols(
         results=result["results"],
         total_matches=result["total_matches"],
         index_refreshed=result.get("index_refreshed", False),
-        _meta=make_meta(time.monotonic(), "search_symbols"),
+        _meta=make_meta(t0, "search_symbols"),
     )
 
 
@@ -387,6 +394,7 @@ async def search_text(
     Returns:
         Results list and meta envelope.
     """
+    t0 = time.monotonic()
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
         result = await app_ctx.runtime.run_blocking(
@@ -408,14 +416,14 @@ async def search_text(
         return SearchTextResult(
             results=[],
             max_results=max_results,
-            _meta=make_meta(time.monotonic(), "search_text"),
+            _meta=make_meta(t0, "search_text"),
             error=result["error"],
         )
 
     return SearchTextResult(
         results=result["results"],
         max_results=max_results,
-        _meta=make_meta(time.monotonic(), "search_text"),
+        _meta=make_meta(t0, "search_text"),
         error="",
     )
 
@@ -451,12 +459,13 @@ async def get_symbol(
     Returns:
         Symbol dict and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_get_symbol, symbol_id, path)
     if "error" in result:
         return error_response(result["error"])
     return GetSymbolResult(
         symbol=result["symbol"],
-        _meta=make_meta(time.monotonic(), "get_symbol"),
+        _meta=make_meta(t0, "get_symbol"),
     )
 
 
@@ -488,12 +497,13 @@ async def get_symbols(
     Returns:
         Symbols list and meta envelope.
     """
+    t0 = time.monotonic()
     result = await asyncio.to_thread(_get_symbols, symbol_ids, path)
     if "error" in result:
         return error_response(result["error"])
     return GetSymbolsResult(
         symbols=result["symbols"],
-        _meta=make_meta(time.monotonic(), "get_symbols"),
+        _meta=make_meta(t0, "get_symbols"),
     )
 
 
@@ -549,6 +559,7 @@ async def search_references(
     Returns:
         Candidate occurrences, candidate names, disclaimer, and meta envelope.
     """
+    t0 = time.monotonic()
     resolved_path = str(Path(path).resolve())
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
@@ -593,7 +604,7 @@ async def search_references(
         results=result["results"],
         candidate_names=result["candidate_names"],
         disclaimer=result["disclaimer"],
-        _meta=make_meta(time.monotonic(), "search_references"),
+        _meta=make_meta(t0, "search_references"),
     )
 
 
@@ -626,6 +637,7 @@ async def invalidate_cache(
     Destructive runs require the ``LGREP_ALLOW_DESTRUCTIVE_MCP`` grant on the
     server. Without it the handler refuses the deletion and reports why.
     """
+    t0 = time.monotonic()
     if not _destructive_grant_present():
         return InvalidateCacheResult(
             status="refused",
@@ -635,12 +647,12 @@ async def invalidate_cache(
                 "Set LGREP_ALLOW_DESTRUCTIVE_MCP=1 on the server to allow destructive "
                 "MCP calls. There is no CLI equivalent."
             ),
-            _meta=make_meta(time.monotonic(), "invalidate_cache"),
+            _meta=make_meta(t0, "invalidate_cache"),
         )
 
     result = await asyncio.to_thread(_invalidate_cache, path)
     return InvalidateCacheResult(
         status=result["status"],
         refused_reason="",
-        _meta=make_meta(time.monotonic(), "invalidate_cache"),
+        _meta=make_meta(t0, "invalidate_cache"),
     )

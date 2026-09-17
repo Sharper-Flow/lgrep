@@ -130,6 +130,23 @@ class TestSymbolToolResponses:
         assert "files" in data
 
     @pytest.mark.asyncio
+    async def test_get_file_tree_meta_reports_handler_duration(self, tmp_path, monkeypatch):
+        import time
+
+        import lgrep.server.tools_symbols as symbols_module
+
+        def slow_get_file_tree(path, max_files=500):
+            time.sleep(0.02)
+            return {"files": [], "total_files": 0}
+
+        monkeypatch.setattr(symbols_module, "_get_file_tree", slow_get_file_tree)
+        fn = self._get_tool_fn("get_file_tree")
+
+        result = await fn(path=str(tmp_path))
+
+        assert result["_meta"]["timing_ms"] >= 10
+
+    @pytest.mark.asyncio
     async def test_get_file_outline_returns_json_with_meta(self, tmp_path):
         fn = self._get_tool_fn("get_file_outline")
         f = tmp_path / "hello.py"
@@ -259,7 +276,7 @@ class TestSymbolToolResponses:
         assert result["candidate_names"] == []
         assert result["disclaimer"] == ""
         assert result["_meta"]["tool"] == "search_references"
-        assert result["_meta"]["timing_ms"] >= 0
+        assert result["_meta"]["timing_ms"] > 0
         assert result["error"] == "Operation was cancelled."
 
     @pytest.mark.asyncio

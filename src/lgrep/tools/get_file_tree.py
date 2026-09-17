@@ -5,12 +5,11 @@ Returns the list of source files in a repository, respecting .gitignore.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import structlog
 
-from lgrep.tools._meta import error_response, make_meta
+from lgrep.tools._meta import error_response
 
 log = structlog.get_logger()
 
@@ -26,15 +25,13 @@ def get_file_tree(
         max_files: Maximum number of files to return (default: 500)
 
     Returns:
-        Dict with files list (relative paths), total_files, and _meta envelope
+        Dict with files list (relative paths) and total_files
     """
-    t0 = time.monotonic()
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
         return error_response(
             f"Path does not exist or is not a directory: {repo_path}",
-            _meta=make_meta(t0, __name__),
         )
 
     from lgrep.discovery import FileDiscovery
@@ -54,5 +51,4 @@ def get_file_tree(
         "repo_path": str(root.resolve()),
         "files": files,
         "total_files": len(files),
-        "_meta": make_meta(t0, __name__),
     }
