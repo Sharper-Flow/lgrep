@@ -1,3 +1,8 @@
+## 2026-09-17 (v3.4.1)
+
+- fix(meta): delete the token savings ledger and measure real tool timing (#20)
+- docs: update changelog for v3.4.0
+
 ## 2026-09-14 (v3.4.0)
 
 - feat(index-repo): token from the environment and bounded-concurrent fetches (#19)
