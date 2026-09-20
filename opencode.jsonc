@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Concord drives work in this repository through concord-1/concord-2.
+  // The build agent stays enabled globally and in non-Concord projects;
+  // this block removes it from the agent picker here so a mid-session
+  // switch cannot silently drop Concord workflow authority. Tracked so
+  // every Concord worktree checkout inherits it. Set "disable": false
+  // in a local override to bring the agent back for one session.
+  "agent": {
+    "build": {
+      "disable": true
+    }
+  }
+}
