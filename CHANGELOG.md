@@ -1,3 +1,8 @@
+## 2026-09-20 (v3.4.2)
+
+- chore(config): hide the build agent from Concord sessions (#21)
+- docs: update changelog for v3.4.1
+
 ## 2026-09-17 (v3.4.1)
 
 - fix(meta): delete the token savings ledger and measure real tool timing (#20)
