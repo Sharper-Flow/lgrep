@@ -168,6 +168,10 @@ async def test_all_registered_tools_validate_on_trivial_invocation(tmp_path, mon
             args = {"path": str(repo)}
         elif tool.name == "get_file_outline":
             args = {"path": str(repo / "hello.py")}
+        elif tool.name == "search_semantic":
+            # A missing path returns the structured ToolError before any
+            # indexing work, which is what this validation check requires.
+            args = {"query": "greet", "path": str(tmp_path / "absent")}
         elif tool.name in {"search_symbols", "search_text", "search_references"}:
             args = {"query": "greet", "path": str(repo)}
         elif tool.name == "get_symbol":

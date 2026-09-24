@@ -98,12 +98,6 @@ async def test_full_flow_integration(sample_project):
         assert "content" in res
         assert "score" in res
 
-        # 1.1 Search using q and m aliases
-        response = await lgrep_search(q="database", m=5, path=str(sample_project), ctx=mock_ctx)
-        search_data = response
-        assert "results" in search_data
-        assert len(search_data["results"]) > 0
-
         # 2. Check status reflects indexed project
         response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)
         status_data = response

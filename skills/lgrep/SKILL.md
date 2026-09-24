@@ -130,23 +130,21 @@ To remove them: `lgrep uninstall-opencode`.
 
 > **Note:** Tool functions are named `search_semantic`, `index_semantic`, etc. OpenCode auto-prefixes them as `lgrep_search_semantic`, `lgrep_index_semantic`, etc.
 
+> **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (files scanned). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool that declares them (`lgrep_get_symbol` / `lgrep_index_symbols_folder`).
+
 ### lgrep_search_semantic
 
 Searches a project semantically.
 
-- `q` (string, **required**): Natural language search query. Alias: `query`.
+- `query` (string, **required**): Natural language search query.
 - `path` (string, **required**): Absolute path to the project to search. Auto-loads from disk if previously indexed in a prior session.
-- `m` (int): Maximum results (default 10). Alias: `limit`.
+- `limit` (int): Maximum results (default 10).
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
 
-If a default hybrid semantic search times out or hits a deadline, retry once with `hybrid:false` and a small limit (for example `m=5` / `limit=5`) before falling back to symbol/text/read tools.
+If a default hybrid semantic search times out or hits a deadline, retry once with `hybrid:false` and a small limit (for example `limit=5`) before falling back to symbol/text/read tools.
 
 **Example usage:**
 ```python
-# Short form (preferred by agents)
-lgrep_search_semantic(q="JWT verification and token handling", path="/home/user/dev/project", m=5)
-
-# Long form (also accepted)
 lgrep_search_semantic(query="JWT verification and token handling", path="/home/user/dev/project", limit=5)
 ```
 
@@ -288,7 +286,7 @@ Literal text search across all source files.
 
 - `query` (string, **required**): Text to search for.
 - `path` (string, **required**): Absolute path to the repository root.
-- `max_results` (int): Maximum results (default: 50).
+- `limit` (int): Maximum results (default: 50).
 - `case_sensitive` (bool): Case-sensitive matching (default: false).
 
 ### lgrep_search_references

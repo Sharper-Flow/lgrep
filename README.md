@@ -388,12 +388,25 @@ Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If yo
 | `lgrep_get_repo_outline(path, max_files=500)` | Show symbol outline for a repo |
 | `lgrep_search_symbols(query, path, limit=20, kind?)` | Search symbols by name |
 | `lgrep_search_references(query, path, limit=20, usage_filter="production_first", kind?)` | Find bounded candidate symbol usages |
-| `lgrep_search_text(query, path, max_results=50)` | Search literal text |
+| `lgrep_search_text(query, path, limit=50)` | Search literal text |
 | `lgrep_get_symbol(symbol_id, path)` | Retrieve one symbol |
 | `lgrep_get_symbols(symbol_ids, path)` | Retrieve multiple symbols |
 | `lgrep_invalidate_cache(path)` | Drop the symbol index for a repo |
 | `lgrep_prune_orphans(dry_run=True)` | Report (or with `dry_run=False`, delete) orphan semantic cache dirs; skips active projects and the `symbols/` cache |
 | `lgrep_prune_symbols(dry_run=True)` | Report (or with `dry_run=False`, delete) stale symbol-store index files; skips active projects and non-local `github:` entries |
+
+### Argument names
+
+Each concept carries one declared name in every tool schema:
+
+| Concept | Declared name |
+|---|---|
+| Search text or symbol name | `query` |
+| Local repository root or file | `path` |
+| Result cap | `limit` |
+| Files scanned during indexing | `max_files` |
+
+Before validation, the server renames a fixed set of legacy spellings to the declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, and `file_path`/`file`/`folder` → `path`. A synonym applies only when the tool declares the canonical name and the caller did not send both spellings. Any other undeclared argument is refused with the tool's valid argument names; `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool that declares them (`lgrep_get_symbol` and `lgrep_index_symbols_folder`).
 
 ### Symbol ID format
 

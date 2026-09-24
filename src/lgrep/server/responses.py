@@ -226,7 +226,7 @@ class _SearchTextResultRequired(TypedDict):
     """Required response fields for search_text."""
 
     results: list[SearchTextMatch]
-    max_results: int
+    limit: int
     _meta: _Meta
     error: str
 
