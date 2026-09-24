@@ -46,6 +46,14 @@ def search_symbols(
     store = IndexStore(storage_dir=storage_dir)
 
     repo_key = normalize_repo_key(repo_path)
+    # First use of an unindexed local git checkout builds that checkout's
+    # own index (seeded from an indexed sibling worktree when one exists)
+    # instead of refusing.
+    bootstrapped = False
+    if store.load(repo_key) is None:
+        from lgrep.tools._index_bootstrap import ensure_symbol_index
+
+        bootstrapped = ensure_symbol_index(repo_path, storage_dir=storage_dir)
     # Serve no answer from an index known to be behind the working tree:
     # refresh first when the gate fires, then load the post-refresh index.
     refresh = refresh_stale_index(repo_path, storage_dir=storage_dir)
@@ -71,5 +79,5 @@ def search_symbols(
     return {
         "results": results,
         "total_matches": len(results),
-        "index_refreshed": refresh is not None,
+        "index_refreshed": refresh is not None or bootstrapped,
     }

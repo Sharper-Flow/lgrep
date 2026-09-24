@@ -553,7 +553,15 @@ The first run embeds the whole project. Later runs skip unchanged files using ha
 
 **`Repository not indexed` from symbol tools**
 
-Run `lgrep_index_symbols_folder(path=...)` first.
+Local git checkouts build their own index on the first symbol query
+(`lgrep_search_symbols`, `lgrep_get_symbol`, `lgrep_get_symbols`,
+`lgrep_search_references`). When a linked worktree of the same repository
+already has an index, the new index is seeded from it and an incremental
+refresh re-parses only files whose content hash differs, so the answer
+always comes from the queried checkout's own files. Indexes for checkouts
+that no longer exist on disk are deleted when a new index is created.
+Run `lgrep_index_symbols_folder(path=...)` explicitly for non-git
+folders, to raise `max_files`, or to force a rebuild.
 
 **Stale semantic results**
 

@@ -119,6 +119,12 @@ def search_references(
 
     store = IndexStore(storage_dir=storage_dir)
     repo_key = normalize_repo_key(repo_path)
+    # First use of an unindexed local git checkout builds that checkout's
+    # own index instead of refusing.
+    if store.load(repo_key) is None:
+        from lgrep.tools._index_bootstrap import ensure_symbol_index
+
+        ensure_symbol_index(repo_path, storage_dir=storage_dir)
     index = store.load(repo_key)
     if index is None:
         return error_response(
