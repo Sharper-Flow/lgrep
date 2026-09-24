@@ -1,3 +1,8 @@
+## 2026-09-24 (v3.4.4)
+
+- fix(symbol-tools): return the helper error instead of raising KeyError (#23)
+- docs: update changelog for v3.4.3
+
 ## 2026-09-24 (v3.4.3)
 
 - fix(symbol-tools): build a worktree's symbol index on first use (#22)
