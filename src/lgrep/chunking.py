@@ -5,6 +5,8 @@ Uses AST-aware chunking via tree-sitter for better semantic boundaries.
 
 from __future__ import annotations
 
+import re
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -60,6 +62,115 @@ LANGUAGE_MAP = {
 # Default chunk size (tokens)
 DEFAULT_CHUNK_SIZE = 500
 MIN_CHUNK_TOKENS = 10  # Skip tiny chunks
+
+# chonkie's experimental CodeChunker (add_split_context=True, the default)
+# prepends the enclosing node's header to chunks of a split node:
+# ``header + "\n\n" + body`` for the first chunk and
+# ``header + "\n\n\t...\n\n" + body`` for later chunks. The ``\t...``
+# breadcrumb is synthetic and never appears in real source.
+_BREADCRUMB = "\n\t...\n"
+
+# First lines that look like a declaration header chonkie would inject.
+# Kept tight: a wrong match strips real body lines from snippets.
+_DECLARATION_RE = re.compile(
+    r"^(?:async\s+)?(?:def|class|fn|func|function|impl|struct|trait|enum)\b"
+)
+
+
+def strip_split_breadcrumb(text: str) -> str:
+    """Return chunk text with chonkie's breadcrumb-form header removed.
+
+    Later chunks of a split node carry ``header + "\\n\\n\\t...\\n\\n"``
+    in front of the body. The ``\\t...`` breadcrumb never appears in real
+    source, so this strip is unambiguous from the stored text alone.
+    Text without a breadcrumb is returned unchanged.
+    """
+    while True:
+        idx = text.find(_BREADCRUMB)
+        if idx < 0:
+            return text
+        text = text[idx + len(_BREADCRUMB) :].lstrip()
+
+
+def strip_injected_class_header(text: str) -> str:
+    """Return a candidate chunk body with chonkie's injected header removed.
+
+    Removes the breadcrumb form (see :func:`strip_split_breadcrumb`) and
+    then the plain ``header\\n\\n`` form that chonkie puts on the first
+    chunk of a split node: stripped when the first line looks like a
+    declaration and the line after the blank separator starts at column
+    0 (a body chonkie lstripped).
+
+    The plain form cannot be told apart from verbatim text with the same
+    shape — two adjacent definitions separated by one blank line — so
+    the result is only a candidate. :func:`locate_chunk_body` uses it
+    only after the full chunk text is not found in the file, and only
+    accepts it when the candidate body is found there.
+    """
+    text = strip_split_breadcrumb(text)
+    head, sep, body = text.partition("\n\n")
+    if sep:
+        first_body_line = body.split("\n", 1)[0]
+        if first_body_line and not first_body_line[0].isspace() and _DECLARATION_RE.match(head):
+            return body
+    return text
+
+
+def _find_forward(content: str, needle: str, search_from: int) -> int:
+    """Find ``needle`` at or after ``search_from``, else anywhere; -1 if absent."""
+    pos = content.find(needle, search_from)
+    if pos < 0 and search_from:
+        pos = content.find(needle)
+    return pos
+
+
+def locate_chunk_body(content: str, chunk_text: str, search_from: int = 0) -> tuple[int, str]:
+    """Locate a chunk's body in file content, header context stripped.
+
+    The full chunk text is searched first, so a verbatim chunk maps to
+    its own extent. Only when the full text is not in the file — the
+    signature of chonkie's injected header context — is the header
+    stripped and the full body searched. Matching whole text, never a
+    prefix, keeps an injected header from matching its own declaration
+    line. ``search_from`` moves the search forward so later chunks
+    cannot match earlier file positions; the fallback searches from the
+    start for out-of-order chunks.
+
+    Returns ``(char_offset, body)``. ``char_offset`` is ``-1`` when the
+    body is not found; ``body`` is the located text with any injected
+    header removed.
+    """
+    pos = _find_forward(content, chunk_text, search_from)
+    if pos >= 0:
+        return pos, chunk_text
+    body = strip_injected_class_header(chunk_text)
+    if body != chunk_text:
+        pos = _find_forward(content, body, search_from)
+        if pos >= 0:
+            return pos, body
+    return -1, body
+
+
+def compute_line_starts(content: str) -> list[int]:
+    """Return the char offset at which each 1-indexed line starts.
+
+    The returned list has one entry per line plus a trailing sentinel,
+    so ``bisect_right`` over it maps any in-bounds offset to its line.
+    """
+    starts = [0]
+    for line in content.split("\n"):
+        starts.append(starts[-1] + len(line) + 1)
+    return starts
+
+
+def line_range_at(line_starts: list[int], start_pos: int, end_pos: int) -> tuple[int, int]:
+    """Map a ``[start_pos, end_pos)`` char range to 1-indexed lines.
+
+    Returns ``(start_line, end_line)``, both inclusive.
+    """
+    start_line = bisect_right(line_starts, start_pos)
+    end_line = bisect_right(line_starts, max(start_pos, end_pos - 1))
+    return start_line, max(start_line, end_line)
 
 
 @dataclass
@@ -207,15 +318,18 @@ class CodeChunker:
     def _process_chunks(self, raw_chunks: list, content: str) -> list[ChunkInfo]:
         """Process Chonkie chunks into ChunkInfo objects.
 
-        Filters out tiny chunks and calculates line numbers.
+        Filters out tiny chunks and calculates line numbers. Chonkie
+        injects header context in front of split chunk bodies, so each
+        body is located through :func:`locate_chunk_body`, searching
+        forward from the previous chunk. Stored chunk text keeps the
+        injected header — it carries embedding context; only the line
+        range is computed from the body.
         """
         chunks = []
-        lines = content.split("\n")
-        line_starts = [0]  # Cumulative char positions for each line
-        for line in lines:
-            line_starts.append(line_starts[-1] + len(line) + 1)
+        line_starts = compute_line_starts(content)
+        cursor = 0
 
-        for i, raw in enumerate(raw_chunks):
+        for raw in raw_chunks:
             text = raw.text.strip()
             token_count = getattr(raw, "token_count", len(text.split()))
 
@@ -223,25 +337,14 @@ class CodeChunker:
             if token_count < MIN_CHUNK_TOKENS or not text:
                 continue
 
-            # Calculate line numbers
-            # Find the chunk in content and get line numbers
+            pos, body = locate_chunk_body(content, text, cursor)
             start_line = 1
             end_line = 1
-            try:
-                pos = content.find(text[: min(50, len(text))])
-                if pos >= 0:
-                    # Find which line this position is on
-                    for line_num, start_pos in enumerate(line_starts):
-                        if start_pos > pos:
-                            start_line = line_num
-                            break
-                    end_pos = pos + len(text)
-                    for line_num, start_pos in enumerate(line_starts):
-                        if start_pos > end_pos:
-                            end_line = line_num
-                            break
-            except Exception as e:
-                log.debug("line_number_calc_failed", chunk_index=i, error=str(e))
+            if pos >= 0:
+                cursor = pos + 1
+                start_line, end_line = line_range_at(line_starts, pos, pos + len(body))
+            else:
+                log.debug("chunk_body_not_located", chunk_index=len(chunks))
 
             chunks.append(
                 ChunkInfo(

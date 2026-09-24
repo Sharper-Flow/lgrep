@@ -827,3 +827,142 @@ class TestRegistryOneNamePerConcept:
         for name in ("search_semantic", "search_symbols", "search_text", "search_references"):
             required = set(tools[name].parameters.get("required", []))
             assert {"query", "path"} <= required, f"{name} requires {sorted(required)}"
+
+
+class TestSearchSemanticCompactDefault:
+    """search_semantic returns compact hits by default; content on request.
+
+    Covers check:pytest/search-semantic-compact-default.
+    """
+
+    STORED_CONTENT = (
+        "class Greeter:\n\n\t...\n\n"
+        "def greet(self, name):\n"
+        '    return "Hello, ' + "x" * 130 + '!"\n'
+        "\n"
+        '    return "done"\n'
+    )
+
+    @staticmethod
+    def _search_ctx(content=None, line_repair_done=True):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from mcp.server.fastmcp import Context
+
+        from lgrep.server import LgrepContext, ProjectState
+        from lgrep.storage import SearchResult, SearchResults
+
+        mock_ctx = MagicMock(spec=Context)
+        app_ctx = LgrepContext()
+        app_ctx.embedder = MagicMock()
+        app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
+        mock_db = MagicMock()
+        mock_db.line_repair_done.return_value = line_repair_done
+        state = ProjectState(db=mock_db, indexer=MagicMock())
+        app_ctx.projects["/path"] = state
+        mock_ctx.request_context.lifespan_context = app_ctx
+
+        results = SearchResults(
+            results=[
+                SearchResult(
+                    "src/greet.py",
+                    7,
+                    12,
+                    content or TestSearchSemanticCompactDefault.STORED_CONTENT,
+                    0.91,
+                    "hybrid",
+                ),
+            ],
+            query_time_ms=1.0,
+            total_chunks=10,
+        )
+        mock_db.search_hybrid.return_value = results
+        return mock_ctx
+
+    @pytest.mark.asyncio
+    async def test_default_hits_are_compact(self):
+        from lgrep.server import search_semantic
+
+        response = await search_semantic(query="greet", path="/path", ctx=self._search_ctx())
+        hit = response["results"][0]
+
+        assert set(hit.keys()) == {
+            "file_path",
+            "start_line",
+            "end_line",
+            "score",
+            "match_type",
+            "snippet",
+        }
+        assert (hit["start_line"], hit["end_line"]) == (7, 12)
+        assert "line_number" not in hit
+        assert "content" not in hit
+
+    @pytest.mark.asyncio
+    async def test_snippet_is_first_three_nonblank_body_lines_capped(self):
+        from lgrep.server import search_semantic
+
+        response = await search_semantic(query="greet", path="/path", ctx=self._search_ctx())
+        snippet = response["results"][0]["snippet"]
+        lines = snippet.split("\n")
+
+        assert len(lines) == 3
+        # chonkie's injected header context is stripped: snippet starts at the body.
+        assert lines[0] == "def greet(self, name):"
+        assert len(lines[1]) == 120  # the 146-char line is capped
+        assert lines[2] == '    return "done"'
+
+    @pytest.mark.asyncio
+    async def test_snippet_keeps_verbatim_adjacent_definitions(self):
+        """A verbatim chunk shaped like the plain injected-header form keeps
+        its first definition: stored text alone cannot prove it injected."""
+        from lgrep.server import search_semantic
+
+        content = "struct Point {}\n\nfn origin() -> Point {\n    Point {}\n}"
+        response = await search_semantic(
+            query="point", path="/path", ctx=self._search_ctx(content=content)
+        )
+
+        assert response["results"][0]["snippet"].split("\n") == [
+            "struct Point {}",
+            "fn origin() -> Point {",
+            "    Point {}",
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("repair_done", "scheduled"), [(False, True), (True, False)])
+    async def test_search_schedules_pending_line_repair(self, repair_done, scheduled):
+        """A cached project whose stored line ranges are not yet repaired gets
+        a background incremental pass (which runs the repair) from search."""
+        from unittest.mock import AsyncMock, patch
+
+        from lgrep.server import search_semantic
+
+        ctx = self._search_ctx(line_repair_done=repair_done)
+        with patch(
+            "lgrep.server.tools_semantic._schedule_background_reindex", new=AsyncMock()
+        ) as schedule:
+            response = await search_semantic(query="greet", path="/path", ctx=ctx)
+
+        assert "results" in response
+        assert schedule.await_count == (1 if scheduled else 0)
+
+    @pytest.mark.asyncio
+    async def test_include_content_adds_stored_text(self):
+        from lgrep.server import search_semantic
+
+        response = await search_semantic(
+            query="greet", path="/path", include_content=True, ctx=self._search_ctx()
+        )
+        hit = response["results"][0]
+
+        assert hit["content"] == self.STORED_CONTENT
+        # The snippet derives from the content body (per-line caps may truncate).
+        assert hit["snippet"].split("\n")[0] in hit["content"]
+
+    def test_include_content_declared_canonical(self):
+        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
+        declared = set(tools["search_semantic"].parameters.get("properties", {}))
+        assert "include_content" in declared
+        assert "content" not in declared
+        assert "full_content" not in declared

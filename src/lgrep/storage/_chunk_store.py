@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import lancedb
+import pyarrow as pa
 import structlog
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
@@ -42,6 +43,13 @@ CHUNKS_TABLE = "chunks"
 # File storing paths known to produce zero chunks, so staleness checks do not
 # keep re-attempting them after a complete index window.
 _ZERO_CHUNK_FILES_FILENAME = "zero_chunk_files.json"
+
+# File recording completion of the one-time stored line-range repair, so the
+# repair pass in Indexer.repair_line_ranges runs once per cache.
+_LINE_REPAIR_FILENAME = "line_range_repair.json"
+
+# Rows per merge-insert when rewriting repaired line ranges.
+_LINE_REPAIR_BATCH = 10_000
 
 
 def _escape_sql_string(value: str) -> str:
@@ -357,6 +365,8 @@ class ChunkStore:
         # skipped below. Do not fall back to db_path — it would record
         # the hash dir as the project path and confuse prune_orphans.
         self._project_path = Path(project_path).resolve() if project_path is not None else None
+        # Completion of the one-time line-range repair; read from disk until true.
+        self._line_repair_done = False
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -795,6 +805,81 @@ class ChunkStore:
                 path.unlink(missing_ok=True)
         except Exception as e:
             log.warning("remove_zero_chunk_file_failed", error=str(e))
+
+    def line_repair_done(self) -> bool:
+        """Return whether the one-time stored line-range repair completed.
+
+        Search asks on every call, so a true answer is kept in memory and
+        the marker file is read only until the repair has completed.
+        """
+        if self._line_repair_done:
+            return True
+        try:
+            path = self.db_path / _LINE_REPAIR_FILENAME
+            if not path.is_file():
+                return False
+            done = bool(json.loads(path.read_text(encoding="utf-8")).get("done", False))
+        except Exception as e:
+            log.debug("line_repair_state_read_failed", error=str(e))
+            return False
+        self._line_repair_done = done
+        return done
+
+    def mark_line_repair_done(self) -> None:
+        """Record the one-time stored line-range repair as complete."""
+        try:
+            path = self.db_path / _LINE_REPAIR_FILENAME
+            path.write_text(
+                json.dumps({"done": True, "completed_at": time.time()}),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            log.warning("line_repair_state_write_failed", error=str(e))
+
+    def get_line_repair_rows(self) -> dict[str, list[dict]]:
+        """Return each file's stored chunks for the line-range repair.
+
+        One projected scan of ``id``, ``file_path``, ``chunk_index``,
+        ``content``, ``start_line`` and ``end_line``; vectors are never
+        read. Rows are grouped by file and sorted by ``chunk_index``.
+        Returns an empty dict when the table is empty.
+        """
+        count = self.table.count_rows()
+        if count == 0:
+            return {}
+        columns = ["id", "file_path", "chunk_index", "content", "start_line", "end_line"]
+        rows = self.table.search().select(columns).limit(count).to_arrow().to_pylist()
+        by_file: dict[str, list[dict]] = {}
+        for row in rows:
+            by_file.setdefault(row.pop("file_path"), []).append(row)
+        for file_rows in by_file.values():
+            file_rows.sort(key=lambda r: r["chunk_index"])
+        return by_file
+
+    def update_chunk_line_ranges(self, updates: list[tuple[str, int, int]]) -> int:
+        """Set ``start_line``/``end_line`` on stored rows, matched by ``id``.
+
+        ``updates`` holds ``(id, start_line, end_line)`` tuples. The merge
+        carries only those three columns, so content and vectors stay as
+        stored. Returns the number of rows submitted.
+        """
+        if not updates:
+            return 0
+        schema = self.table.schema
+        for offset in range(0, len(updates), _LINE_REPAIR_BATCH):
+            batch = updates[offset : offset + _LINE_REPAIR_BATCH]
+            source = pa.table(
+                {
+                    "id": pa.array([u[0] for u in batch], type=schema.field("id").type),
+                    "start_line": pa.array(
+                        [u[1] for u in batch], type=schema.field("start_line").type
+                    ),
+                    "end_line": pa.array([u[2] for u in batch], type=schema.field("end_line").type),
+                }
+            )
+            self.table.merge_insert("id").when_matched_update_all().execute(source)
+        log.info("chunk_line_ranges_updated", count=len(updates))
+        return len(updates)
 
     def get_latest_indexed_at(self) -> float:
         """Return the most-recent ``indexed_at`` timestamp across all chunks.

@@ -346,13 +346,15 @@ Example — `lgrep_search_semantic`:
     "engine": "hybrid",
     "total": 3,
     "results": [
-        {"file_path": "src/auth.py", "line_number": 42,
-         "content": "...", "score": 0.91,
-         "start_line": 42, "end_line": 87, "match_type": "hybrid"},
+        {"file_path": "src/auth.py", "start_line": 42, "end_line": 87,
+         "score": 0.91, "match_type": "hybrid",
+         "snippet": "def login(username, password):\n    \"\"\"Handle user login.\"\"\"\n    if username..."},
         # ...
     ],
 }
 ```
+
+Hits are compact by default: the path, the correct line range, the score, the match type, and a 3-line snippet (first 3 non-blank chunk-body lines, 120 characters each). Pass `include_content=true` to add the full stored chunk text as `content` on each hit.
 
 `engine` is `"hybrid"` when `hybrid=true` (the default) or `"vector"` when `hybrid=false`.
 
@@ -370,7 +372,7 @@ Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If yo
 
 | Tool | Purpose |
 |---|---|
-| `lgrep_search_semantic(query, path, limit=10, hybrid=true)` | Search code by meaning |
+| `lgrep_search_semantic(query, path, limit=10, hybrid=true, include_content=false)` | Search code by meaning |
 | `lgrep_index_semantic(path)` | Build or refresh a semantic index |
 | `lgrep_status_semantic(path?)` | Show semantic index and watcher status |
 | `lgrep_watch_start_semantic(path)` | Start background semantic re-indexing |
