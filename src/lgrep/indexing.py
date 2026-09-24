@@ -185,7 +185,7 @@ class Indexer:
             pending_files = sorted(pending_files)
 
         indexed_this_window: list[str] = []
-        zero_chunk_this_window: list[str] = []
+        zero_chunk_this_window: dict[str, str] = {}
         remaining_files = list(pending_files)
         processed = False
 
@@ -228,7 +228,7 @@ class Indexer:
             indexed_this_window.append(rel_path)
             remaining_files.remove(rel_path)
             if file_status.chunk_count == 0:
-                zero_chunk_this_window.append(rel_path)
+                zero_chunk_this_window[rel_path] = self._compute_file_hash(file_path, rel_path)
             else:
                 self.storage.remove_zero_chunk_file(rel_path)
             processed = True
@@ -311,14 +311,14 @@ class Indexer:
             stored_hashes = {}
 
         try:
-            zero_chunk_files = set(self.storage.get_zero_chunk_files())
+            zero_chunk_files = self.storage.get_zero_chunk_files()
         except Exception:
-            zero_chunk_files = set()
+            zero_chunk_files = {}
         return sorted(
             rel_path
             for rel_path, file_hash in current.items()
-            if rel_path not in zero_chunk_files
-            and not (file_hash and stored_hashes.get(rel_path) == file_hash)
+            if not file_hash
+            or file_hash not in (stored_hashes.get(rel_path), zero_chunk_files.get(rel_path))
         )
 
     def _compute_file_hash(self, file_path: Path, rel_path: str) -> str:

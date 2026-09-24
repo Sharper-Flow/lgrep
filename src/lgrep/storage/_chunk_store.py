@@ -661,12 +661,17 @@ class ChunkStore:
         """Reconcile stored rows with the checkout's current files.
 
         ``current`` maps every discovered relative path to its sha256.
-        Rows of files no longer on disk are deleted. ``checked_at`` is when
-        the file walk started; the base store does not need it.
+        Rows of files no longer on disk are deleted, and zero-chunk entries
+        of files that changed or are gone are forgotten. ``checked_at`` is
+        when the file walk started; the base store does not need it.
         """
         for stale_path in sorted(self.get_indexed_files() - current.keys()):
             self.delete_by_file(stale_path)
             log.info("stale_file_removed", file=stale_path)
+        zero = self.get_zero_chunk_files()
+        kept = {path: h for path, h in zero.items() if current.get(path) == h}
+        if kept != zero:
+            self._write_zero_chunk_files(kept)
 
     def _table_needs_rebuild(self) -> bool:
         """Return whether the opened table lacks or uses a stale model schema."""
@@ -982,41 +987,47 @@ class ChunkStore:
             log.debug("get_file_hashes_failed", error=str(e))
             return {}
 
-    def get_zero_chunk_files(self) -> set[str]:
-        """Return paths known to produce zero chunks.
+    def get_zero_chunk_files(self) -> dict[str, str]:
+        """Map paths known to produce zero chunks to the content hash that did.
 
         Zero-chunk files are not present in the chunks table, so a staleness
         check that simply compares current files to indexed files would flag
-        them as pending forever.  This persisted set lets completed index
-        windows remember that such files were already considered and can be
-        ignored on subsequent checks.
+        them as pending forever.  This persisted mapping lets completed index
+        windows remember that such files were already considered; a file
+        whose hash no longer matches its entry is indexed again. Entries
+        written without a hash map to ``""`` and never match.
         """
         try:
             path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
             if not path.is_file():
-                return set()
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return set(data.get("files", []))
+                return {}
+            files = json.loads(path.read_text(encoding="utf-8")).get("files", {})
+            if isinstance(files, list):
+                return dict.fromkeys(files, "")
+            return dict(files)
         except Exception as e:
             log.debug("get_zero_chunk_files_failed", error=str(e))
-            return set()
+            return {}
 
-    def add_zero_chunk_files(self, paths: list[str]) -> None:
-        """Persist a set of paths that produced zero chunks in this window.
+    def _write_zero_chunk_files(self, entries: dict[str, str]) -> None:
+        path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
+        if entries:
+            _write_json_atomic(path, {"files": dict(sorted(entries.items()))})
+        else:
+            path.unlink(missing_ok=True)
 
-        Merging avoids duplicate entries.  Failures are logged and ignored so
-        zero-chunk tracking never blocks indexing.
+    def add_zero_chunk_files(self, entries: dict[str, str]) -> None:
+        """Persist paths that produced zero chunks, with their content hashes.
+
+        Failures are logged and ignored so zero-chunk tracking never blocks
+        indexing.
         """
-        if not paths:
+        if not entries:
             return
         try:
             current = self.get_zero_chunk_files()
-            current.update(paths)
-            path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
-            path.write_text(
-                json.dumps({"files": sorted(current)}, indent=2),
-                encoding="utf-8",
-            )
+            current.update(entries)
+            self._write_zero_chunk_files(current)
             log.info("zero_chunk_files_persisted", count=len(current))
         except Exception as e:
             log.warning("add_zero_chunk_files_failed", error=str(e))
@@ -1025,17 +1036,8 @@ class ChunkStore:
         """Remove a path from the zero-chunk set, e.g. after it gains content."""
         try:
             current = self.get_zero_chunk_files()
-            if file_path not in current:
-                return
-            current.discard(file_path)
-            path = self.db_path / _ZERO_CHUNK_FILES_FILENAME
-            if current:
-                path.write_text(
-                    json.dumps({"files": sorted(current)}, indent=2),
-                    encoding="utf-8",
-                )
-            else:
-                path.unlink(missing_ok=True)
+            if current.pop(file_path, None) is not None:
+                self._write_zero_chunk_files(current)
         except Exception as e:
             log.warning("remove_zero_chunk_file_failed", error=str(e))
 
@@ -1158,7 +1160,7 @@ class _OverlayState:
     """
 
     shadowed: set[str] = field(default_factory=set)
-    zero_chunk_files: set[str] = field(default_factory=set)
+    zero_chunk_files: dict[str, str] = field(default_factory=dict)
     base_generation: int | None = None
     checked_at: float = 0.0
 
@@ -1210,7 +1212,7 @@ class OverlayStore(ChunkStore):
             data = json.loads(self._state_path.read_text(encoding="utf-8"))
             return _OverlayState(
                 shadowed=set(data.get("shadowed", [])),
-                zero_chunk_files=set(data.get("zero_chunk_files", [])),
+                zero_chunk_files=dict(data.get("zero_chunk_files", {})),
                 base_generation=data.get("base_generation"),
                 checked_at=float(data.get("checked_at", 0.0)),
             )
@@ -1225,7 +1227,7 @@ class OverlayStore(ChunkStore):
                 {
                     "checkout": self.checkout,
                     "shadowed": sorted(self._state.shadowed),
-                    "zero_chunk_files": sorted(self._state.zero_chunk_files),
+                    "zero_chunk_files": dict(sorted(self._state.zero_chunk_files.items())),
                     "base_generation": self._state.base_generation,
                     "checked_at": self._state.checked_at,
                 },
@@ -1271,20 +1273,19 @@ class OverlayStore(ChunkStore):
         """Return the later of the last full comparison and the newest overlay row."""
         return max(self._state.checked_at, super().get_latest_indexed_at())
 
-    def get_zero_chunk_files(self) -> set[str]:
-        """Return worktree paths known to produce zero chunks."""
-        return set(self._state.zero_chunk_files)
+    def get_zero_chunk_files(self) -> dict[str, str]:
+        """Map worktree paths known to produce zero chunks to their content hash."""
+        return dict(self._state.zero_chunk_files)
 
-    def add_zero_chunk_files(self, paths: list[str]) -> None:
-        """Record worktree paths that produced zero chunks."""
-        if paths and not set(paths) <= self._state.zero_chunk_files:
-            self._state.zero_chunk_files.update(paths)
+    def add_zero_chunk_files(self, entries: dict[str, str]) -> None:
+        """Record worktree paths that produced zero chunks, with their hashes."""
+        if entries and not entries.items() <= self._state.zero_chunk_files.items():
+            self._state.zero_chunk_files.update(entries)
             self._save_state()
 
     def remove_zero_chunk_file(self, file_path: str) -> None:
         """Forget a zero-chunk worktree path, e.g. after it gains content."""
-        if file_path in self._state.zero_chunk_files:
-            self._state.zero_chunk_files.discard(file_path)
+        if self._state.zero_chunk_files.pop(file_path, None) is not None:
             self._save_state()
 
     def line_repair_done(self) -> bool:
@@ -1308,7 +1309,7 @@ class OverlayStore(ChunkStore):
             return False
         ChunkStore.delete_by_file(self, file_path)
         self._state.shadowed.discard(file_path)
-        self._state.zero_chunk_files.discard(file_path)
+        self._state.zero_chunk_files.pop(file_path, None)
         self._save_state()
         return True
 
@@ -1317,7 +1318,8 @@ class OverlayStore(ChunkStore):
 
         Afterwards every row the worktree sees matches its file on disk.
         Overlay rows of files gone from the worktree, changed since they
-        were embedded, or equal to base again are deleted. Base paths the
+        were embedded, or equal to base again are deleted, and so are
+        zero-chunk entries of files that changed or are gone. Base paths the
         worktree lacks or holds with other content become shadowed. Records
         the base generation read before the comparison, so a base write
         during it triggers another one, and ``checked_at`` as the time
@@ -1335,7 +1337,9 @@ class OverlayStore(ChunkStore):
             self.table.delete(f"{self._own_where()} AND file_path IN ({_sql_list(drop)})")
             log.info("overlay_rows_dropped", checkout=self.checkout, files=len(drop))
         self._state.shadowed = {path for path, h in base.items() if current.get(path) != h}
-        self._state.zero_chunk_files &= set(current)
+        self._state.zero_chunk_files = {
+            path: h for path, h in self._state.zero_chunk_files.items() if current.get(path) == h
+        }
         self._state.base_generation = generation
         self._state.checked_at = checked_at
         self._save_state()

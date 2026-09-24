@@ -154,7 +154,8 @@ def _cmd_search_semantic(args: list[str]) -> int:
     from pathlib import Path
 
     from lgrep.embeddings import VoyageEmbedder
-    from lgrep.storage import get_project_db_path, open_checkout_store
+    from lgrep.indexing import Indexer
+    from lgrep.storage import BASE_CHECKOUT, get_project_db_path, open_checkout_store
 
     # Parse args
     query = None
@@ -217,6 +218,10 @@ def _cmd_search_semantic(args: list[str]) -> int:
     try:
         embedder = VoyageEmbedder(api_key=api_key)
         store = open_checkout_store(path)
+        if store.checkout != BASE_CHECKOUT and store.needs_full_recheck():
+            # A worktree overlay hides the base rows of files it changed or
+            # deleted only after comparing its files with base (no embedding).
+            Indexer(path, store, embedder).reconcile_checkout()
 
         query_vector = embedder.embed_query(query)
 

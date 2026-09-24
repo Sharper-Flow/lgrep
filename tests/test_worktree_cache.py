@@ -1159,9 +1159,9 @@ class TestWorktreeOverlay:
         found = {str(p.relative_to(worktree)) for p in state.indexer.discovery.find_files()}
         assert found == {"shared.py", "same.py", "branch_only.py"}
 
-    @pytest.mark.parametrize("overlay_indexed_before", [False, True])
+    @pytest.mark.parametrize("scenario", ["fresh", "overlay_indexed_before", "all_files_differ"])
     def test_first_worktree_search_never_serves_trunk_versions(
-        self, tmp_path, monkeypatch, overlay_indexed_before
+        self, tmp_path, monkeypatch, scenario
     ):
         """A worktree's first search, before its overlay is embedded, hides the
         base rows of files it changed or deleted and schedules the embedding."""
@@ -1178,7 +1178,7 @@ class TestWorktreeOverlay:
         self._index(repo, embedder)
         # A branch file edited after an earlier overlay pass must not serve
         # its stale overlay rows either.
-        if overlay_indexed_before:
+        if scenario == "overlay_indexed_before":
             (worktree / "branch_only.py").write_text("def branch_only():\n    return 'old'\n")
             self._index(worktree, embedder)
             (worktree / "branch_only.py").write_text(
@@ -1186,6 +1186,8 @@ class TestWorktreeOverlay:
             )
         (repo / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
         (worktree / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
+        if scenario == "all_files_differ":
+            (worktree / "same.py").write_text("def same():\n    return 'branch same'\n")
         self._index(repo, embedder)
 
         app_ctx = LgrepContext(voyage_api_key="k")
@@ -1208,8 +1210,64 @@ class TestWorktreeOverlay:
         assert "trunk_only.py" not in hits
         assert "trunk version" not in hits.get("shared.py", "")
         assert "old" not in hits.get("branch_only.py", "")
-        assert "same.py" in hits
+        if scenario == "all_files_differ":
+            assert hits == {}
+        else:
+            assert "same.py" in hits
         assert schedule.await_count == 1
+
+    def test_first_cli_worktree_search_never_serves_trunk_versions(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The CLI search reconciles a worktree overlay before searching it."""
+        import json
+
+        from lgrep.cli import _cmd_search_semantic
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        self._index(repo, _RecordingEmbedder())
+        monkeypatch.setenv("VOYAGE_API_KEY", "k")
+        query_embedder = MagicMock()
+        query_embedder.embed_query.return_value = _vector("probe")
+
+        with patch("lgrep.embeddings.VoyageEmbedder", return_value=query_embedder):
+            rc = _cmd_search_semantic(["return", str(worktree), "--limit", "50"])
+
+        assert rc == 0
+        # Structured logs share stdout; the command's JSON is the last line.
+        results = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["results"]
+        hits = {r["file_path"]: r["content"] for r in results}
+        assert set(hits) == {"same.py"}
+
+    @pytest.mark.parametrize("checkout", ["trunk", "worktree"])
+    def test_zero_chunk_file_is_indexed_after_it_gains_code(self, tmp_path, monkeypatch, checkout):
+        """A file that produced no chunks is embedded once its content changes."""
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        root = repo if checkout == "trunk" else worktree
+        (root / "empty.py").write_text("")
+        store = self._index(root, embedder)
+        assert "empty.py" in store.get_zero_chunk_files()
+
+        (root / "empty.py").write_text("def gained():\n    return 'gained code'\n")
+        # A reconcile after the edit (a search, for example) must forget the
+        # marker, so the staleness check still sees the file as unindexed.
+        from lgrep.indexing import Indexer
+        from lgrep.server.lifecycle import ProjectState, _check_staleness
+
+        indexer = Indexer(root, store, embedder)
+        indexer.reconcile_checkout()
+        assert "empty.py" not in store.get_zero_chunk_files()
+        base_path = str(repo) if checkout == "worktree" else None
+        state = ProjectState(db=store, indexer=indexer, base_path=base_path)
+        assert _check_staleness(state)[0] is True
+
+        embedder.texts.clear()
+        store = self._index(root, embedder)
+        assert "gained code" in "\n".join(embedder.texts)
+        assert "empty.py" in store.get_indexed_files()
+        assert "empty.py" not in store.get_zero_chunk_files()
 
     def test_filter_indexes_keep_overlay_search_correct(self, tmp_path, monkeypatch):
         """Scalar indexes on the prefilter columns persist and keep results exact."""
