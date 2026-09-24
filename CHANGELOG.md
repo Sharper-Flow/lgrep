@@ -1,3 +1,8 @@
+## 2026-09-24 (v3.6.0)
+
+- feat(search_semantic): compact hits by default; fix method chunk line ranges (#25)
+- docs: update changelog for v3.5.0
+
 ## 2026-09-24 (v3.5.0)
 
 - feat(tools): one argument name per concept; refuse undeclared arguments (#24)
