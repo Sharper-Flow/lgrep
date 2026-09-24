@@ -24,6 +24,7 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -458,6 +459,74 @@ class IndexStore:
             log.info("index_deleted", repo=normalized_repo)
         except OSError as e:
             log.warning("index_delete_failed", repo=normalized_repo, error=str(e))
+
+    def seed_from(self, seed_repo_path: str, target_repo_path: str) -> bool:
+        """Copy the seed repo's index bytes onto the target repo's key.
+
+        First-use bootstrap for linked worktrees of one repository: the
+        seed index is copied byte-for-byte (parsing a multi-hundred-MB
+        JSON body on the query path would break the tool time budget),
+        and the caller then runs an incremental refresh that re-parses
+        only files whose content hash differs. Consequence: the copied
+        body keeps the seed's ``repo_path`` until that refresh saves over
+        it, so the sidecar is written immediately with the TARGET path —
+        ``list_repos()`` keys this file correctly in the interim.
+        """
+        seed_normalized = normalize_repo_key(seed_repo_path)
+        target_normalized = normalize_repo_key(target_repo_path)
+        seed_file = self._index_path(seed_normalized)
+        target_file = self._index_path(target_normalized)
+        try:
+            seed_size = seed_file.stat().st_size
+        except OSError as e:
+            log.warning("index_seed_source_unreadable", seed=seed_normalized, error=str(e))
+            return False
+        self._dir.mkdir(parents=True, exist_ok=True)
+        tmp = _unique_temp_path(target_file)
+        try:
+            shutil.copyfile(seed_file, tmp)
+            os.replace(tmp, target_file)
+        except OSError as e:
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
+            log.warning(
+                "index_seed_copy_failed",
+                seed=seed_normalized,
+                target=target_normalized,
+                error=str(e),
+            )
+            return False
+        # Advisory counts ride the seed sidecar when readable. They are
+        # informational only; the caller's refresh overwrites them on save.
+        meta = {
+            "repo_path": target_normalized,
+            "version": "2.0",
+            "meta_version": 1,
+            "files": 0,
+            "symbols": 0,
+            "occurrences": 0,
+            "updated_at": time.time(),
+            "seeded_from": seed_normalized,
+            "seed_bytes": seed_size,
+        }
+        try:
+            seed_meta = json.loads(_sidecar_for_index(seed_file).read_text(encoding="utf-8"))
+            if isinstance(seed_meta, dict):
+                for meta_field in ("version", "files", "symbols", "occurrences"):
+                    value = seed_meta.get(meta_field)
+                    if isinstance(value, (str, int)) and not isinstance(value, bool):
+                        meta[meta_field] = value
+        except (OSError, json.JSONDecodeError):
+            pass
+        _write_sidecar(target_file, meta)
+        self._cache.pop(target_file, None)
+        log.info(
+            "index_seeded",
+            seed=seed_normalized,
+            target=target_normalized,
+            seed_bytes=seed_size,
+        )
+        return True
 
     def detect_changes(
         self,
