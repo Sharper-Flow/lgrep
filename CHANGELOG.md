@@ -1,3 +1,8 @@
+## 2026-09-24 (v3.5.0)
+
+- feat(tools): one argument name per concept; refuse undeclared arguments (#24)
+- docs: update changelog for v3.4.4
+
 ## 2026-09-24 (v3.4.4)
 
 - fix(symbol-tools): return the helper error instead of raising KeyError (#23)
