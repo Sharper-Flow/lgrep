@@ -267,26 +267,38 @@ class Indexer:
             files_indexed=len(indexed_this_window),
         )
 
+    def reconcile_checkout(self) -> None:
+        """Reconcile the store with the checkout's current files, without embedding.
+
+        Raises when the store cannot reconcile.
+        """
+        checked_at = time.time()
+        self.storage.sync_checkout(self._hash_checkout(), checked_at)
+
+    def _hash_checkout(self) -> dict[str, str]:
+        """Map every discovered file's relative path to its sha256."""
+        current: dict[str, str] = {}
+        for file_path in self.discovery.find_files():
+            rel_path = str(Path(file_path).relative_to(self.project_path))
+            current[rel_path] = self._compute_file_hash(Path(file_path), rel_path)
+        return current
+
     def compute_pending_files(self) -> list[str]:
         """Return the deterministic ordered list of files needing indexing.
 
         Hashes every discovered file once, then lets the store reconcile its
         checkout with that file set (``ChunkStore.sync_checkout``): the
         cache's own checkout drops rows of files gone from disk, and a
-        worktree overlay drops rows that equal base again and records which
-        base files it hides. Files whose hash matches the hash this checkout
-        sees are omitted. Every incremental pass starts here, so the
+        worktree overlay drops rows that equal base again and hides the base
+        files it changed or lacks. Files whose hash matches the hash this
+        checkout sees are omitted. Every incremental pass starts here, so the
         one-time stored line-range repair runs here first (a no-op once the
         cache records it as done).
         """
         self._run_line_repair()
 
         checked_at = time.time()
-        current: dict[str, str] = {}
-        for file_path in self.discovery.find_files():
-            rel_path = str(Path(file_path).relative_to(self.project_path))
-            current[rel_path] = self._compute_file_hash(Path(file_path), rel_path)
-
+        current = self._hash_checkout()
         try:
             self.storage.sync_checkout(current, checked_at)
         except Exception as e:

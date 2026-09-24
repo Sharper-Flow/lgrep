@@ -1313,17 +1313,24 @@ class OverlayStore(ChunkStore):
         return True
 
     def sync_checkout(self, current: dict[str, str], checked_at: float) -> None:
-        """Compare the worktree's files against base.
+        """Compare the worktree's files against base and against its overlay.
 
-        Overlay rows of files gone from the worktree or equal to base again
-        are deleted. Base paths the worktree lacks or holds with other
-        content become shadowed. Records the base generation read before the
-        comparison, so a base write during it triggers another one.
+        Afterwards every row the worktree sees matches its file on disk.
+        Overlay rows of files gone from the worktree, changed since they
+        were embedded, or equal to base again are deleted. Base paths the
+        worktree lacks or holds with other content become shadowed. Records
+        the base generation read before the comparison, so a base write
+        during it triggers another one, and ``checked_at`` as the time
+        before which file mtimes need no re-hash.
         """
         generation = self._owner.base_generation()
         base = self._owner.get_file_hashes()
         own = ChunkStore.get_file_hashes(self)
-        drop = [path for path in own if path not in current or base.get(path) == current[path]]
+        drop = [
+            path
+            for path, file_hash in own.items()
+            if current.get(path) != file_hash or base.get(path) == file_hash
+        ]
         if drop:
             self.table.delete(f"{self._own_where()} AND file_path IN ({_sql_list(drop)})")
             log.info("overlay_rows_dropped", checkout=self.checkout, files=len(drop))

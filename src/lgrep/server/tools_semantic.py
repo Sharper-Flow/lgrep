@@ -103,6 +103,18 @@ async def _execute_search(
     if app_ctx.embedder is None:
         return error_response("VOYAGE_API_KEY not set. Cannot perform semantic search.")
     try:
+        # A worktree overlay that has not compared its files with the
+        # current base rows would serve base versions of files it changed
+        # or deleted. Reconcile it first: hashing only, no embedding. Files
+        # still to embed stay hidden until the background pass adds them.
+        if state.base_path is not None and state.db.needs_full_recheck():
+            await _run_blocking(
+                app_ctx,
+                "overlay_reconcile",
+                "_execute_search",
+                project_path,
+                state.indexer.reconcile_checkout,
+            )
         # Auto-staleness pre-flight: cheap mtime gate, then hash check on the
         # suspect subset only. If drift is confirmed, re-index synchronously
         # before paying for the query embedding so the user sees fresh results.

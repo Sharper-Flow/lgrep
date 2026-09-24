@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
 from lgrep.storage._chunk_store import canonical_repo_key
 
@@ -1156,6 +1158,58 @@ class TestWorktreeOverlay:
         assert state.indexer.project_path == worktree
         found = {str(p.relative_to(worktree)) for p in state.indexer.discovery.find_files()}
         assert found == {"shared.py", "same.py", "branch_only.py"}
+
+    @pytest.mark.parametrize("overlay_indexed_before", [False, True])
+    def test_first_worktree_search_never_serves_trunk_versions(
+        self, tmp_path, monkeypatch, overlay_indexed_before
+    ):
+        """A worktree's first search, before its overlay is embedded, hides the
+        base rows of files it changed or deleted and schedules the embedding."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from mcp.server.fastmcp import Context
+
+        from lgrep.server import search_semantic
+        from lgrep.server.lifecycle import LgrepContext
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        # A branch file edited after an earlier overlay pass must not serve
+        # its stale overlay rows either.
+        if overlay_indexed_before:
+            (worktree / "branch_only.py").write_text("def branch_only():\n    return 'old'\n")
+            self._index(worktree, embedder)
+            (worktree / "branch_only.py").write_text(
+                "def branch_only():\n    return 'branch only'\n"
+            )
+        (repo / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
+        (worktree / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
+        self._index(repo, embedder)
+
+        app_ctx = LgrepContext(voyage_api_key="k")
+        query_embedder = MagicMock()
+        query_embedder.embed_query_async = AsyncMock(return_value=_vector("probe"))
+        ctx = MagicMock(spec=Context)
+        ctx.request_context.lifespan_context = app_ctx
+        with (
+            patch("lgrep.server.lifecycle.VoyageEmbedder", return_value=query_embedder),
+            patch(
+                "lgrep.server.tools_semantic._schedule_background_reindex", new=AsyncMock()
+            ) as schedule,
+        ):
+            response = asyncio.run(
+                search_semantic(query="return", path=str(worktree), limit=50, ctx=ctx)
+            )
+
+        assert "results" in response, response
+        hits = {hit["file_path"]: hit["snippet"] for hit in response["results"]}
+        assert "trunk_only.py" not in hits
+        assert "trunk version" not in hits.get("shared.py", "")
+        assert "old" not in hits.get("branch_only.py", "")
+        assert "same.py" in hits
+        assert schedule.await_count == 1
 
     def test_filter_indexes_keep_overlay_search_correct(self, tmp_path, monkeypatch):
         """Scalar indexes on the prefilter columns persist and keep results exact."""
