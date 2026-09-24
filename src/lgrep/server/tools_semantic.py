@@ -12,7 +12,7 @@ from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from lgrep.chunking import strip_injected_class_header
+from lgrep.chunking import strip_split_breadcrumb
 from lgrep.server import log, mcp, time_tool
 from lgrep.server.lifecycle import (
     LgrepContext,
@@ -76,10 +76,13 @@ def _cheap_project_status(proj_path: str, state: ProjectState) -> StatusSemantic
 def _chunk_snippet(content: str, max_lines: int = 3, max_chars: int = 120) -> str:
     """First non-blank chunk-body lines, each capped, joined by newlines.
 
-    Chonkie's injected header context is stripped first so the snippet
-    starts at the chunk body, matching the stored start_line.
+    Chonkie's breadcrumb-form header is removed first, so later chunks of
+    a split class start at their body. The plain header form on the
+    first chunk of a split class is kept: stored text alone cannot tell
+    it from two verbatim adjacent definitions, and the kept line is the
+    enclosing declaration from the same file.
     """
-    body = strip_injected_class_header(content)
+    body = strip_split_breadcrumb(content)
     lines: list[str] = []
     for line in body.split("\n"):
         if line.strip():
@@ -225,11 +228,19 @@ async def _execute_search(
             _check_staleness,
             state,
         )
-        if stale:
+        line_repair_done = await _run_blocking(
+            app_ctx,
+            "line_repair_state",
+            "_execute_search",
+            project_path,
+            state.db.line_repair_done,
+        )
+        if stale or not line_repair_done:
             log.info(
                 "staleness_triggered_background_reindex",
                 project=project_path,
                 suspect_count=suspect_count,
+                line_repair_pending=not line_repair_done,
             )
             await _schedule_background_reindex(app_ctx, project_path, Path(project_path))
             # Serve the current (possibly stale) index immediately. The reindex

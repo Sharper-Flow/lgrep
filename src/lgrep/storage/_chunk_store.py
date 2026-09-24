@@ -365,6 +365,8 @@ class ChunkStore:
         # skipped below. Do not fall back to db_path — it would record
         # the hash dir as the project path and confuse prune_orphans.
         self._project_path = Path(project_path).resolve() if project_path is not None else None
+        # Completion of the one-time line-range repair; read from disk until true.
+        self._line_repair_done = False
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -805,15 +807,23 @@ class ChunkStore:
             log.warning("remove_zero_chunk_file_failed", error=str(e))
 
     def line_repair_done(self) -> bool:
-        """Return whether the one-time stored line-range repair completed."""
+        """Return whether the one-time stored line-range repair completed.
+
+        Search asks on every call, so a true answer is kept in memory and
+        the marker file is read only until the repair has completed.
+        """
+        if self._line_repair_done:
+            return True
         try:
             path = self.db_path / _LINE_REPAIR_FILENAME
             if not path.is_file():
                 return False
-            return bool(json.loads(path.read_text(encoding="utf-8")).get("done", False))
+            done = bool(json.loads(path.read_text(encoding="utf-8")).get("done", False))
         except Exception as e:
             log.debug("line_repair_state_read_failed", error=str(e))
             return False
+        self._line_repair_done = done
+        return done
 
     def mark_line_repair_done(self) -> None:
         """Record the one-time stored line-range repair as complete."""

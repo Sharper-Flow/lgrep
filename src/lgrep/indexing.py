@@ -122,8 +122,6 @@ class Indexer:
         status = IndexStatus()
         pending: list[str] | None = None
 
-        self._run_line_repair(cancel_event=cancel_event)
-
         log.info("full_index_started", project=str(self.project_path))
 
         while True:
@@ -276,8 +274,12 @@ class Indexer:
         Compares discovered files against stored hashes using one batched
         projection. Files whose hash matches the stored hash are omitted.
         Stale indexed files (present in storage but absent from disk) are
-        removed when worktree dedup is disabled.
+        removed when worktree dedup is disabled. Every incremental pass
+        starts here, so the one-time stored line-range repair runs here
+        first (a no-op once the cache records it as done).
         """
+        self._run_line_repair()
+
         all_files = list(self.discovery.find_files())
         current_rel_paths = {str(Path(f).relative_to(self.project_path)) for f in all_files}
 
@@ -362,7 +364,6 @@ class Indexer:
             self.storage.mark_line_repair_done()
             return 0
 
-        changed = set(self.compute_pending_files())
         rows_by_file = self.storage.get_line_repair_rows()
         updates: list[tuple[str, int, int]] = []
 
@@ -370,7 +371,7 @@ class Indexer:
             if cancel_event is not None and cancel_event.is_set():
                 raise OperationCancelled("line range repair cancelled by cancel_event")
             stored_hash = stored_hashes.get(rel_path)
-            if rel_path in changed or stored_hash is None:
+            if stored_hash is None:
                 continue
             file_path = self.project_path / rel_path
             try:

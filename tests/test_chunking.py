@@ -257,6 +257,33 @@ class TestLocateChunkBody:
         assert pos == -1
 
 
+class TestLongInjectedHeader:
+    """An injected header longer than any prefix probe must not match its
+    own declaration line in the file."""
+
+    HEADER = "class ServiceWithAVeryLongDescriptiveName(BaseServiceWithMixins):"
+    SOURCE = (
+        HEADER + "\n"  # 1
+        '    """Service."""\n'  # 2
+        "    limit = 1\n"  # 3
+        "    def run(self):\n"  # 4
+        "        return self.limit\n"  # 5
+    )
+
+    @pytest.mark.parametrize("separator", ["\n\n\t...\n\n", "\n\n"])
+    def test_body_is_located_not_the_declaration(self, separator):
+        from lgrep.chunking import compute_line_starts, line_range_at, locate_chunk_body
+
+        assert len(self.HEADER) > 50
+        chunk = self.HEADER + separator + "def run(self):\n        return self.limit"
+
+        pos, body = locate_chunk_body(self.SOURCE, chunk)
+
+        assert body.startswith("def run(self):")
+        start, end = line_range_at(compute_line_starts(self.SOURCE), pos, pos + len(body))
+        assert (start, end) == (4, 5)
+
+
 class TestLineRangeAt:
     """compute_line_starts + line_range_at map char offsets to lines."""
 

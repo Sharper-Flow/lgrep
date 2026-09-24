@@ -844,7 +844,7 @@ class TestSearchSemanticCompactDefault:
     )
 
     @staticmethod
-    def _search_ctx():
+    def _search_ctx(content=None, line_repair_done=True):
         from unittest.mock import AsyncMock, MagicMock
 
         from mcp.server.fastmcp import Context
@@ -857,6 +857,7 @@ class TestSearchSemanticCompactDefault:
         app_ctx.embedder = MagicMock()
         app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
         mock_db = MagicMock()
+        mock_db.line_repair_done.return_value = line_repair_done
         state = ProjectState(db=mock_db, indexer=MagicMock())
         app_ctx.projects["/path"] = state
         mock_ctx.request_context.lifespan_context = app_ctx
@@ -867,7 +868,7 @@ class TestSearchSemanticCompactDefault:
                     "src/greet.py",
                     7,
                     12,
-                    TestSearchSemanticCompactDefault.STORED_CONTENT,
+                    content or TestSearchSemanticCompactDefault.STORED_CONTENT,
                     0.91,
                     "hybrid",
                 ),
@@ -910,6 +911,41 @@ class TestSearchSemanticCompactDefault:
         assert lines[0] == "def greet(self, name):"
         assert len(lines[1]) == 120  # the 146-char line is capped
         assert lines[2] == '    return "done"'
+
+    @pytest.mark.asyncio
+    async def test_snippet_keeps_verbatim_adjacent_definitions(self):
+        """A verbatim chunk shaped like the plain injected-header form keeps
+        its first definition: stored text alone cannot prove it injected."""
+        from lgrep.server import search_semantic
+
+        content = "struct Point {}\n\nfn origin() -> Point {\n    Point {}\n}"
+        response = await search_semantic(
+            query="point", path="/path", ctx=self._search_ctx(content=content)
+        )
+
+        assert response["results"][0]["snippet"].split("\n") == [
+            "struct Point {}",
+            "fn origin() -> Point {",
+            "    Point {}",
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("repair_done", "scheduled"), [(False, True), (True, False)])
+    async def test_search_schedules_pending_line_repair(self, repair_done, scheduled):
+        """A cached project whose stored line ranges are not yet repaired gets
+        a background incremental pass (which runs the repair) from search."""
+        from unittest.mock import AsyncMock, patch
+
+        from lgrep.server import search_semantic
+
+        ctx = self._search_ctx(line_repair_done=repair_done)
+        with patch(
+            "lgrep.server.tools_semantic._schedule_background_reindex", new=AsyncMock()
+        ) as schedule:
+            response = await search_semantic(query="greet", path="/path", ctx=ctx)
+
+        assert "results" in response
+        assert schedule.await_count == (1 if scheduled else 0)
 
     @pytest.mark.asyncio
     async def test_include_content_adds_stored_text(self):

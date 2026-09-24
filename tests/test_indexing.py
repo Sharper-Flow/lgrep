@@ -256,6 +256,24 @@ class TestLineRangeRepair:
         (other,) = _stored_rows(store, "other.py")
         assert (other["start_line"], other["end_line"]) == (7, 8)
 
+    def test_incremental_pass_runs_the_repair(self, tmp_path):
+        """Every incremental pass (index_all, search auto-index, background
+        reindex) computes pending files first, and that runs the repair."""
+        self._write_source(tmp_path)
+        file_hash = hashlib.sha256((tmp_path / "svc.py").read_bytes()).hexdigest()
+        store = self._store_with_collapsed_rows(tmp_path, file_hash)
+
+        project = tmp_path / "project"
+        project.mkdir()
+        (tmp_path / "svc.py").rename(project / "svc.py")
+        indexer = Indexer(project_path=project, storage=store, embedder=_no_embed_embedder())
+
+        assert indexer.compute_pending_files() == []
+        rows = {r["chunk_index"]: r for r in _stored_rows(store, "svc.py")}
+        assert (rows[0]["start_line"], rows[0]["end_line"]) == (4, 5)
+        assert (rows[1]["start_line"], rows[1]["end_line"]) == (7, 8)
+        assert store.line_repair_done() is True
+
     def test_empty_cache_records_completion(self, tmp_path):
         store = ChunkStore(tmp_path / "cache")
         indexer = Indexer(project_path=tmp_path, storage=store, embedder=_no_embed_embedder())

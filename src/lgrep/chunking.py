@@ -70,9 +70,6 @@ MIN_CHUNK_TOKENS = 10  # Skip tiny chunks
 # breadcrumb is synthetic and never appears in real source.
 _BREADCRUMB = "\n\t...\n"
 
-# How much of the body must match the file to consider it located.
-_LOCATE_PROBE_LEN = 50
-
 # First lines that look like a declaration header chonkie would inject.
 # Kept tight: a wrong match strips real body lines from snippets.
 _DECLARATION_RE = re.compile(
@@ -80,26 +77,37 @@ _DECLARATION_RE = re.compile(
 )
 
 
-def strip_injected_class_header(text: str) -> str:
-    """Return chunk text with chonkie's injected header context removed.
+def strip_split_breadcrumb(text: str) -> str:
+    """Return chunk text with chonkie's breadcrumb-form header removed.
 
-    The header (class or function declaration line, optionally with a
-    docstring) plus the ``\\t...`` breadcrumb are context chonkie adds in
-    front of the chunk body. They are not contiguous file text, so a
-    caller locating the raw chunk text in a file finds the class
-    declaration instead of the body, which corrupts line ranges.
-
-    The breadcrumb form is unambiguous. The plain ``header\\n\\n`` form is
-    stripped only when the line after the blank separator starts at
-    column 0 — a body chonkie lstripped — and the first line looks like a
-    declaration. Verbatim chunks keep their body indented under the
-    header line, so they pass through unchanged.
+    Later chunks of a split node carry ``header + "\\n\\n\\t...\\n\\n"``
+    in front of the body. The ``\\t...`` breadcrumb never appears in real
+    source, so this strip is unambiguous from the stored text alone.
+    Text without a breadcrumb is returned unchanged.
     """
     while True:
         idx = text.find(_BREADCRUMB)
         if idx < 0:
-            break
+            return text
         text = text[idx + len(_BREADCRUMB) :].lstrip()
+
+
+def strip_injected_class_header(text: str) -> str:
+    """Return a candidate chunk body with chonkie's injected header removed.
+
+    Removes the breadcrumb form (see :func:`strip_split_breadcrumb`) and
+    then the plain ``header\\n\\n`` form that chonkie puts on the first
+    chunk of a split node: stripped when the first line looks like a
+    declaration and the line after the blank separator starts at column
+    0 (a body chonkie lstripped).
+
+    The plain form cannot be told apart from verbatim text with the same
+    shape — two adjacent definitions separated by one blank line — so
+    the result is only a candidate. :func:`locate_chunk_body` uses it
+    only after the full chunk text is not found in the file, and only
+    accepts it when the candidate body is found there.
+    """
+    text = strip_split_breadcrumb(text)
     head, sep, body = text.partition("\n\n")
     if sep:
         first_body_line = body.split("\n", 1)[0]
@@ -108,32 +116,36 @@ def strip_injected_class_header(text: str) -> str:
     return text
 
 
+def _find_forward(content: str, needle: str, search_from: int) -> int:
+    """Find ``needle`` at or after ``search_from``, else anywhere; -1 if absent."""
+    pos = content.find(needle, search_from)
+    if pos < 0 and search_from:
+        pos = content.find(needle)
+    return pos
+
+
 def locate_chunk_body(content: str, chunk_text: str, search_from: int = 0) -> tuple[int, str]:
     """Locate a chunk's body in file content, header context stripped.
 
-    Tries the chunk text verbatim first so non-split chunks map to their
-    full extent. Only when the verbatim text is not in the file — the
+    The full chunk text is searched first, so a verbatim chunk maps to
+    its own extent. Only when the full text is not in the file — the
     signature of chonkie's injected header context — is the header
-    stripped and the body searched. ``search_from`` moves the search
-    forward so later chunks cannot match earlier file positions; the
-    fallback searches from the start for out-of-order chunks.
+    stripped and the full body searched. Matching whole text, never a
+    prefix, keeps an injected header from matching its own declaration
+    line. ``search_from`` moves the search forward so later chunks
+    cannot match earlier file positions; the fallback searches from the
+    start for out-of-order chunks.
 
     Returns ``(char_offset, body)``. ``char_offset`` is ``-1`` when the
     body is not found; ``body`` is the located text with any injected
     header removed.
     """
-    probe = chunk_text[:_LOCATE_PROBE_LEN]
-    pos = content.find(probe, search_from)
-    if pos < 0 and search_from:
-        pos = content.find(probe)
+    pos = _find_forward(content, chunk_text, search_from)
     if pos >= 0:
         return pos, chunk_text
     body = strip_injected_class_header(chunk_text)
     if body != chunk_text:
-        probe = body[:_LOCATE_PROBE_LEN]
-        pos = content.find(probe, search_from)
-        if pos < 0 and search_from:
-            pos = content.find(probe)
+        pos = _find_forward(content, body, search_from)
         if pos >= 0:
             return pos, body
     return -1, body
