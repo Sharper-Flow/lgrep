@@ -71,7 +71,7 @@ async def index_symbols_folder(
         bool,
         Field(description="Skip unchanged files when true; set false to force full rebuild."),
     ] = True,
-) -> IndexSymbolsFolderResult:
+) -> IndexSymbolsFolderResult | ToolError:
     """Index all symbols in a local folder for exact symbol lookup.
 
     Args:
@@ -87,6 +87,8 @@ async def index_symbols_folder(
     result = await asyncio.to_thread(
         _index_folder, path, max_files=max_files, incremental=incremental
     )
+    if "error" in result:
+        return error_response(result["error"])
     return IndexSymbolsFolderResult(
         files_indexed=result["files_indexed"],
         files_skipped=result["files_skipped"],
@@ -137,7 +139,7 @@ async def index_symbols_repo(
             ),
         ),
     ] = None,
-) -> IndexSymbolsRepoResult:
+) -> IndexSymbolsRepoResult | ToolError:
     """Index symbols from a GitHub repository via the REST API (no git clone).
 
     Args:
@@ -151,6 +153,8 @@ async def index_symbols_repo(
     """
     t0 = time.monotonic()
     result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
+    if "error" in result:
+        return error_response(result["error"])
     return IndexSymbolsRepoResult(
         files_indexed=result["files_indexed"],
         symbols_indexed=result["symbols_indexed"],
@@ -202,7 +206,7 @@ async def get_file_tree(
         int,
         Field(description="Maximum file paths to return in the tree response."),
     ] = 500,
-) -> GetFileTreeResult:
+) -> GetFileTreeResult | ToolError:
     """Get the file tree of a repository, respecting .gitignore.
 
     Args:
@@ -214,6 +218,8 @@ async def get_file_tree(
     """
     t0 = time.monotonic()
     result = await asyncio.to_thread(_get_file_tree, path, max_files=max_files)
+    if "error" in result:
+        return error_response(result["error"])
     return GetFileTreeResult(
         files=result["files"],
         total_files=result["total_files"],
@@ -239,7 +245,7 @@ async def get_file_outline(
         str | None,
         Field(description="Optional repository root for stable relative symbol identifiers."),
     ] = None,
-) -> GetFileOutlineResult:
+) -> GetFileOutlineResult | ToolError:
     """Get the symbol outline (functions, classes, methods) for a single file.
 
     Args:
@@ -251,6 +257,8 @@ async def get_file_outline(
     """
     t0 = time.monotonic()
     result = await asyncio.to_thread(_get_file_outline, path, repo_root=repo_root)
+    if "error" in result:
+        return error_response(result["error"])
     return GetFileOutlineResult(
         file_path=result["file_path"],
         symbols=result["symbols"],
@@ -277,7 +285,7 @@ async def get_repo_outline(
         int,
         Field(description="Maximum number of files to scan while building outlines."),
     ] = 500,
-) -> GetRepoOutlineResult:
+) -> GetRepoOutlineResult | ToolError:
     """Get the symbol outline across an entire repository.
 
     Args:
@@ -289,6 +297,8 @@ async def get_repo_outline(
     """
     t0 = time.monotonic()
     result = await asyncio.to_thread(_get_repo_outline, path, max_files=max_files)
+    if "error" in result:
+        return error_response(result["error"])
     return GetRepoOutlineResult(
         repo_path=result["repo_path"],
         files=result["files"],

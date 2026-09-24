@@ -10,11 +10,12 @@ Verifies:
 from __future__ import annotations
 
 import asyncio
+import inspect
 from types import SimpleNamespace
 
 import pytest
 
-from lgrep.server import mcp
+from lgrep.server import mcp, tools_symbols
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 
@@ -465,3 +466,151 @@ class TestPruneSymbolsTool:
         ctx = self._make_context("streamable-http")
         result = await fn(dry_run=False, ctx=ctx)
         assert result["dry_run"] is True
+
+
+# ── Wrapper bad-input contract ────────────────────────────────────────────────
+
+MISSING_DIR = "/nonexistent/lgrep-wrapper-contract-dir"
+MISSING_FILE = "/nonexistent/lgrep-wrapper-contract-dir/absent.py"
+LOCAL_PATH_FOR_REPO_TOOL = "/nonexistent/lgrep-wrapper-contract-local/repo"
+
+
+class TestWrapperBadInputPerTool:
+    """A bad input returns a ToolError dict from every repaired wrapper.
+
+    Covers check:pytest/wrapper-bad-input-per-tool: each wrapper that reads
+    helper success keys returns the helper's error instead of raising KeyError
+    when the helper reports an error.
+    """
+
+    def _get_tool_fn(self, name: str):
+        """Get the tool function by name."""
+        for t in mcp._tool_manager.list_tools():
+            if t.name == name:
+                return t.fn
+        raise KeyError(f"Tool not found: {name}")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("tool_name", "arguments"),
+        [
+            ("index_symbols_folder", {"path": MISSING_DIR}),
+            ("index_symbols_repo", {"repo": LOCAL_PATH_FOR_REPO_TOOL}),
+            ("get_file_tree", {"path": MISSING_DIR}),
+            ("get_file_outline", {"path": MISSING_FILE}),
+            ("get_repo_outline", {"path": MISSING_DIR}),
+        ],
+    )
+    async def test_bad_input_returns_tool_error_not_keyerror(self, tool_name, arguments):
+        fn = self._get_tool_fn(tool_name)
+        result = await fn(**arguments)
+        assert isinstance(result, dict), (
+            f"{tool_name} returned {type(result).__name__}, expected a ToolError dict"
+        )
+        assert set(result) == {"error"}, f"{tool_name} returned non-error dict: {result}"
+        assert isinstance(result["error"], str)
+        assert result["error"], f"{tool_name} returned an empty error message"
+
+    @pytest.mark.asyncio
+    async def test_get_file_outline_directory_is_not_a_file(self, tmp_path):
+        """A directory reports 'not a file'; a missing path reports 'does not exist'."""
+        fn = self._get_tool_fn("get_file_outline")
+        directory_result = await fn(path=str(tmp_path))
+        missing_result = await fn(path=str(tmp_path / "absent.py"))
+        assert "error" in directory_result
+        assert "not a file" in directory_result["error"]
+        assert "error" in missing_result
+        assert "does not exist" in missing_result["error"]
+        assert directory_result["error"] != missing_result["error"]
+
+    @pytest.mark.asyncio
+    async def test_index_symbols_repo_local_path_names_folder_tool(self):
+        """An owner/name format error for a local path points at index_symbols_folder."""
+        fn = self._get_tool_fn("index_symbols_repo")
+        local_path_result = await fn(repo=LOCAL_PATH_FOR_REPO_TOOL)
+        assert "error" in local_path_result
+        assert "index_symbols_folder" in local_path_result["error"]
+        malformed_result = await fn(repo="notowner/name/extra")
+        assert "error" in malformed_result
+        assert "index_symbols_folder" not in malformed_result["error"]
+
+
+class TestEverySymbolToolPassesHelperError:
+    """Every registered symbol tool returns its helper's error message.
+
+    Covers check:pytest/every-symbol-tool-passes-helper-error. The tool list
+    comes from the MCP registry, and every lgrep.tools helper the module calls
+    is stubbed to report an error, so a symbol tool added later is covered
+    without editing this test.
+    """
+
+    STUB_ERROR = "stub helper error"
+
+    # Helpers of these tools have no error branch, so there is no error to pass on.
+    NO_HELPER_ERROR = {"list_repos", "invalidate_cache"}
+
+    @staticmethod
+    def _symbol_tools():
+        return sorted(
+            (
+                t
+                for t in mcp._tool_manager.list_tools()
+                if t.fn.__module__ == tools_symbols.__name__
+            ),
+            key=lambda t: t.name,
+        )
+
+    @classmethod
+    def _stub_helpers(cls, monkeypatch):
+        def sync_stub(*_args, **_kwargs):
+            return {"error": cls.STUB_ERROR}
+
+        async def async_stub(*_args, **_kwargs):
+            return {"error": cls.STUB_ERROR}
+
+        stubbed = 0
+        for name, value in vars(tools_symbols).items():
+            if (
+                name.startswith("_")
+                and inspect.isfunction(value)
+                and value.__module__.startswith("lgrep.tools.")
+            ):
+                stub = async_stub if inspect.iscoroutinefunction(value) else sync_stub
+                monkeypatch.setattr(tools_symbols, name, stub)
+                stubbed += 1
+        assert stubbed, "no lgrep.tools helpers found in tools_symbols"
+
+    @staticmethod
+    def _arguments(tool) -> dict:
+        arguments = {}
+        for name, prop in tool.parameters.get("properties", {}).items():
+            if name not in tool.parameters.get("required", []):
+                continue
+            if prop.get("type") == "array":
+                arguments[name] = ["src/absent.py:function:absent"]
+            elif name == "repo":
+                arguments[name] = "owner/name"
+            else:
+                arguments[name] = "/nonexistent/lgrep-guard"
+        return arguments
+
+    def test_registry_finds_the_symbol_tools(self):
+        names = {t.name for t in self._symbol_tools()}
+        assert names <= EXPECTED_SYMBOL_TOOLS
+        assert {"get_file_tree", "get_file_outline", "search_symbols"} <= names
+
+    @pytest.mark.asyncio
+    async def test_every_symbol_tool_returns_helper_error(self, monkeypatch):
+        self._stub_helpers(monkeypatch)
+        failures = []
+        for tool in self._symbol_tools():
+            if tool.name in self.NO_HELPER_ERROR:
+                continue
+            try:
+                result = await tool.fn(**self._arguments(tool))
+            except Exception as exc:  # noqa: BLE001 - each failure is reported below
+                failures.append(f"{tool.name}: raised {type(exc).__name__}: {exc}")
+                continue
+            if not isinstance(result, dict) or result.get("error") != self.STUB_ERROR:
+                failures.append(f"{tool.name}: returned {result!r}")
+        assert not failures, "\n".join(failures)

@@ -51,6 +51,16 @@ def _resolve_github_token(github_token: str | None) -> str | None:
     return os.environ.get("LGREP_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
 
 
+def _looks_like_local_path(value: str) -> bool:
+    """Return True when a rejected owner/name value looks like a filesystem path."""
+    if value.startswith(("/", "./", "../", "~/")) or "\\" in value:
+        return True
+    try:
+        return Path(value).exists()
+    except OSError:
+        return False
+
+
 async def index_repo(
     repo: str,
     ref: str = "HEAD",
@@ -72,9 +82,13 @@ async def index_repo(
     """
     t0 = time.monotonic()
     if "/" not in repo or repo.count("/") != 1:
-        return error_response(
-            f"Invalid repo format. Expected 'owner/name', got: {repo!r}",
-        )
+        message = f"Invalid repo format. Expected 'owner/name', got: {repo!r}"
+        if _looks_like_local_path(repo):
+            message += (
+                " This looks like a local path;"
+                " for a local repository use lgrep_index_symbols_folder."
+            )
+        return error_response(message)
 
     try:
         import httpx

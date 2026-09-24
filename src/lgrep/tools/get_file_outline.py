@@ -23,9 +23,13 @@ def get_file_outline(file_path: str, repo_root: str | None = None) -> dict:
     """
     path = Path(file_path)
 
-    if not path.exists() or not path.is_file():
+    if not path.exists():
         return error_response(
             f"File does not exist: {file_path}",
+        )
+    if not path.is_file():
+        return error_response(
+            f"Path is not a file: {file_path}",
         )
 
     root = Path(repo_root) if repo_root else None
