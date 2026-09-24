@@ -1,3 +1,8 @@
+## 2026-09-24 (v3.4.3)
+
+- fix(symbol-tools): build a worktree's symbol index on first use (#22)
+- docs: update changelog for v3.4.2
+
 ## 2026-09-20 (v3.4.2)
 
 - chore(config): hide the build agent from Concord sessions (#21)
