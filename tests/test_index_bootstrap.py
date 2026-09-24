@@ -301,3 +301,96 @@ class TestSeedFrom:
 
         assert store.seed_from(str(tmp_path / "never"), str(tmp_path / "target")) is False
         assert store.load(str(tmp_path / "target")) is None
+
+
+class TestSeedScopeRestrictedToCheckoutRoots:
+    """A seed is only defined between checkout roots.
+
+    Index file sets are relative to the indexed path, so a subdirectory
+    index shares no file scope with a root checkout: seeding across that
+    boundary re-parses everything the copy imported.
+    """
+
+    def test_checkout_root_detection(self, split_repo):
+        from lgrep.tools._index_bootstrap import _is_checkout_root
+
+        trunk, worktree = split_repo
+        assert _is_checkout_root(trunk) is True
+        assert _is_checkout_root(worktree) is True
+        assert _is_checkout_root(trunk / "src") is False
+
+    def test_subdirectory_index_is_not_a_seed_candidate(self, split_repo, tmp_path, monkeypatch):
+        from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
+
+        trunk, worktree = split_repo
+        store_dir = tmp_path / "store"
+
+        # The only indexed sibling is a subdirectory of the trunk checkout.
+        assert "error" not in index_folder(str(trunk / "src"), storage_dir=store_dir)
+
+        seed_calls: list[str] = []
+
+        def spy_seed(self, seed_repo_path, target_repo_path):
+            seed_calls.append(seed_repo_path)
+            return False
+
+        monkeypatch.setattr(IndexStore, "seed_from", spy_seed)
+
+        found = search_symbols("worktree_only_symbol", str(worktree), storage_dir=store_dir)
+
+        assert "error" not in found
+        assert found["total_matches"] == 1
+        assert seed_calls == []
+        # The full-index fallback still answers from the worktree's files.
+        store = IndexStore(storage_dir=store_dir)
+        index = store.load(str(worktree.resolve()))
+        assert index is not None
+        assert "src/worktree_only.py" in index.files
+
+    def test_subdirectory_query_does_not_bootstrap(self, split_repo, tmp_path):
+        from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
+
+        trunk, worktree = split_repo
+        store_dir = tmp_path / "store"
+
+        # A checkout-root sibling is indexed, but the queried path is a
+        # subdirectory of another checkout of the same repository.
+        assert "error" not in index_folder(str(trunk), storage_dir=store_dir)
+
+        subdir = str(worktree / "src")
+        found = search_symbols("authenticate", subdir, storage_dir=store_dir)
+
+        assert "error" in found
+        assert "Repository not indexed" in found["error"]
+        store = IndexStore(storage_dir=store_dir)
+        assert store.load(subdir) is None
+
+    def test_bootstrap_call_saves_the_index_once(self, tmp_path, monkeypatch):
+        from lgrep.tools.search_symbols import search_symbols
+
+        big = tmp_path / "big"
+        (big / "pkg").mkdir(parents=True)
+        for i in range(501):
+            (big / "pkg" / f"mod_{i:03d}.py").write_text(f"def sym_{i:03d}():\n    return {i}\n")
+        _git("init", cwd=big)
+        _commit_all(big, "init")
+        store_dir = tmp_path / "store"
+
+        saves: list[str] = []
+        original_save = IndexStore.save
+
+        def counting_save(self, index):
+            saves.append(index.repo_path)
+            return original_save(self, index)
+
+        monkeypatch.setattr(IndexStore, "save", counting_save)
+
+        found = search_symbols("sym_007", str(big), storage_dir=store_dir)
+
+        assert "error" not in found
+        assert found["total_matches"] >= 1
+        # One bootstrap, one save: the freshness gate must not re-save the
+        # just-built index on the same call.
+        assert saves == [str(big.resolve())]

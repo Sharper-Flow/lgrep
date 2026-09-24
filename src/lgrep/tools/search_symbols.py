@@ -56,7 +56,11 @@ def search_symbols(
         bootstrapped = ensure_symbol_index(repo_path, storage_dir=storage_dir)
     # Serve no answer from an index known to be behind the working tree:
     # refresh first when the gate fires, then load the post-refresh index.
-    refresh = refresh_stale_index(repo_path, storage_dir=storage_dir)
+    # The bootstrap call saved this index moments ago, so the gate cannot
+    # learn anything new; on repos past max_files its file-set branch
+    # always fires and the refetch would re-save the whole body for no
+    # change. Skip the gate on the bootstrap call only.
+    refresh = None if bootstrapped else refresh_stale_index(repo_path, storage_dir=storage_dir)
     index = store.load(repo_key)
     if index is None:
         return error_response(

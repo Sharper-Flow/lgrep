@@ -7,11 +7,15 @@ their own index on the first query instead (``ensure_symbol_index``):
 
 - The index is built under the checkout's own resolved-path key, so
   results always come from this checkout's files.
-- When another checkout sharing the same git common directory (a linked
-  worktree of the same repository) already has an index, the newest such
-  index is copied as a seed and an incremental refresh re-parses only
-  files whose content hash differs.
-- With no indexed sibling, the first query runs a full index.
+- When the queried path is itself a checkout root and another checkout
+  root sharing the same git common directory (a linked worktree of the
+  same repository) already has an index, the newest such root index is
+  copied as a seed and an incremental refresh re-parses only files whose
+  content hash differs. Seeds are root-to-root only: index file sets are
+  relative to the indexed path, so a subdirectory index shares no scope
+  with a root checkout.
+- Otherwise the first query runs a full index. A query against a
+  subdirectory of a checkout keeps the "not indexed" error contract.
 
 When a new index is created, indexes whose repo_path no longer exists on
 disk are deleted. Deletion reuses ``prune_symbols`` (reason
@@ -58,13 +62,39 @@ def git_common_dir(repo_path: Path) -> str | None:
     return result.stdout.strip() or None
 
 
+def _is_checkout_root(path: Path) -> bool:
+    """Return True when *path* is itself a working-tree root.
+
+    ``git rev-parse --show-toplevel`` answers the top-level directory of
+    the working tree containing *path* and errors when there is none, so
+    comparing it with *path* identifies checkout roots; a subdirectory of
+    a checkout is not itself a checkout.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--show-toplevel"],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_S,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    return Path(result.stdout.strip()) == path
+
+
 def _newest_sibling_index(store: IndexStore, common_dir: str) -> str | None:
-    """Return the repo path of the freshest indexed sibling checkout.
+    """Return the repo path of the freshest indexed sibling checkout root.
 
     Candidates come from the store's sidecars; a candidate must be a live
-    local directory whose common dir matches. Gone directories cannot
-    produce a common dir (git needs a cwd), so they drop out here and are
-    pruned by the create-time sweep instead.
+    local directory whose common dir matches and which is itself a
+    checkout root. Index file sets are relative to the indexed path, so a
+    subdirectory index shares no file scope with a root checkout and can
+    never seed one. Gone directories cannot produce a common dir (git
+    needs a cwd), so they drop out here and are pruned by the create-time
+    sweep instead.
     """
     newest: tuple[str, float] | None = None
     for candidate in store.list_repos():
@@ -75,6 +105,8 @@ def _newest_sibling_index(store: IndexStore, common_dir: str) -> str | None:
             if not candidate_path.is_dir():
                 continue
         except OSError:
+            continue
+        if not _is_checkout_root(candidate_path):
             continue
         if git_common_dir(candidate_path) != common_dir:
             continue
@@ -89,11 +121,14 @@ def _newest_sibling_index(store: IndexStore, common_dir: str) -> str | None:
 def ensure_symbol_index(repo_path: str, storage_dir: Path | str | None = None) -> bool:
     """Build an index for an unindexed local git checkout on first use.
 
-    Seeds from the newest indexed sibling worktree when one exists, then
-    refreshes incrementally; otherwise runs a full index. Returns True
-    when an index now exists for the checkout. Never raises: a failed
-    bootstrap returns False and the caller keeps the "not indexed"
-    error. Non-git folders and ``github:`` keys are out of scope.
+    A query against a checkout root seeds from the newest indexed sibling
+    checkout root when one exists, then refreshes incrementally; otherwise
+    it runs a full index. A query against a subdirectory of a checkout
+    does not bootstrap: no seed can share its scope, so the "not indexed"
+    error contract stands. Returns True when an index now exists for the
+    checkout. Never raises: a failed bootstrap returns False and the
+    caller keeps the "not indexed" error. Non-git folders and ``github:``
+    keys are out of scope.
     """
     if repo_path.startswith("github:"):
         return False
@@ -106,6 +141,12 @@ def ensure_symbol_index(repo_path: str, storage_dir: Path | str | None = None) -
 
     common_dir = git_common_dir(resolved)
     if common_dir is None:
+        return False
+    if not _is_checkout_root(resolved):
+        # Seeding is only defined between checkout roots: index file sets
+        # are relative to the indexed path, so a subdirectory cannot share
+        # scope with a root index. A subdirectory keeps the "not indexed"
+        # error contract instead of bootstrapping a mismatched scope.
         return False
 
     store = IndexStore(storage_dir=storage_dir)
