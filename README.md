@@ -461,7 +461,7 @@ Security notes:
 | `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
-| `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory resolve to the same semantic cache key, eliminating duplicate embeddings and disk usage across worktrees. |
+| `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory share one semantic cache. Each worktree embeds only the files that differ from its trunk and still searches its own version of every file. |
 | `LGREP_ALLOW_DESTRUCTIVE_MCP` | No | unset | Allows `prune_orphans`, `prune_symbols`, `invalidate_cache` and `invalidate_worktree_cache` to actually delete when called over MCP. Unset, those tools return a preview/refusal and say why. Leave unset on any server reachable by more than one client — including a Vision-proxied server, where the subprocess transport still reports `stdio`. The CLI (`--execute`) is unaffected for the tools that have one; the invalidation tools have no CLI equivalent. |
 
 ### Vision / OpenCode tuning
@@ -532,17 +532,20 @@ When using git worktrees (e.g., ADV's per-change worktree isolation), multiple c
 export LGREP_WORKTREE_DEDUP=1
 ```
 
-With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share:
+With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share one LanceDB cache directory and one open table, and each worktree still searches its own files:
 
-- One LanceDB cache directory (disk dedup)
-- One `ProjectState` object in memory (memory dedup — RSS stays bounded regardless of worktree count)
-- One `project_meta.json` with `alias_paths` tracking every worktree that uses the canonical cache
+- **Base rows** hold the trunk checkout's files.
+- **Overlay rows** hold, for each linked worktree, only the files that differ from base or that base lacks. A worktree's first index embeds that difference and nothing else.
+- A worktree search returns its overlay rows plus the base rows of files it has not changed, in one prefiltered query. Base files that the worktree changed or deleted are hidden. Trunk search returns base rows only.
+- When base rows change (for example, after a trunk pull), each worktree compares every file with base again on its next search or index pass.
+- Stale-file cleanup runs for every checkout: deleting a file removes its base rows on trunk and hides them in a worktree.
+- `project_meta.json` lists every worktree that uses the cache in `alias_paths`.
+
+Caches created before overlay rows existed gain a `checkout` column when opened; existing rows become base rows with no re-embedding.
 
 **Concurrency:** Cross-process alias updates to `project_meta.json` are guarded by a POSIX advisory lock (`fcntl.flock`) on a dedicated `.meta.lock` file, so simultaneous writes from multiple lgrep instances do not lose alias entries.
 
-**Tradeoff:** When dedup is enabled, stale-file cleanup during indexing is skipped. Deleted-file chunks remain in the shared cache until a full rebuild. This is benign (extra search results, not wrong results) and avoids cross-worktree corruption.
-
-**ADV integration:** Call the `invalidate_worktree_cache` MCP tool during `/adv-archive` Phase 9 (before `adv_worktree_delete`) to remove the worktree's alias from the shared cache metadata:
+**ADV integration:** Call the `invalidate_worktree_cache` MCP tool during `/adv-archive` Phase 9 (before `adv_worktree_delete`) to remove the worktree's alias and overlay rows from the shared cache:
 
 ```
 invalidate_worktree_cache(paths: ["/path/to/worktree"])
@@ -551,7 +554,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
 **Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs three passes:
 
 1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
-2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files (worktrees that were deleted without calling `invalidate_worktree_cache`)
+2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files and deletes the overlay rows of worktrees that no longer exist (worktrees that were deleted without calling `invalidate_worktree_cache`)
 3. `prune_symbols` — deletes stale symbol-store index files (`index_<hash>.json`) whose `repo_path` is missing, unreadable, or absent from the JSON, plus their metadata sidecars, orphaned sidecars, and stale temp files from interrupted writes
 
 The `prune_orphans` and `gc_worktree_meta` passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects. The `prune_symbols` pass respects the same grace window, but only for the `unreadable_index_json` reason; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass grace, and non-local `github:` entries are skipped. Orphan sidecars and stale temp files are grace-eligible, and `.index_<hash>.lock` files are never deleted.

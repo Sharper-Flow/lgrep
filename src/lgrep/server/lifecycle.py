@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import threading
 import time
@@ -17,11 +18,13 @@ from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer, OperationCancelled
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import (
+    BASE_CHECKOUT,
     ChunkStore,
-    canonical_repo_key,
+    checkout_scope,
     discover_cached_projects,
     get_project_db_path,
     has_disk_cache,
+    write_project_meta,
 )
 from lgrep.watcher import FileWatcher
 
@@ -75,6 +78,10 @@ class ProjectState:
     ``pending_index_files`` holds the deterministic remaining work from an
     interrupted bounded index window.  When it is non-empty, the next index
     window resumes from this list instead of re-walking the repository.
+
+    ``base_path`` is set for a linked worktree that shares its trunk's cache
+    under worktree dedup: the trunk path whose base rows the worktree's
+    overlay is compared against. It is ``None`` for a cache's own checkout.
     """
 
     db: ChunkStore
@@ -83,15 +90,17 @@ class ProjectState:
     watching: bool = False
     latest_indexed_at: float | None = None
     pending_index_files: list[str] | None = None
+    base_path: str | None = None
 
 
 @dataclass
 class LgrepContext:
     """Application context supporting multiple concurrent projects.
 
-    Each project gets its own ProjectState (ChunkStore, Indexer, FileWatcher),
-    keyed by resolved absolute path string. A single VoyageEmbedder is shared
-    across all projects to avoid duplicate API client overhead.
+    Each checkout path gets its own ProjectState (store view, Indexer,
+    FileWatcher), keyed by resolved absolute path string. A single
+    VoyageEmbedder is shared across all projects to avoid duplicate API
+    client overhead.
     ``transport`` records the MCP transport kind (``"stdio"``,
     ``"streamable-http"``, ``"sse"``, ...) when the server is started via
     ``run_server``. It is stored on the application context from an internal
@@ -100,11 +109,10 @@ class LgrepContext:
     """
 
     projects: dict[str, ProjectState] = field(default_factory=dict)
-    # Canonical-key index for worktree dedup: maps str(canonical_repo_key) → ProjectState.
-    # Multiple paths in `projects` may point to the SAME ProjectState when they
-    # share a git common-dir and LGREP_WORKTREE_DEDUP is enabled. This bounds
-    # memory growth: one ProjectState per repo, regardless of worktree count.
-    _canonical_to_state: dict[str, ProjectState] = field(default_factory=dict)
+    # One owning ChunkStore per cache, keyed by str(canonical_repo_key). Under
+    # worktree dedup every worktree of a repo reads a view of its trunk's
+    # store, so connections and tables stay bounded by repository count.
+    _stores: dict[str, ChunkStore] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     transport: str | None = None
@@ -143,12 +151,7 @@ async def _startup(server: FastMCP) -> LgrepContext:
 
 
 async def _shutdown(ctx: LgrepContext) -> None:
-    """Gracefully shut down all projects: stop watchers and release resources.
-
-    When worktree dedup is enabled, ProjectState may be shared across multiple
-    paths. We stop watchers on the canonical states (one per repo) to avoid
-    double-stopping the same watcher via aliased paths.
-    """
+    """Gracefully shut down all projects: stop watchers and release resources."""
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
 
     # Cancel outstanding background reindexes; await terminal state so
@@ -167,17 +170,11 @@ async def _shutdown(ctx: LgrepContext) -> None:
             await asyncio.sleep(0.01)
     ctx._bg_reindex_tasks.clear()
 
-    # Iterate canonical states (deduped) to stop each watcher exactly once.
-    # Fall back to projects when _canonical_to_state is empty (legacy / pre-dedup).
-    seen_states: set[int] = set()
     for proj_path, state in ctx.projects.items():
-        if id(state) in seen_states:
-            continue
-        seen_states.add(id(state))
         _stop_watcher(state, proj_path)
 
     ctx.projects.clear()
-    ctx._canonical_to_state.clear()
+    ctx._stores.clear()
     ctx.runtime.shutdown(cancel_futures=True)
     ctx.embedder = None
     log.info("lgrep_shutdown_complete")
@@ -263,11 +260,10 @@ async def _ensure_project_initialized(
     Uses double-checked locking: fast lock-free path for already-cached projects,
     asyncio.Lock only for first-time initialization.
 
-    When ``LGREP_WORKTREE_DEDUP`` is enabled, this function shares ProjectState
-    across worktree paths of the same repo: the first path to initialize creates
-    the state, and subsequent paths with the same canonical_repo_key alias to
-    the SAME ProjectState object. This bounds in-memory growth to one
-    ProjectState per repo regardless of worktree count.
+    Every checkout path gets its own ProjectState, whose Indexer walks that
+    checkout. When ``LGREP_WORKTREE_DEDUP`` is enabled, a linked worktree
+    shares its trunk's cache: the trunk's ChunkStore is opened once, and the
+    worktree's state reads and writes an ``OverlayStore`` view of it.
 
     Returns ProjectState on success, or a ToolError dict on failure.
     """
@@ -277,38 +273,29 @@ async def _ensure_project_initialized(
     if path_key in app_ctx.projects:
         return app_ctx.projects[path_key]
 
-    # Slow path: need to create or alias (under lock to prevent duplicate entries)
+    # Slow path: need to create (under lock to prevent duplicate entries)
     async with app_ctx._lock:
         # Double-check after acquiring lock
         if path_key in app_ctx.projects:
             return app_ctx.projects[path_key]
 
-        # Compute canonical key — when dedup is on, this collapses worktrees
-        # of the same repo to a single shared state. When dedup is off,
-        # canonical_repo_key returns Path.resolve(), so each path is its own key.
-        canonical_str = str(canonical_repo_key(Path(project_path)))
+        # The cache owner is the trunk under dedup and the path itself
+        # otherwise; checkout is BASE_CHECKOUT unless the path is a linked
+        # worktree of the owner.
+        owner, checkout = checkout_scope(project_path)
+        owner_str = str(owner)
 
-        # Alias path: another path already initialized the same canonical repo.
-        # Share the existing ProjectState — DO NOT create a duplicate.
-        existing_state = app_ctx._canonical_to_state.get(canonical_str)
-        if existing_state is not None:
-            app_ctx.projects[path_key] = existing_state
-            log.info(
-                "project_aliased",
-                project=path_key,
-                canonical=canonical_str,
-            )
-            return existing_state
-
-        # Check MAX_PROJECTS limit (counts canonical projects, not aliases)
-        count = len(app_ctx._canonical_to_state)
-        if count >= MAX_PROJECTS:
-            return _error_response(
-                f"Maximum project limit ({MAX_PROJECTS}) reached. "
-                "Restart the server or use the CLI to evict unused projects."
-            )
-        if count >= int(MAX_PROJECTS * 0.8):
-            log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
+        store = app_ctx._stores.get(owner_str)
+        if store is None:
+            # Check MAX_PROJECTS limit (counts caches, not worktree views)
+            count = len(app_ctx._stores)
+            if count >= MAX_PROJECTS:
+                return _error_response(
+                    f"Maximum project limit ({MAX_PROJECTS}) reached. "
+                    "Restart the server or use the CLI to evict unused projects."
+                )
+            if count >= int(MAX_PROJECTS * 0.8):
+                log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
 
         if not app_ctx.voyage_api_key:
             return _error_response("VOYAGE_API_KEY not set.")
@@ -318,20 +305,26 @@ async def _ensure_project_initialized(
             if app_ctx.embedder is None:
                 app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
 
-            db_path = get_project_db_path(project_path)
-            db = ChunkStore(db_path, project_path=path_key)
+            if store is None:
+                store = ChunkStore(get_project_db_path(owner), project_path=owner_str)
+                app_ctx._stores[owner_str] = store
+            db = store.for_checkout(checkout)
+            base_path = None
+            if checkout != BASE_CHECKOUT:
+                base_path = owner_str
+                write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
             indexer = Indexer(
                 project_path=project_path,
                 storage=db,
                 embedder=app_ctx.embedder,
             )
-            state = ProjectState(db=db, indexer=indexer)
+            state = ProjectState(db=db, indexer=indexer, base_path=base_path)
             app_ctx.projects[path_key] = state
-            app_ctx._canonical_to_state[canonical_str] = state
             log.info(
                 "project_initialized",
                 project=path_key,
-                canonical=canonical_str,
+                cache_owner=owner_str,
+                overlay=base_path is not None,
             )
             return state
         except Exception as e:
@@ -395,6 +388,167 @@ async def _get_project_stats(
         }
 
 
+def _check_staleness(state: ProjectState) -> tuple[bool, int]:
+    """Cheap three-stage freshness check.
+
+    Returns ``(stale, suspect_count)``. ``stale=True`` means the on-disk file
+    set has drifted from the index and a re-embed is needed before search.
+
+    Stages, ordered cheapest first so the warm path (no edits since last
+    index) costs only a directory walk + ``stat`` per file:
+
+    1. mtime gate — collect current files with their ``stat().st_mtime``.
+       Deleted indexed files are stale. Otherwise any file whose mtime exceeds
+       the cached ``latest_indexed_at`` becomes a suspect. We intentionally do
+       not compare file counts because discovered files can legitimately
+       produce zero chunks (empty/comment-only files) and therefore never
+       appear in the indexed file set.
+    2. hash check — only suspect files are read+hashed and compared against
+       the stored ``file_hash`` from ``ChunkStore.get_file_hashes()``. A
+       single batched projection query handles all comparisons.
+    3. caller acts on the result. Any errors during the check are treated
+       as "fresh" so transient I/O issues never cause an unintended re-embed.
+
+    The whole check is bounded by ``LGREP_STALENESS_DEADLINE_S`` (default
+    4.0s) so a large repo's directory walk cannot eat the entire 8s tool
+    timeout. On deadline, the function returns ``(False, 0)`` and the
+    search proceeds with the slightly-stale index; the next search will
+    trigger a fresh reindex if drift is real.
+    """
+    deadline_s = float(os.environ.get("LGREP_STALENESS_DEADLINE_S", "4.0"))
+    deadline = time.monotonic() + deadline_s
+
+    def _over_deadline() -> bool:
+        return time.monotonic() > deadline
+
+    try:
+        # A worktree overlay whose base changed since its last full
+        # comparison must re-hash every file: base writes leave worktree
+        # mtimes untouched.
+        if state.base_path is not None and state.db.needs_full_recheck():
+            return True, 0
+
+        indexer = state.indexer
+        if state.latest_indexed_at is None:
+            state.latest_indexed_at = state.db.get_latest_indexed_at()
+        latest = state.latest_indexed_at or 0.0
+
+        indexed_files = set(state.db.get_indexed_files() or set())
+        current: list[tuple[Path, float, str]] = []
+        current_rel_paths: set[str] = set()
+        project_root = Path(indexer.project_path)
+        for fp in indexer.discovery.find_files():
+            if _over_deadline():
+                log.warning(
+                    "staleness_check_deadline_exceeded",
+                    project=str(indexer.project_path),
+                    deadline_s=deadline_s,
+                )
+                return False, 0
+            try:
+                rel = str(fp.relative_to(project_root))
+                current.append((fp, fp.stat().st_mtime, rel))
+                current_rel_paths.add(rel)
+            except (OSError, ValueError):
+                continue
+
+        # Stage 0 — current files that are absent from the indexed set.  This
+        # catches partial indexes where a bounded window left files pending,
+        # even though their mtime is older than the latest chunk timestamp.
+        # Exclude zero-chunk files, which are intentionally not represented in
+        # the chunks table but are tracked separately.
+        if indexed_files:
+            try:
+                zero_chunk_files = set(state.db.get_zero_chunk_files())
+            except Exception:
+                zero_chunk_files = set()
+            never_indexed = current_rel_paths - indexed_files - zero_chunk_files
+            if never_indexed:
+                log.info(
+                    "staleness_never_indexed_files",
+                    project=str(indexer.project_path),
+                    count=len(never_indexed),
+                )
+                return True, len(never_indexed)
+
+        # Stage 1a — indexed files that no longer exist on disk are stale.
+        deleted_indexed_files = indexed_files - current_rel_paths
+        if deleted_indexed_files:
+            return True, len(deleted_indexed_files)
+
+        # Stage 1b — pick files whose mtime is newer than the index timestamp.
+        suspects = [(fp, rel) for fp, mt, rel in current if mt > latest]
+        if not suspects:
+            return False, 0
+
+        # Stage 2 — hash only the suspect subset.
+        stored = state.db.get_file_hashes()
+        for fp, rel in suspects:
+            if _over_deadline():
+                log.warning(
+                    "staleness_check_deadline_exceeded",
+                    project=str(indexer.project_path),
+                    deadline_s=deadline_s,
+                )
+                return False, 0
+            try:
+                content = fp.read_bytes()
+            except OSError:
+                continue
+            current_hash = hashlib.sha256(content).hexdigest()
+            if stored.get(rel) != current_hash:
+                return True, len(suspects)
+
+        # All suspects had matching hashes (mtime touched but content unchanged).
+        return False, 0
+    except Exception as e:  # pragma: no cover — pre-flight must never crash search
+        log.debug("staleness_check_failed", error=str(e))
+        return False, 0
+
+
+def _index_in_flight(app_ctx: LgrepContext, project_path: str) -> bool:
+    return project_path in app_ctx._indexing_events or project_path in app_ctx._bg_reindex_tasks
+
+
+async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -> bool:
+    """Bring a trunk's base rows current before a worktree compares against them.
+
+    A worktree overlay holds only files that differ from base, so an
+    overlay computed against a stale or partial base embeds files the base
+    would have covered. When the base is stale, a background pass waits for
+    the base reindex; a foreground pass runs one base window. Returns True
+    when the base has no pending work, or when the base cannot be indexed
+    (the overlay then covers every differing file).
+    """
+    base = await _ensure_project_initialized(app_ctx, Path(base_path))
+    if isinstance(base, dict):
+        log.warning("overlay_base_unavailable", base=base_path, error=base.get("error"))
+        return True
+    if not _index_in_flight(app_ctx, base_path):
+        stale, _ = await app_ctx.runtime.run_blocking(
+            "staleness_check", "_base_index_ready", base_path, _check_staleness, base
+        )
+        if not stale and not base.pending_index_files:
+            return True
+        if wait:
+            await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+        else:
+            await _auto_index_project_single_flight(app_ctx, base_path, Path(base_path))
+            return not _index_in_flight(app_ctx, base_path) and not base.pending_index_files
+    if not wait:
+        return False
+    while _index_in_flight(app_ctx, base_path):
+        event = app_ctx._indexing_events.get(base_path)
+        task = app_ctx._bg_reindex_tasks.get(base_path)
+        if event is not None:
+            await event.wait()
+        elif task is not None:
+            await asyncio.wait({task})
+        # Let the finished task's done callback unregister it.
+        await asyncio.sleep(0)
+    return not base.pending_index_files
+
+
 async def _finish_single_flight_indexing(
     app_ctx: LgrepContext, project_path: str, event: asyncio.Event
 ) -> None:
@@ -426,7 +580,7 @@ async def _schedule_background_reindex(
         if project_path in app_ctx._indexing_events or project_path in app_ctx._bg_reindex_tasks:
             return  # already in flight
         task = asyncio.create_task(
-            _auto_index_project_single_flight(app_ctx, project_path, path_obj),
+            _auto_index_project_single_flight(app_ctx, project_path, path_obj, wait_for_base=True),
             name=f"bg_reindex:{project_path}",
         )
         app_ctx._bg_reindex_tasks[project_path] = task
@@ -447,7 +601,7 @@ async def _run_index_continuation(app_ctx: LgrepContext, project_path: str, path
         # done callback will see a different task object and no-op.
         task = asyncio.create_task(
             _auto_index_project_single_flight(
-                app_ctx, project_path, path_obj, continue_until_complete=True
+                app_ctx, project_path, path_obj, continue_until_complete=True, wait_for_base=True
             ),
             name=f"bg_reindex_continuation:{project_path}",
         )
@@ -483,6 +637,7 @@ async def _auto_index_project_single_flight(
     project_path: str,
     path_obj: Path,
     continue_until_complete: bool = False,
+    wait_for_base: bool = False,
 ) -> ProjectState | dict:
     """Auto-index project on first search using leader/follower coordination.
 
@@ -491,6 +646,11 @@ async def _auto_index_project_single_flight(
     a background continuation, then returns the state so the calling search
     does not block.  When ``continue_until_complete`` is true, the coroutine
     loops windows in the background until the pending set is empty.
+
+    A worktree overlay is compared against its trunk's base rows, so the
+    base is brought current first (``_base_index_ready``). If the base is
+    still indexing, the overlay pass is skipped and the state returned;
+    ``wait_for_base`` makes background passes wait for the base instead.
     """
     is_leader = False
     async with app_ctx._lock:
@@ -521,6 +681,12 @@ async def _auto_index_project_single_flight(
         if isinstance(result, dict):
             return result
         state = result
+
+        if state.base_path is not None and not await _base_index_ready(
+            app_ctx, state.base_path, wait=wait_for_base
+        ):
+            log.info("overlay_index_deferred_for_base", project=project_path, base=state.base_path)
+            return state
 
         # Seed pending work so cancellation can preserve it even if the
         # blocking index_window raises before returning a window result.

@@ -21,8 +21,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from lgrep.indexing import Indexer
+from lgrep.server.lifecycle import _check_staleness
 from lgrep.server.runtime import RuntimeSupervisor
-from lgrep.server.tools_semantic import _check_staleness
 from lgrep.storage import ChunkStore
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,10 @@ def mock_embedder():
 @pytest.fixture
 def mock_storage():
     """Create a mock ChunkStore that records calls but does not write."""
-    return MagicMock(spec=ChunkStore)
+    storage = MagicMock(spec=ChunkStore)
+    # A base store has no other version of a file to adopt.
+    storage.adopt_base_version.return_value = False
+    return storage
 
 
 @pytest.fixture
@@ -198,6 +201,7 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
     # Build a state with explicit db mock. We use a plain MagicMock (no spec)
     # so we can freely populate the fields the staleness check accesses.
     state = MagicMock()
+    state.base_path = None
     state.latest_indexed_at = 0.0
     state.db.get_latest_indexed_at.return_value = 0.0
     state.db.get_indexed_files.return_value = set()
@@ -213,7 +217,7 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
     indexer.discovery.find_files.side_effect = slow_find_files
     state.indexer = indexer
 
-    # Patch the logger used by tools_semantic to capture deadline logs.
+    # Patch the logger used by the staleness check to capture deadline logs.
     captured: dict = {}
 
     class _Capture:
@@ -226,9 +230,9 @@ def test_check_staleness_deadline_returns_fresh(tmp_path, monkeypatch):
         def debug(self, event, **kw):
             captured.setdefault("debug", []).append((event, kw))
 
-    import lgrep.server.tools_semantic as ts_mod
+    import lgrep.server.lifecycle as lifecycle_mod
 
-    monkeypatch.setattr(ts_mod, "log", _Capture())
+    monkeypatch.setattr(lifecycle_mod, "log", _Capture())
 
     stale, count = _check_staleness(state)
 

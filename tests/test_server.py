@@ -190,7 +190,7 @@ class TestDiskCacheAutoLoad:
 
         with (
             patch("lgrep.server.tools_semantic.has_disk_cache", return_value=True),
-            patch("lgrep.server.tools_semantic.ChunkStore", return_value=mock_store),
+            patch("lgrep.server.tools_semantic.open_checkout_store", return_value=mock_store),
         ):
             response = await lgrep_status(path=str(project_path), ctx=mock_ctx)
 
@@ -1011,13 +1011,13 @@ class TestMaxProjectsLimit:
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
         # Pre-fill projects dict to MAX_PROJECTS.
-        # After in-memory dedup, the limit applies to unique canonical projects,
-        # so we populate _canonical_to_state too.
+        # The limit applies to open caches (one store per repository), so
+        # we populate _stores too.
         for i in range(MAX_PROJECTS):
             state = ProjectState(db=MagicMock(), indexer=MagicMock())
             path = f"/fake/project/{i}"
             app_ctx.projects[path] = state
-            app_ctx._canonical_to_state[path] = state
+            app_ctx._stores[path] = state.db
 
         assert len(app_ctx.projects) == MAX_PROJECTS
 
@@ -1573,7 +1573,7 @@ class TestStalenessPreflight:
 
         call_count = {"n": 0}
 
-        async def fake_single_flight(app_ctx_, project_path_, path_obj_):
+        async def fake_single_flight(app_ctx_, project_path_, path_obj_, wait_for_base=False):
             call_count["n"] += 1
             return state
 
@@ -1623,7 +1623,7 @@ class TestStalenessPreflight:
         original = _lc._auto_index_project_single_flight
         call_count = {"n": 0}
 
-        async def fake_single_flight(app_ctx_, project_path_, path_obj_):
+        async def fake_single_flight(app_ctx_, project_path_, path_obj_, wait_for_base=False):
             call_count["n"] += 1
             return state  # caller treats this as success
 

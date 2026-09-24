@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -17,6 +14,7 @@ from lgrep.server import log, mcp, time_tool
 from lgrep.server.lifecycle import (
     LgrepContext,
     ProjectState,
+    _check_staleness,
     _ensure_project_initialized,
     _ensure_search_project_state,
     _get_project_stats,
@@ -34,7 +32,7 @@ from lgrep.server.responses import (
     WatchStopResult,
     error_response,
 )
-from lgrep.storage import ChunkStore, get_project_db_path, has_disk_cache
+from lgrep.storage import has_disk_cache, open_checkout_store
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
@@ -90,118 +88,6 @@ def _chunk_snippet(content: str, max_lines: int = 3, max_chars: int = 120) -> st
             if len(lines) == max_lines:
                 break
     return "\n".join(lines)
-
-
-def _check_staleness(state: ProjectState) -> tuple[bool, int]:
-    """Cheap three-stage freshness check.
-
-    Returns ``(stale, suspect_count)``. ``stale=True`` means the on-disk file
-    set has drifted from the index and a re-embed is needed before search.
-
-    Stages, ordered cheapest first so the warm path (no edits since last
-    index) costs only a directory walk + ``stat`` per file:
-
-    1. mtime gate — collect current files with their ``stat().st_mtime``.
-       Deleted indexed files are stale. Otherwise any file whose mtime exceeds
-       the cached ``latest_indexed_at`` becomes a suspect. We intentionally do
-       not compare file counts because discovered files can legitimately
-       produce zero chunks (empty/comment-only files) and therefore never
-       appear in the indexed file set.
-    2. hash check — only suspect files are read+hashed and compared against
-       the stored ``file_hash`` from ``ChunkStore.get_file_hashes()``. A
-       single batched projection query handles all comparisons.
-    3. caller acts on the result. Any errors during the check are treated
-       as "fresh" so transient I/O issues never cause an unintended re-embed.
-
-    The whole check is bounded by ``LGREP_STALENESS_DEADLINE_S`` (default
-    4.0s) so a large repo's directory walk cannot eat the entire 8s tool
-    timeout. On deadline, the function returns ``(False, 0)`` and the
-    search proceeds with the slightly-stale index; the next search will
-    trigger a fresh reindex if drift is real.
-    """
-    deadline_s = float(os.environ.get("LGREP_STALENESS_DEADLINE_S", "4.0"))
-    deadline = time.monotonic() + deadline_s
-
-    def _over_deadline() -> bool:
-        return time.monotonic() > deadline
-
-    try:
-        indexer = state.indexer
-        if state.latest_indexed_at is None:
-            state.latest_indexed_at = state.db.get_latest_indexed_at()
-        latest = state.latest_indexed_at or 0.0
-
-        indexed_files = set(state.db.get_indexed_files() or set())
-        current: list[tuple[Path, float, str]] = []
-        current_rel_paths: set[str] = set()
-        project_root = Path(indexer.project_path)
-        for fp in indexer.discovery.find_files():
-            if _over_deadline():
-                log.warning(
-                    "staleness_check_deadline_exceeded",
-                    project=str(indexer.project_path),
-                    deadline_s=deadline_s,
-                )
-                return False, 0
-            try:
-                rel = str(fp.relative_to(project_root))
-                current.append((fp, fp.stat().st_mtime, rel))
-                current_rel_paths.add(rel)
-            except (OSError, ValueError):
-                continue
-
-        # Stage 0 — current files that are absent from the indexed set.  This
-        # catches partial indexes where a bounded window left files pending,
-        # even though their mtime is older than the latest chunk timestamp.
-        # Exclude zero-chunk files, which are intentionally not represented in
-        # the chunks table but are tracked separately.
-        if indexed_files:
-            try:
-                zero_chunk_files = set(state.db.get_zero_chunk_files())
-            except Exception:
-                zero_chunk_files = set()
-            never_indexed = current_rel_paths - indexed_files - zero_chunk_files
-            if never_indexed:
-                log.info(
-                    "staleness_never_indexed_files",
-                    project=str(indexer.project_path),
-                    count=len(never_indexed),
-                )
-                return True, len(never_indexed)
-
-        # Stage 1a — indexed files that no longer exist on disk are stale.
-        deleted_indexed_files = indexed_files - current_rel_paths
-        if deleted_indexed_files:
-            return True, len(deleted_indexed_files)
-
-        # Stage 1b — pick files whose mtime is newer than the index timestamp.
-        suspects = [(fp, rel) for fp, mt, rel in current if mt > latest]
-        if not suspects:
-            return False, 0
-
-        # Stage 2 — hash only the suspect subset.
-        stored = state.db.get_file_hashes()
-        for fp, rel in suspects:
-            if _over_deadline():
-                log.warning(
-                    "staleness_check_deadline_exceeded",
-                    project=str(indexer.project_path),
-                    deadline_s=deadline_s,
-                )
-                return False, 0
-            try:
-                content = fp.read_bytes()
-            except OSError:
-                continue
-            current_hash = hashlib.sha256(content).hexdigest()
-            if stored.get(rel) != current_hash:
-                return True, len(suspects)
-
-        # All suspects had matching hashes (mtime touched but content unchanged).
-        return False, 0
-    except Exception as e:  # pragma: no cover — pre-flight must never crash search
-        log.debug("staleness_check_failed", error=str(e))
-        return False, 0
 
 
 async def _execute_search(
@@ -417,6 +303,17 @@ async def index_semantic(
 
     # Perform indexing
     try:
+        base_tokens = 0
+        if state.base_path is not None:
+            # A worktree overlay holds only what differs from its trunk's base
+            # rows, so bring the base current before comparing against it.
+            base = await _ensure_project_initialized(app_ctx, Path(state.base_path))
+            if not isinstance(base, dict):
+                base_status = await _run_blocking(
+                    app_ctx, "index_all", "index_semantic", state.base_path, base.indexer.index_all
+                )
+                base_tokens = base_status.total_tokens
+                base.latest_indexed_at = None
         status = await _run_blocking(
             app_ctx,
             "index_all",
@@ -437,7 +334,7 @@ async def index_semantic(
             file_count=status.file_count,
             chunk_count=status.chunk_count,
             duration_ms=round(status.duration_ms, 2),
-            total_tokens=status.total_tokens,
+            total_tokens=status.total_tokens + base_tokens,
         )
     except Exception as e:
         log.exception("indexing_failed", project=str(project_path), error=str(e))
@@ -487,8 +384,7 @@ async def status_semantic(
                 try:
 
                     def _read_disk_stats():
-                        db_path = get_project_db_path(project_path)
-                        store = ChunkStore(db_path, project_path=project_path)
+                        store = open_checkout_store(project_path)
                         chunks = store.count_chunks()
                         files_set = store.get_indexed_files()
                         return len(files_set), chunks
