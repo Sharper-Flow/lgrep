@@ -95,8 +95,14 @@ async def test_full_flow_integration(sample_project):
         # Check first result
         res = search_data["results"][0]
         assert "file_path" in res
-        assert "content" in res
+        assert "snippet" in res
         assert "score" in res
+
+        # Full stored chunk text rides along only when requested.
+        response = await lgrep_search(
+            "login", path=str(sample_project), include_content=True, ctx=mock_ctx
+        )
+        assert "content" in response["results"][0]
 
         # 2. Check status reflects indexed project
         response = await lgrep_status(path=str(sample_project), ctx=mock_ctx)

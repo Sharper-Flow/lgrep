@@ -68,28 +68,31 @@ class _SearchChunkRequired(TypedDict):
     """Required fields for a semantic search result chunk."""
 
     file_path: str
-    line_number: int  # required — mapped from SearchResult.start_line
-    content: str
+    start_line: int
+    end_line: int
     score: float
+    match_type: str
+    snippet: str
 
 
 class SearchChunk(_SearchChunkRequired, total=False):
-    """A single semantic search result.
+    """A single semantic search result (compact by default).
 
     Required keys (always present):
       - ``file_path``: repo-relative path of the matching file.
-      - ``line_number``: primary line anchor (mapped from ``start_line``).
-      - ``content``: matched chunk text.
+      - ``start_line`` / ``end_line``: 1-indexed inclusive line range of
+        the chunk body in the file.
       - ``score``: relevance score from the underlying engine.
-
-    Optional fidelity keys (may be absent):
-      - ``start_line`` / ``end_line``: original chunk line range.
       - ``match_type``: ``"hybrid"`` | ``"vector"`` | ``"keyword"``.
+      - ``snippet``: first 3 non-blank chunk-body lines with chonkie's
+        injected header context stripped, each capped at 120 characters.
+
+    Optional keys:
+      - ``content``: full stored chunk text; present only when the
+        caller passes ``include_content=true``.
     """
 
-    start_line: int  # optional fidelity — original range start
-    end_line: int  # optional fidelity — original range end
-    match_type: str  # optional fidelity — "hybrid" | "vector" | "keyword"
+    content: str  # optional — include_content=true
 
 
 class FileOutline(TypedDict):

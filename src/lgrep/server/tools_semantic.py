@@ -12,6 +12,7 @@ from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from lgrep.chunking import strip_injected_class_header
 from lgrep.server import log, mcp, time_tool
 from lgrep.server.lifecycle import (
     LgrepContext,
@@ -70,6 +71,22 @@ def _cheap_project_status(proj_path: str, state: ProjectState) -> StatusSemantic
         summary_only=True,
         detail="Counts omitted for cheap global status; call with path for deep counts.",
     )
+
+
+def _chunk_snippet(content: str, max_lines: int = 3, max_chars: int = 120) -> str:
+    """First non-blank chunk-body lines, each capped, joined by newlines.
+
+    Chonkie's injected header context is stripped first so the snippet
+    starts at the chunk body, matching the stored start_line.
+    """
+    body = strip_injected_class_header(content)
+    lines: list[str] = []
+    for line in body.split("\n"):
+        if line.strip():
+            lines.append(line[:max_chars])
+            if len(lines) == max_lines:
+                break
+    return "\n".join(lines)
 
 
 def _check_staleness(state: ProjectState) -> tuple[bool, int]:
@@ -191,6 +208,7 @@ async def _execute_search(
     limit: int,
     hybrid: bool,
     project_path: str,
+    include_content: bool = False,
 ) -> SearchSemanticResult | ToolError:
     """Run embedding + storage search and return structured result."""
     if app_ctx.embedder is None:
@@ -239,17 +257,18 @@ async def _execute_search(
                 query_vector,
                 limit,
             )
-        # Explicit key mapping: construct SearchChunk dicts with line_number
-        # mapped from SearchResult.start_line, preserving fidelity fields.
+        # Explicit key mapping: compact hits by default — path, correct
+        # line range, score, match type, and a short snippet. The full
+        # stored chunk text rides along only when requested.
         chunks = [
             {
                 "file_path": r.file_path,
-                "line_number": r.start_line,
-                "content": r.content,
-                "score": r.score,
                 "start_line": r.start_line,
                 "end_line": r.end_line,
+                "score": r.score,
                 "match_type": r.match_type,
+                "snippet": _chunk_snippet(r.content),
+                **({"content": r.content} if include_content else {}),
             }
             for r in results.results
         ]
@@ -294,6 +313,10 @@ async def search_semantic(
         Field(description="Maximum number of ranked matches to return."),
     ] = 10,
     hybrid: bool = True,
+    include_content: Annotated[
+        bool,
+        Field(description="Add the full stored chunk text as content on each hit."),
+    ] = False,
     ctx: Context | None = None,
 ) -> SearchSemanticResult | ToolError:
     """Search code semantically using natural language.
@@ -306,8 +329,18 @@ async def search_semantic(
         path: Absolute path to the project to search
         limit: Maximum number of results to return (default: 10)
         hybrid: Use hybrid search combining vector similarity + keyword matching (default: True)
+        include_content: Add the full stored chunk text as content on each
+            hit. Default hits stay compact: file_path, start_line, end_line,
+            score, match_type, and a 3-line snippet.
     """
-    log.info("lgrep_search_semantic", query=query, project=path, limit=limit, hybrid=hybrid)
+    log.info(
+        "lgrep_search_semantic",
+        query=query,
+        project=path,
+        limit=limit,
+        hybrid=hybrid,
+        include_content=include_content,
+    )
 
     if not query:
         return error_response("Internal error: query is required")
@@ -324,7 +357,9 @@ async def search_semantic(
 
     state = result
 
-    return await _execute_search(app_ctx, state, query, limit, hybrid, project_path)
+    return await _execute_search(
+        app_ctx, state, query, limit, hybrid, project_path, include_content
+    )
 
 
 @mcp.tool(

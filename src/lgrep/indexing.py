@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from lgrep.chunking import CodeChunker
+from lgrep.chunking import (
+    CodeChunker,
+    compute_line_starts,
+    line_range_at,
+    locate_chunk_body,
+)
 from lgrep.discovery import FileDiscovery
 from lgrep.exceptions import OperationCancelled
 from lgrep.storage import CodeChunk
@@ -116,6 +121,8 @@ class Indexer:
         start_time = self._perf_counter()
         status = IndexStatus()
         pending: list[str] | None = None
+
+        self._run_line_repair(cancel_event=cancel_event)
 
         log.info("full_index_started", project=str(self.project_path))
 
@@ -315,6 +322,80 @@ class Indexer:
         except Exception as e:
             log.debug("file_hash_failed", file=rel_path, error=str(e))
             return ""
+
+    def _run_line_repair(self, cancel_event: threading.Event | None = None) -> None:
+        """Run the one-time line-range repair without blocking indexing.
+
+        A failed repair leaves the completion marker unset so the next
+        incremental pass retries it; indexing itself proceeds.
+        """
+        try:
+            repaired = self.repair_line_ranges(cancel_event=cancel_event)
+        except OperationCancelled:
+            raise
+        except Exception as e:
+            log.warning("line_range_repair_failed", project=str(self.project_path), error=str(e))
+            return
+        if repaired:
+            log.info("line_range_repair_completed", project=str(self.project_path), rows=repaired)
+
+    def repair_line_ranges(self, cancel_event: threading.Event | None = None) -> int:
+        """One-time local repair of stored line ranges for unchanged files.
+
+        Older indexes stored ``1/1`` or class-line ranges for method
+        chunks because chonkie's injected header context broke body
+        location. Files whose on-disk sha256 equals the stored hash are
+        repaired here by re-locating each stored chunk body; changed
+        files are re-chunked by the normal incremental pass instead. The
+        stored rows are read in one projected scan without vectors, and
+        only ``start_line``/``end_line`` are written back, so no
+        embedding is read or recomputed. Completion is recorded in cache
+        metadata so the pass runs once per cache.
+
+        Returns the number of rows updated.
+        """
+        if self.storage.line_repair_done():
+            return 0
+
+        stored_hashes = self.storage.get_file_hashes()
+        if not stored_hashes:
+            self.storage.mark_line_repair_done()
+            return 0
+
+        changed = set(self.compute_pending_files())
+        rows_by_file = self.storage.get_line_repair_rows()
+        updates: list[tuple[str, int, int]] = []
+
+        for rel_path, rows in sorted(rows_by_file.items()):
+            if cancel_event is not None and cancel_event.is_set():
+                raise OperationCancelled("line range repair cancelled by cancel_event")
+            stored_hash = stored_hashes.get(rel_path)
+            if rel_path in changed or stored_hash is None:
+                continue
+            file_path = self.project_path / rel_path
+            try:
+                raw = file_path.read_bytes()
+            except OSError as e:
+                log.debug("line_repair_read_failed", file=rel_path, error=str(e))
+                continue
+            if hashlib.sha256(raw).hexdigest() != stored_hash:
+                continue
+
+            content = raw.decode("utf-8", errors="replace")
+            line_starts = compute_line_starts(content)
+            cursor = 0
+            for row in rows:
+                pos, body = locate_chunk_body(content, row["content"], cursor)
+                if pos < 0:
+                    continue
+                cursor = pos + 1
+                start_line, end_line = line_range_at(line_starts, pos, pos + len(body))
+                if (start_line, end_line) != (row["start_line"], row["end_line"]):
+                    updates.append((row["id"], start_line, end_line))
+
+        self.storage.update_chunk_line_ranges(updates)
+        self.storage.mark_line_repair_done()
+        return len(updates)
 
     def _build_code_chunks(
         self,

@@ -90,14 +90,14 @@ class TestSemanticToolResponseShapes:
 
         assert SearchChunk.__required_keys__ == {
             "file_path",
-            "line_number",
-            "content",
-            "score",
-        }
-        assert SearchChunk.__optional_keys__ == {
             "start_line",
             "end_line",
+            "score",
             "match_type",
+            "snippet",
+        }
+        assert SearchChunk.__optional_keys__ == {
+            "content",
         }
 
     @pytest.mark.asyncio
@@ -129,11 +129,13 @@ class TestSemanticToolResponseShapes:
         assert "results" in data
         assert len(data["results"]) == 1
         assert data["results"][0]["file_path"] == "a.py"
-        # Contract: line_number is required on every result, mapped from start_line
+        # Contract: hits are compact by default — line range plus snippet,
+        # no duplicate line_number, no content unless include_content=true.
         for chunk in data["results"]:
-            assert "line_number" in chunk
-            assert isinstance(chunk["line_number"], int)
-        assert data["results"][0]["line_number"] == 1  # start_line value
+            assert "line_number" not in chunk
+            assert "snippet" in chunk
+        assert data["results"][0]["start_line"] == 1
+        assert data["results"][0]["end_line"] == 10
         # Contract: total == len(results), not total_chunks
         assert data["total"] == len(data["results"])
         assert data["total"] != 0

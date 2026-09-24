@@ -140,6 +140,9 @@ Searches a project semantically.
 - `path` (string, **required**): Absolute path to the project to search. Auto-loads from disk if previously indexed in a prior session.
 - `limit` (int): Maximum results (default 10).
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
+- `include_content` (bool): Add the full stored chunk text as `content` on each hit (default false).
+
+Default hits are compact: `file_path`, `start_line`, `end_line`, `score`, `match_type`, and `snippet` (first 3 non-blank chunk-body lines, 120 characters each). Read only the hits you need — pass `include_content=true` when you want the full chunk text inline. `line_number` is no longer returned; `start_line` carries that value.
 
 If a default hybrid semantic search times out or hits a deadline, retry once with `hybrid:false` and a small limit (for example `limit=5`) before falling back to symbol/text/read tools.
 
