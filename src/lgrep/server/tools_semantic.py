@@ -282,20 +282,18 @@ async def _execute_search(
 @time_tool
 async def search_semantic(
     query: Annotated[
-        str | None,
+        str,
         Field(description="Natural-language intent query (for example: 'JWT verification path')."),
-    ] = None,
+    ],
     path: Annotated[
         str,
         Field(description="Absolute path to the local repository root to search."),
-    ] = "",
+    ],
     limit: Annotated[
         int,
         Field(description="Maximum number of ranked matches to return."),
     ] = 10,
     hybrid: bool = True,
-    q: str | None = None,
-    m: int | None = None,
     ctx: Context | None = None,
 ) -> SearchSemanticResult | ToolError:
     """Search code semantically using natural language.
@@ -308,16 +306,11 @@ async def search_semantic(
         path: Absolute path to the project to search
         limit: Maximum number of results to return (default: 10)
         hybrid: Use hybrid search combining vector similarity + keyword matching (default: True)
-        q: Alias for query (use for shorthand or if query is missing)
-        m: Alias for limit (max results)
     """
-    query = query or q
-    limit = m if m is not None else limit
-
     log.info("lgrep_search_semantic", query=query, project=path, limit=limit, hybrid=hybrid)
 
     if not query:
-        return error_response("Internal error: query or q is required")
+        return error_response("Internal error: query is required")
 
     if not ctx:
         return error_response("Internal error: Context missing")

@@ -10,7 +10,6 @@ from importlib import import_module
 from pathlib import Path
 
 import structlog
-from mcp.server.fastmcp import FastMCP
 
 log = structlog.get_logger()
 
@@ -50,7 +49,7 @@ def time_tool(func):
             if tool_name == "search_text":
                 return {
                     "results": [],
-                    "max_results": kwargs.get("max_results", 50),
+                    "limit": kwargs.get("limit", 50),
                     "_meta": make_meta(start, tool_name),
                     "error": message,
                 }
@@ -109,6 +108,7 @@ _lifecycle.MAX_PROJECTS = MAX_PROJECTS
 _lifecycle.AUTO_INDEX_MAX_ATTEMPTS = AUTO_INDEX_MAX_ATTEMPTS
 _lifecycle.AUTO_INDEX_RETRY_BASE_DELAY_S = AUTO_INDEX_RETRY_BASE_DELAY_S
 
+from lgrep.server.arguments import LgrepFastMCP  # noqa: E402
 from lgrep.server.lifecycle import (  # noqa: E402
     LgrepContext,
     ProjectState,
@@ -124,7 +124,7 @@ from lgrep.server.lifecycle import (  # noqa: E402
 )
 from lgrep.tools._meta import make_meta  # noqa: E402
 
-mcp = FastMCP(
+mcp = LgrepFastMCP(
     "lgrep",
     lifespan=app_lifespan,
     stateless_http=True,
@@ -215,6 +215,7 @@ __all__ = [
     "mcp",
     "log",
     "time_tool",
+    "LgrepFastMCP",
     "LgrepContext",
     "ProjectState",
     "MAX_PROJECTS",

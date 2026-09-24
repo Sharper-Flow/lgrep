@@ -383,7 +383,7 @@ async def search_text(
         str,
         Field(description="Absolute path to the local repository root."),
     ],
-    max_results: Annotated[
+    limit: Annotated[
         int,
         Field(description="Maximum number of text matches to return."),
     ] = 50,
@@ -398,7 +398,7 @@ async def search_text(
     Args:
         query: Text to search for
         path: Absolute path to the repository root
-        max_results: Maximum number of results to return (default: 50)
+        limit: Maximum number of results to return (default: 50)
         case_sensitive: Whether to perform case-sensitive matching (default: False)
 
     Returns:
@@ -414,25 +414,25 @@ async def search_text(
             _search_text,
             query,
             path,
-            max_results=max_results,
+            max_results=limit,
             case_sensitive=case_sensitive,
         )
     else:
         result = await asyncio.to_thread(
-            _search_text, query, path, max_results=max_results, case_sensitive=case_sensitive
+            _search_text, query, path, max_results=limit, case_sensitive=case_sensitive
         )
 
     if "error" in result:
         return SearchTextResult(
             results=[],
-            max_results=max_results,
+            limit=limit,
             _meta=make_meta(t0, "search_text"),
             error=result["error"],
         )
 
     return SearchTextResult(
         results=result["results"],
-        max_results=max_results,
+        limit=limit,
         _meta=make_meta(t0, "search_text"),
         error="",
     )

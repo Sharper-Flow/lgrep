@@ -14,8 +14,10 @@ import inspect
 from types import SimpleNamespace
 
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 
 from lgrep.server import mcp, tools_symbols
+from lgrep.server.arguments import SYNONYMS, TOOL_SYNONYMS
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 
@@ -189,7 +191,7 @@ class TestSymbolToolResponses:
         data = result
         assert "_meta" in data
         assert "results" in data
-        assert data["max_results"] == 50
+        assert data["limit"] == 50
         assert data["error"] == ""
 
     @pytest.mark.asyncio
@@ -198,7 +200,7 @@ class TestSymbolToolResponses:
         result = await fn(query="greet", path=str(tmp_path / "missing"))
         assert "error" in result
         assert result["results"] == []
-        assert result["max_results"] == 50
+        assert result["limit"] == 50
 
     @pytest.mark.asyncio
     async def test_search_text_uses_runtime_supervisor_when_context_available(self, tmp_path):
@@ -239,13 +241,13 @@ class TestSymbolToolResponses:
         monkeypatch.setattr(server_mod, "TOOL_TIMEOUT_S", 0.01)
 
         @server_mod.time_tool
-        async def search_text(max_results=7):
+        async def search_text(limit=7):
             await asyncio.sleep(0.05)
 
-        result = await search_text(max_results=7)
+        result = await search_text(limit=7)
 
         assert result["results"] == []
-        assert result["max_results"] == 7
+        assert result["limit"] == 7
         assert "error" in result
 
     @pytest.mark.asyncio
@@ -614,3 +616,214 @@ class TestEverySymbolToolPassesHelperError:
             if not isinstance(result, dict) or result.get("error") != self.STUB_ERROR:
                 failures.append(f"{tool.name}: returned {result!r}")
         assert not failures, "\n".join(failures)
+
+
+# ── Argument normalization seam (call_tool) ───────────────────────────────────
+
+
+def _structured_result(call_result):
+    """Return the structured dict from a FastMCP call_tool result.
+
+    Single-model tools return the dict itself; union-return tools wrap it
+    as ``{"result": ...}`` under the MCP union output schema.
+    """
+    structured = call_result[1] if isinstance(call_result, tuple) else call_result
+    if set(structured) == {"result"}:
+        return structured["result"]
+    return structured
+
+
+@pytest.fixture
+def offline_runtime_ctx(monkeypatch):
+    """Give call_tool a ctx whose runtime runs work inline.
+
+    Outside a request, FastMCP injects a Context whose request_context
+    raises. Tools under test declare ``ctx``, so the seam test swaps in a
+    fake context whose runtime executes the helper in the caller's loop.
+    """
+
+    class RuntimeStub:
+        async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+            return fn_to_run(*args, **kwargs)
+
+    fake_ctx = SimpleNamespace(
+        request_context=SimpleNamespace(lifespan_context=SimpleNamespace(runtime=RuntimeStub()))
+    )
+    monkeypatch.setattr(mcp, "get_context", lambda: fake_ctx)
+    return fake_ctx
+
+
+class TestUnknownArgumentRefused:
+    """Every registered tool refuses an undeclared argument at call_tool.
+
+    Covers check:pytest/every-tool-refuses-undeclared-argument. The refusal
+    names the tool, the rejected argument, and the declared arguments; the
+    wrong-tool calls name the tool that declares the argument.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name", sorted(ALL_EXPECTED_TOOLS))
+    async def test_every_tool_refuses_undeclared_argument(self, tool_name):
+        undeclared = "lgrep_undeclared_probe_argument"
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool(tool_name, {undeclared: 1})
+        # Pydantic's "Field required" error echoes the input dict, so matching
+        # the bare names would pass without the seam; match the refusal text.
+        message = str(excinfo.value)
+        assert f"Unknown argument '{undeclared}' for tool '{tool_name}'." in message
+
+    @pytest.mark.asyncio
+    async def test_refusal_names_the_declared_arguments(self):
+        tool = mcp._tool_manager.get_tool("search_text")
+        declared = set(tool.parameters.get("properties", {}))
+        assert declared
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool("search_text", {"file_pattern": "*.py"})
+        for argument in declared:
+            assert argument in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_search_references_symbol_id_names_get_symbol(self):
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool(
+                "search_references",
+                {"query": "absent", "path": "/tmp", "symbol_id": "a.py:function:absent"},
+            )
+        assert "get_symbol" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_index_symbols_repo_path_names_index_symbols_folder(self):
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool("index_symbols_repo", {"repo": "owner/name", "path": "/tmp"})
+        assert "index_symbols_folder" in str(excinfo.value)
+
+
+class TestSynonymReachesCanonicalArgument:
+    """Fixed synonyms rename to the canonical argument before validation.
+
+    Covers check:pytest/synonym-reaches-canonical-argument. A synonym applies
+    only when the tool declares the canonical name and the caller did not
+    send both spellings.
+    """
+
+    @pytest.mark.asyncio
+    async def test_max_results_reaches_limit(self, tmp_path, offline_runtime_ctx):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool(
+                "search_text", {"query": "greet", "path": str(tmp_path), "max_results": 3}
+            )
+        )
+        assert data["limit"] == 3
+        assert "max_results" not in data
+
+    @pytest.mark.asyncio
+    async def test_camel_case_max_results_reaches_limit(self, tmp_path, offline_runtime_ctx):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool(
+                "search_text", {"query": "greet", "path": str(tmp_path), "maxResults": 2}
+            )
+        )
+        assert data["limit"] == 2
+
+    @pytest.mark.asyncio
+    async def test_pattern_reaches_query_on_search_text(self, tmp_path, offline_runtime_ctx):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool("search_text", {"pattern": "greet", "path": str(tmp_path)})
+        )
+        assert [match["line"] for match in data["results"]] == ["def greet(): pass"]
+
+    @pytest.mark.asyncio
+    async def test_symbol_reaches_query_on_search_text(self, tmp_path, offline_runtime_ctx):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool("search_text", {"symbol": "greet", "path": str(tmp_path)})
+        )
+        assert data["results"]
+
+    @pytest.mark.asyncio
+    async def test_file_path_reaches_path_on_get_file_tree(self, tmp_path):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool("get_file_tree", {"file_path": str(tmp_path)})
+        )
+        assert data["files"] == ["hello.py"]
+
+    @pytest.mark.asyncio
+    async def test_folder_reaches_path_on_get_repo_outline(self, tmp_path):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        data = _structured_result(
+            await mcp.call_tool("get_repo_outline", {"folder": str(tmp_path)})
+        )
+        assert data["total_files"] == 1
+
+    @pytest.mark.asyncio
+    async def test_synonym_refused_when_canonical_also_sent(self, tmp_path):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool(
+                "search_text",
+                {"query": "greet", "path": str(tmp_path), "limit": 5, "max_results": 99},
+            )
+        assert "max_results" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_pattern_refused_on_tools_other_than_search_text(self, tmp_path):
+        (tmp_path / "hello.py").write_text("def greet(): pass\n")
+        with pytest.raises(ToolError) as excinfo:
+            await mcp.call_tool("get_file_tree", {"path": str(tmp_path), "pattern": "*.py"})
+        assert "Unknown argument 'pattern' for tool 'get_file_tree'." in str(excinfo.value)
+
+
+class TestRegistryOneNamePerConcept:
+    """The registry declares exactly one name per argument concept.
+
+    Covers check:pytest/registry-one-name-per-concept. No declared argument
+    is a synonym spelling, and each concept family appears at most once per
+    tool, under its canonical name.
+    """
+
+    CONCEPT_FAMILIES = {
+        "limit": {"limit", "max_results", "maxResults", "m"},
+        "query": {"query", "q", "symbol", "symbol_name", "pattern"},
+        "path": {"path", "file_path", "file", "folder"},
+    }
+
+    @staticmethod
+    def _tools() -> dict:
+        return {t.name: t for t in mcp._tool_manager.list_tools()}
+
+    def test_no_declared_argument_is_a_synonym(self):
+        for name, tool in self._tools().items():
+            declared = set(tool.parameters.get("properties", {}))
+            overlap = (declared & set(SYNONYMS)) | {
+                argument for argument in declared if (name, argument) in TOOL_SYNONYMS
+            }
+            assert not overlap, f"{name} declares synonym spellings: {sorted(overlap)}"
+
+    def test_each_concept_declares_only_the_canonical_name(self):
+        for name, tool in self._tools().items():
+            declared = set(tool.parameters.get("properties", {}))
+            for canonical, family in self.CONCEPT_FAMILIES.items():
+                used = declared & family
+                assert used <= {canonical}, (
+                    f"{name} declares non-canonical {sorted(used - {canonical})} "
+                    f"for the {canonical} concept"
+                )
+
+    def test_index_symbols_repo_keeps_repo(self):
+        declared = set(self._tools()["index_symbols_repo"].parameters.get("properties", {}))
+        assert "repo" in declared
+        assert "path" not in declared
+
+    def test_get_symbol_keeps_path_required(self):
+        tool = self._tools()["get_symbol"]
+        assert "path" in tool.parameters.get("required", [])
+
+    def test_search_tools_require_query_and_path(self):
+        tools = self._tools()
+        for name in ("search_semantic", "search_symbols", "search_text", "search_references"):
+            required = set(tools[name].parameters.get("required", []))
+            assert {"query", "path"} <= required, f"{name} requires {sorted(required)}"
