@@ -154,7 +154,8 @@ def _cmd_search_semantic(args: list[str]) -> int:
     from pathlib import Path
 
     from lgrep.embeddings import VoyageEmbedder
-    from lgrep.storage import ChunkStore, get_project_db_path
+    from lgrep.indexing import Indexer
+    from lgrep.storage import BASE_CHECKOUT, get_project_db_path, open_checkout_store
 
     # Parse args
     query = None
@@ -216,7 +217,11 @@ def _cmd_search_semantic(args: list[str]) -> int:
     # Search
     try:
         embedder = VoyageEmbedder(api_key=api_key)
-        store = ChunkStore(db_path, project_path=path)
+        store = open_checkout_store(path)
+        if store.checkout != BASE_CHECKOUT and store.needs_full_recheck():
+            # A worktree overlay hides the base rows of files it changed or
+            # deleted only after comparing its files with base (no embedding).
+            Indexer(path, store, embedder).reconcile_checkout()
 
         query_vector = embedder.embed_query(query)
 
@@ -411,7 +416,9 @@ def _cmd_gc(args: list[str]) -> int:
         print("Run garbage collection across both on-disk stores.")
         print("Combines three sweeps:")
         print("  - prune_orphans      whole orphan semantic-cache directories")
-        print("  - gc_worktree_meta   stale worktree aliases inside live cache dirs")
+        print(
+            "  - gc_worktree_meta   stale worktree aliases and overlay rows inside live cache dirs"
+        )
         print("  - prune_symbols      stale symbol-store index_*.json files")
         print()
         print("options:")
@@ -498,7 +505,7 @@ def _cmd_index_semantic(args: list[str]) -> int:
 
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.indexing import Indexer
-    from lgrep.storage import ChunkStore, get_project_db_path
+    from lgrep.storage import BASE_CHECKOUT, open_checkout_store
 
     # Parse args
     chunk_size = 500
@@ -538,9 +545,17 @@ def _cmd_index_semantic(args: list[str]) -> int:
 
     # Index
     try:
-        db_path = get_project_db_path(path)
         embedder = VoyageEmbedder(api_key=api_key)
-        store = ChunkStore(db_path, project_path=path)
+        store = open_checkout_store(path)
+        base_tokens = 0
+        if store.checkout != BASE_CHECKOUT:
+            # A worktree overlay holds only what differs from its trunk's
+            # base rows, so bring the base current first.
+            base = store.for_checkout(BASE_CHECKOUT)
+            base_status = Indexer(
+                base._project_path, base, embedder, chunk_size=chunk_size
+            ).index_all()
+            base_tokens = base_status.total_tokens
         indexer = Indexer(path, store, embedder, chunk_size=chunk_size)
 
         status = indexer.index_all()
@@ -552,7 +567,7 @@ def _cmd_index_semantic(args: list[str]) -> int:
                     "file_count": status.file_count,
                     "chunk_count": status.chunk_count,
                     "duration_ms": round(status.duration_ms, 2),
-                    "total_tokens": status.total_tokens,
+                    "total_tokens": status.total_tokens + base_tokens,
                 }
             )
         )

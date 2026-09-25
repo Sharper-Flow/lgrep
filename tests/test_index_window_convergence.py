@@ -18,8 +18,12 @@ import pytest
 
 from lgrep.exceptions import OperationCancelled
 from lgrep.indexing import Indexer, IndexWindowResult
-from lgrep.server.lifecycle import LgrepContext, ProjectState, _auto_index_project_single_flight
-from lgrep.server.tools_semantic import _check_staleness
+from lgrep.server.lifecycle import (
+    LgrepContext,
+    ProjectState,
+    _auto_index_project_single_flight,
+    _check_staleness,
+)
 from lgrep.storage import ChunkStore
 
 
@@ -44,7 +48,10 @@ def mock_embedder():
 @pytest.fixture
 def mock_storage():
     """Create a mock ChunkStore that records calls but does not write."""
-    return MagicMock(spec=ChunkStore)
+    storage = MagicMock(spec=ChunkStore)
+    # A base store has no other version of a file to adopt.
+    storage.adopt_base_version.return_value = False
+    return storage
 
 
 @pytest.fixture
@@ -265,6 +272,7 @@ def test_check_staleness_flags_unindexed_files(tmp_path, monkeypatch):
     (tmp_path / "never_indexed.py").write_text("def never_indexed(): pass\n")
 
     state = MagicMock()
+    state.base_path = None
     state.latest_indexed_at = time.time()
     state.db.get_latest_indexed_at.return_value = state.latest_indexed_at
     state.db.get_indexed_files.return_value = {"indexed.py"}

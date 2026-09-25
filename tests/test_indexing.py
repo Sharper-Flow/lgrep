@@ -32,7 +32,10 @@ def mock_embedder():
 @pytest.fixture
 def mock_storage():
     """Create a mock ChunkStore."""
-    return MagicMock(spec=ChunkStore)
+    storage = MagicMock(spec=ChunkStore)
+    # A base store has no other version of a file to adopt.
+    storage.adopt_base_version.return_value = False
+    return storage
 
 
 class TestIndexer:

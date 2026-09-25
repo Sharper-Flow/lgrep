@@ -10,7 +10,7 @@ from lgrep.cli import _cmd_index_semantic as _cmd_index
 from lgrep.cli import _cmd_prune_orphans as _cmd_prune_orphans
 from lgrep.cli import _cmd_search_semantic as _cmd_search
 from lgrep.indexing import IndexStatus
-from lgrep.storage import SearchResult, SearchResults
+from lgrep.storage import BASE_CHECKOUT, SearchResult, SearchResults
 
 
 class TestCLIDispatch:
@@ -184,7 +184,7 @@ class TestCmdSearchExecution:
     """Tests for _cmd_search execution with mocked dependencies."""
 
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.open_checkout_store")
     @patch("lgrep.storage.get_project_db_path")
     def test_search_hybrid_default(
         self, mock_get_path, mock_store_cls, mock_embedder_cls, capsys, monkeypatch
@@ -204,6 +204,7 @@ class TestCmdSearchExecution:
 
         # Mock store
         mock_store = MagicMock()
+        mock_store.checkout = BASE_CHECKOUT
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "def foo(): pass", 0.9, "hybrid")],
             query_time_ms=5.0,
@@ -227,7 +228,7 @@ class TestCmdSearchExecution:
         assert data["query_time_ms"] == 5.0
 
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.open_checkout_store")
     @patch("lgrep.storage.get_project_db_path")
     def test_search_vector_only(
         self, mock_get_path, mock_store_cls, mock_embedder_cls, capsys, monkeypatch
@@ -244,6 +245,7 @@ class TestCmdSearchExecution:
         mock_embedder_cls.return_value = mock_embedder
 
         mock_store = MagicMock()
+        mock_store.checkout = BASE_CHECKOUT
         results = SearchResults(
             results=[SearchResult("b.py", 5, 15, "class Bar:", 0.85, "vector")],
             query_time_ms=3.0,
@@ -259,7 +261,7 @@ class TestCmdSearchExecution:
         mock_store.search_hybrid.assert_not_called()
 
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.open_checkout_store")
     @patch("lgrep.storage.get_project_db_path")
     def test_search_custom_limit(
         self, mock_get_path, mock_store_cls, mock_embedder_cls, capsys, monkeypatch
@@ -276,6 +278,7 @@ class TestCmdSearchExecution:
         mock_embedder_cls.return_value = mock_embedder
 
         mock_store = MagicMock()
+        mock_store.checkout = BASE_CHECKOUT
         results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
@@ -288,7 +291,7 @@ class TestCmdSearchExecution:
         assert call_args[0][2] == 5  # third positional arg is limit
 
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.open_checkout_store")
     @patch("lgrep.storage.get_project_db_path")
     def test_search_defaults_to_cwd(
         self, mock_get_path, mock_store_cls, mock_embedder_cls, capsys, monkeypatch
@@ -305,6 +308,7 @@ class TestCmdSearchExecution:
         mock_embedder_cls.return_value = mock_embedder
 
         mock_store = MagicMock()
+        mock_store.checkout = BASE_CHECKOUT
         results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
@@ -317,7 +321,7 @@ class TestCmdSearchExecution:
         assert call_arg == Path.cwd().resolve()
 
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
+    @patch("lgrep.storage.open_checkout_store")
     @patch("lgrep.storage.get_project_db_path")
     def test_search_exception_returns_json_error(
         self, mock_get_path, mock_store_cls, mock_embedder_cls, capsys, monkeypatch
@@ -382,11 +386,9 @@ class TestCmdIndexExecution:
 
     @patch("lgrep.indexing.Indexer")
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
-    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.open_checkout_store")
     def test_index_success(
         self,
-        mock_get_path,
         mock_store_cls,
         mock_embedder_cls,
         mock_indexer_cls,
@@ -397,8 +399,7 @@ class TestCmdIndexExecution:
         """Successful index should print JSON status and exit 0."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
 
-        mock_db_path = MagicMock()
-        mock_get_path.return_value = mock_db_path
+        mock_store_cls.return_value.checkout = BASE_CHECKOUT
 
         mock_indexer = MagicMock()
         mock_indexer.index_all.return_value = IndexStatus(
@@ -419,11 +420,9 @@ class TestCmdIndexExecution:
 
     @patch("lgrep.indexing.Indexer")
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
-    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.open_checkout_store")
     def test_index_custom_chunk_size(
         self,
-        mock_get_path,
         mock_store_cls,
         mock_embedder_cls,
         mock_indexer_cls,
@@ -434,8 +433,7 @@ class TestCmdIndexExecution:
         """--chunk-size N should pass custom chunk size to Indexer."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
 
-        mock_db_path = MagicMock()
-        mock_get_path.return_value = mock_db_path
+        mock_store_cls.return_value.checkout = BASE_CHECKOUT
 
         mock_indexer = MagicMock()
         mock_indexer.index_all.return_value = IndexStatus()
@@ -450,11 +448,9 @@ class TestCmdIndexExecution:
 
     @patch("lgrep.indexing.Indexer")
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
-    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.open_checkout_store")
     def test_index_defaults_to_cwd(
         self,
-        mock_get_path,
         mock_store_cls,
         mock_embedder_cls,
         mock_indexer_cls,
@@ -464,8 +460,7 @@ class TestCmdIndexExecution:
         """Omitting path should default to cwd."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
 
-        mock_db_path = MagicMock()
-        mock_get_path.return_value = mock_db_path
+        mock_store_cls.return_value.checkout = BASE_CHECKOUT
 
         mock_indexer = MagicMock()
         mock_indexer.index_all.return_value = IndexStatus()
@@ -480,11 +475,9 @@ class TestCmdIndexExecution:
 
     @patch("lgrep.indexing.Indexer")
     @patch("lgrep.embeddings.VoyageEmbedder")
-    @patch("lgrep.storage.ChunkStore")
-    @patch("lgrep.storage.get_project_db_path")
+    @patch("lgrep.storage.open_checkout_store")
     def test_index_exception_returns_json_error(
         self,
-        mock_get_path,
         mock_store_cls,
         mock_embedder_cls,
         mock_indexer_cls,
@@ -495,8 +488,7 @@ class TestCmdIndexExecution:
         """Exceptions during indexing should be caught and returned as JSON."""
         monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
 
-        mock_db_path = MagicMock()
-        mock_get_path.return_value = mock_db_path
+        mock_store_cls.return_value.checkout = BASE_CHECKOUT
 
         mock_indexer = MagicMock()
         mock_indexer.index_all.side_effect = RuntimeError("Disk full")
@@ -508,6 +500,40 @@ class TestCmdIndexExecution:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "Disk full" in data["error"]
+
+    @patch("lgrep.indexing.Indexer")
+    @patch("lgrep.embeddings.VoyageEmbedder")
+    @patch("lgrep.storage.open_checkout_store")
+    def test_index_worktree_indexes_base_first(
+        self,
+        mock_store_cls,
+        mock_embedder_cls,
+        mock_indexer_cls,
+        capsys,
+        monkeypatch,
+        tmp_path,
+    ):
+        """A worktree overlay index first brings its trunk's base rows current."""
+        monkeypatch.setenv("VOYAGE_API_KEY", "test-key")
+        overlay = mock_store_cls.return_value
+        overlay.checkout = str(tmp_path)
+        base = overlay.for_checkout.return_value
+        base._project_path = "/trunk"
+        mock_indexer_cls.return_value.index_all.side_effect = [
+            IndexStatus(file_count=3, chunk_count=9, duration_ms=1.0, total_tokens=700),
+            IndexStatus(file_count=2, chunk_count=4, duration_ms=1.0, total_tokens=50),
+        ]
+
+        rc = _cmd_index([str(tmp_path)])
+        assert rc == 0
+
+        overlay.for_checkout.assert_called_once_with(BASE_CHECKOUT)
+        first, second = mock_indexer_cls.call_args_list
+        assert first.args[:2] == ("/trunk", base)
+        assert second.args[:2] == (tmp_path.resolve(), overlay)
+        data = json.loads(capsys.readouterr().out)
+        assert data["file_count"] == 2
+        assert data["total_tokens"] == 750
 
 
 class TestCmdInitIgnore:

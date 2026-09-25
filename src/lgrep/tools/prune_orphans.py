@@ -17,6 +17,7 @@ from lgrep.storage import (
     CHUNKS_TABLE,
     DEFAULT_CACHE_DIR,
     get_project_db_path,
+    prune_overlays,
     read_project_meta,
 )
 
@@ -408,15 +409,19 @@ class GcWorktreeMetaReport(TypedDict):
     checked: int
     aliases_removed: int
     dirs_updated: int
+    overlays_removed: int
+    overlay_rows_removed: int
 
 
 def gc_worktree_meta(
     cache_dir: Path | None = None,
     dry_run: bool = True,
 ) -> GcWorktreeMetaReport:
-    """Sweep ``project_meta.json`` files and remove stale worktree aliases.
+    """Remove what worktrees that no longer exist left in live caches.
 
     For each semantic cache directory:
+    - Delete the overlay rows and overlay state of worktrees whose
+      directory is gone (``prune_overlays``)
     - Read ``project_meta.json``
     - For each path in ``alias_paths``, check whether the directory still exists
     - Remove paths whose directories are gone
@@ -427,33 +432,33 @@ def gc_worktree_meta(
     still has a valid root. Useful when worktrees were deleted without calling
     ``invalidate_worktree_cache``.
 
-    Returns a report counting directories examined, aliases removed, and
-    cache directories updated.
+    Returns a report counting directories examined, aliases removed, cache
+    directories updated, and overlays and overlay rows removed.
     """
 
     root = _resolve_cache_dir(cache_dir)
+    empty: GcWorktreeMetaReport = {
+        "dry_run": dry_run,
+        "checked": 0,
+        "aliases_removed": 0,
+        "dirs_updated": 0,
+        "overlays_removed": 0,
+        "overlay_rows_removed": 0,
+    }
 
     if not root.is_dir():
-        return {
-            "dry_run": dry_run,
-            "checked": 0,
-            "aliases_removed": 0,
-            "dirs_updated": 0,
-        }
+        return empty
 
     checked = 0
     aliases_removed = 0
     dirs_updated = 0
+    overlays_removed = 0
+    overlay_rows_removed = 0
 
     try:
         entries = list(root.iterdir())
     except OSError:
-        return {
-            "dry_run": dry_run,
-            "checked": 0,
-            "aliases_removed": 0,
-            "dirs_updated": 0,
-        }
+        return empty
 
     for child in entries:
         if not _CACHE_DIR_NAME_RE.match(child.name):
@@ -465,6 +470,14 @@ def gc_worktree_meta(
             continue
 
         checked += 1
+        try:
+            removed, rows = prune_overlays(child, dry_run=dry_run)
+        except Exception as e:
+            log.warning("gc_overlay_prune_failed", cache_dir=str(child), error=str(e))
+            removed, rows = [], 0
+        overlays_removed += len(removed)
+        overlay_rows_removed += rows
+
         meta = read_project_meta(child)
         if meta is None:
             continue
@@ -519,4 +532,6 @@ def gc_worktree_meta(
         "checked": checked,
         "aliases_removed": aliases_removed,
         "dirs_updated": dirs_updated,
+        "overlays_removed": overlays_removed,
+        "overlay_rows_removed": overlay_rows_removed,
     }

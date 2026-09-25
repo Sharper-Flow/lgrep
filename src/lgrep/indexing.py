@@ -94,7 +94,6 @@ class Indexer:
         self.embedder = embedder
         self.chunker = CodeChunker(chunk_size=chunk_size)
         self.discovery = FileDiscovery(self.project_path)
-        self._dedup_enabled = bool(os.environ.get("LGREP_WORKTREE_DEDUP"))
         self._perf_counter = perf_counter or time.perf_counter
 
         log.info("indexer_initialized", project=str(self.project_path))
@@ -186,7 +185,7 @@ class Indexer:
             pending_files = sorted(pending_files)
 
         indexed_this_window: list[str] = []
-        zero_chunk_this_window: list[str] = []
+        zero_chunk_this_window: dict[str, str] = {}
         remaining_files = list(pending_files)
         processed = False
 
@@ -229,7 +228,7 @@ class Indexer:
             indexed_this_window.append(rel_path)
             remaining_files.remove(rel_path)
             if file_status.chunk_count == 0:
-                zero_chunk_this_window.append(rel_path)
+                zero_chunk_this_window[rel_path] = self._compute_file_hash(file_path, rel_path)
             else:
                 self.storage.remove_zero_chunk_file(rel_path)
             processed = True
@@ -268,31 +267,42 @@ class Indexer:
             files_indexed=len(indexed_this_window),
         )
 
+    def reconcile_checkout(self) -> None:
+        """Reconcile the store with the checkout's current files, without embedding.
+
+        Raises when the store cannot reconcile.
+        """
+        checked_at = time.time()
+        self.storage.sync_checkout(self._hash_checkout(), checked_at)
+
+    def _hash_checkout(self) -> dict[str, str]:
+        """Map every discovered file's relative path to its sha256."""
+        current: dict[str, str] = {}
+        for file_path in self.discovery.find_files():
+            rel_path = str(Path(file_path).relative_to(self.project_path))
+            current[rel_path] = self._compute_file_hash(Path(file_path), rel_path)
+        return current
+
     def compute_pending_files(self) -> list[str]:
         """Return the deterministic ordered list of files needing indexing.
 
-        Compares discovered files against stored hashes using one batched
-        projection. Files whose hash matches the stored hash are omitted.
-        Stale indexed files (present in storage but absent from disk) are
-        removed when worktree dedup is disabled. Every incremental pass
-        starts here, so the one-time stored line-range repair runs here
-        first (a no-op once the cache records it as done).
+        Hashes every discovered file once, then lets the store reconcile its
+        checkout with that file set (``ChunkStore.sync_checkout``): the
+        cache's own checkout drops rows of files gone from disk, and a
+        worktree overlay drops rows that equal base again and hides the base
+        files it changed or lacks. Files whose hash matches the hash this
+        checkout sees are omitted. Every incremental pass starts here, so the
+        one-time stored line-range repair runs here first (a no-op once the
+        cache records it as done).
         """
         self._run_line_repair()
 
-        all_files = list(self.discovery.find_files())
-        current_rel_paths = {str(Path(f).relative_to(self.project_path)) for f in all_files}
-
-        # Remove stale chunks for files that no longer exist on disk.
-        if not self._dedup_enabled:
-            try:
-                indexed_files = self.storage.get_indexed_files()
-                stale_files = indexed_files - current_rel_paths
-                for stale_path in stale_files:
-                    self.storage.delete_by_file(stale_path)
-                    log.info("stale_file_removed", file=stale_path)
-            except Exception as e:
-                log.warning("stale_cleanup_failed", error=str(e))
+        checked_at = time.time()
+        current = self._hash_checkout()
+        try:
+            self.storage.sync_checkout(current, checked_at)
+        except Exception as e:
+            log.warning("checkout_sync_failed", project=str(self.project_path), error=str(e))
 
         try:
             stored_hashes = self.storage.get_file_hashes()
@@ -300,21 +310,16 @@ class Indexer:
             log.warning("batched_hash_lookup_failed", error=str(e))
             stored_hashes = {}
 
-        pending: list[str] = []
         try:
-            zero_chunk_files = set(self.storage.get_zero_chunk_files())
+            zero_chunk_files = self.storage.get_zero_chunk_files()
         except Exception:
-            zero_chunk_files = set()
-        for file_path in all_files:
-            rel_path = str(file_path.relative_to(self.project_path))
-            if rel_path in zero_chunk_files:
-                continue
-            file_hash = self._compute_file_hash(file_path, rel_path)
-            if file_hash and stored_hashes.get(rel_path) == file_hash:
-                continue
-            pending.append(rel_path)
-        pending.sort()
-        return pending
+            zero_chunk_files = {}
+        return sorted(
+            rel_path
+            for rel_path, file_hash in current.items()
+            if not file_hash
+            or file_hash not in (stored_hashes.get(rel_path), zero_chunk_files.get(rel_path))
+        )
 
     def _compute_file_hash(self, file_path: Path, rel_path: str) -> str:
         """Compute SHA-256 hash of a file for cache invalidation."""
@@ -455,6 +460,9 @@ class Indexer:
             stored_hash = self.storage.get_file_hash(rel_path)
             if stored_hash == file_hash:
                 log.debug("file_unchanged_skipping", file=rel_path)
+                return IndexStatus(file_count=1)
+            if self.storage.adopt_base_version(rel_path, file_hash):
+                log.debug("file_matches_base_skipping", file=rel_path)
                 return IndexStatus(file_count=1)
 
         # 1. Chunking

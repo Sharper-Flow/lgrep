@@ -5,7 +5,8 @@ For each worktree path:
 2. Read ``project_meta.json`` and remove the path from ``alias_paths``.
 3. If ``alias_paths`` is empty AND the canonical ``project_path`` is gone
    from the filesystem, delete the entire cache dir.
-4. If the canonical exists, just update the meta — keep the cache.
+4. Otherwise delete the worktree's overlay rows and update the meta — keep
+   the cache.
 
 Security guards (same pattern as ``prune_orphans``):
 - Path confinement: resolved cache dir must be under ``LGREP_CACHE_DIR``.
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import structlog
 
-from lgrep.storage import get_project_db_path, read_project_meta
+from lgrep.storage import get_project_db_path, prune_overlays, read_project_meta
 from lgrep.storage._chunk_store import DEFAULT_CACHE_DIR
 
 log = structlog.get_logger()
@@ -221,7 +222,12 @@ def invalidate_worktree_cache(
                 )
                 continue
         else:
-            # Canonical exists or other aliases remain — just update meta
+            # Canonical exists or other aliases remain — drop the worktree's
+            # overlay rows and update meta
+            try:
+                prune_overlays(db_path, checkouts={resolved_path_str})
+            except Exception as exc:
+                log.warning("invalidate_overlay_prune_failed", path=raw_path, error=str(exc))
             # Re-write meta without the removed alias
             if alias_removed:
                 # Write updated meta: project_path stays, aliases updated

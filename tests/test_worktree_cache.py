@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from lgrep.storage import get_project_db_path, read_project_meta, write_project_meta
 from lgrep.storage._chunk_store import canonical_repo_key
 
@@ -154,56 +156,41 @@ class TestDbPathDedup:
 class TestStaleFileDeletionGuard:
     """Tests for the stale-file deletion guard when dedup is enabled."""
 
-    def test_stale_deletion_skipped_with_dedup(self, tmp_path, monkeypatch):
-        """When dedup is on, stale files are NOT deleted from shared cache."""
+    def test_stale_deletion_with_dedup_keeps_overlay_rows(self, tmp_path, monkeypatch):
+        """With dedup on, base stale deletion removes only base rows."""
         monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
-        from lgrep.indexing import Indexer
-        from lgrep.storage import EMBEDDING_DIM, ChunkStore, get_project_db_path
+        import uuid
 
-        # Set up a project with one file
+        from lgrep.embeddings import MODEL_NAME
+        from lgrep.indexing import Indexer
+        from lgrep.storage import EMBEDDING_DIM, ChunkStore, CodeChunk, get_project_db_path
+
         project = tmp_path / "project"
         project.mkdir()
         (project / "real.py").write_text("print('hello')")
 
-        # Create a store with a "stale" file chunk that doesn't exist on disk
-        db_path = get_project_db_path(project)
-        store = ChunkStore(db_path, project_path=project)
+        store = ChunkStore(get_project_db_path(project), project_path=project)
+        overlay = store.for_checkout(str(tmp_path / "worktree"))
 
-        # Manually insert a chunk for a file that doesn't exist
-        stale_chunk = MagicMock()
-        stale_chunk.file_path = "gone.py"
-        stale_chunk.chunk_index = 0
-        stale_chunk.start_line = 1
-        stale_chunk.end_line = 5
-        stale_chunk.text = "# stale content"
-        stale_chunk.file_hash = "abc123"
-        import uuid
+        def _chunk(content: str) -> CodeChunk:
+            return CodeChunk(
+                id=str(uuid.uuid4()),
+                file_path="gone.py",
+                chunk_index=0,
+                start_line=1,
+                end_line=5,
+                content=content,
+                vector=[0.1] * EMBEDDING_DIM,
+                file_hash="abc123",
+                indexed_at=1000.0,
+                embedding_model=MODEL_NAME,
+            )
 
-        from lgrep.embeddings import MODEL_NAME
-        from lgrep.storage import CodeChunk
+        store.add_chunks([_chunk("# stale base")])
+        overlay.add_chunks([_chunk("# worktree copy")])
 
-        store.add_chunks(
-            [
-                CodeChunk(
-                    id=str(uuid.uuid4()),
-                    file_path="gone.py",
-                    chunk_index=0,
-                    start_line=1,
-                    end_line=5,
-                    content="# stale content",
-                    vector=[0.1] * EMBEDDING_DIM,
-                    file_hash="abc123",
-                    indexed_at=1000.0,
-                    embedding_model=MODEL_NAME,
-                )
-            ]
-        )
-
-        assert store.count_chunks() == 1
-
-        # Create a mock embedder that returns zeros
         embedder = MagicMock()
         embed_result = MagicMock()
         embed_result.embeddings = [[0.0] * EMBEDDING_DIM]
@@ -211,15 +198,10 @@ class TestStaleFileDeletionGuard:
         embed_result.model = "voyage-code-4"
         embedder.embed_documents.return_value = embed_result
 
-        indexer = Indexer(project, store, embedder)
-        indexer.index_all()
+        Indexer(project, store, embedder).index_all()
 
-        # The stale chunk should still exist because dedup is on
-        indexed_files = store.get_indexed_files()
-        assert "gone.py" in indexed_files, (
-            "Stale file was deleted despite dedup being on — "
-            "this would corrupt shared cache across worktrees"
-        )
+        assert "gone.py" not in store.get_indexed_files()
+        assert overlay.get_file_hash("gone.py") == "abc123"
 
     def test_stale_deletion_runs_without_dedup(self, tmp_path, monkeypatch):
         """When dedup is off, stale files ARE deleted (existing behavior)."""
@@ -731,15 +713,16 @@ class TestInMemoryDedup:
             capture_output=True,
         )
 
-    def test_inmemory_dedup_shares_state(self, tmp_path, monkeypatch):
-        """With dedup on, trunk and worktree get the SAME ProjectState object."""
+    def test_inmemory_dedup_shares_store_not_state(self, tmp_path, monkeypatch):
+        """With dedup on, each checkout has its own state over one shared store."""
         monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
         monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
         monkeypatch.setenv("VOYAGE_API_KEY", "fake-key-for-test")
 
         import asyncio
 
-        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
+        from lgrep.server.lifecycle import LgrepContext, ProjectState, _ensure_project_initialized
+        from lgrep.storage import BASE_CHECKOUT, OverlayStore
 
         repo, worktree = self._make_repo_with_worktree(tmp_path)
         try:
@@ -750,15 +733,17 @@ class TestInMemoryDedup:
                 state_trunk = asyncio.run(_ensure_project_initialized(ctx, repo))
                 state_worktree = asyncio.run(_ensure_project_initialized(ctx, worktree))
 
-            # Both must be ProjectState (not error dicts)
-            from lgrep.server.lifecycle import ProjectState
-
             assert isinstance(state_trunk, ProjectState)
             assert isinstance(state_worktree, ProjectState)
-            # AC: same Python object — memory is shared
-            assert state_trunk is state_worktree, (
-                "Trunk and worktree ProjectStates should be the same object when dedup is enabled"
-            )
+            assert state_trunk is not state_worktree
+            assert len(ctx._stores) == 1
+            assert isinstance(state_worktree.db, OverlayStore)
+            assert state_worktree.db.for_checkout(BASE_CHECKOUT) is state_trunk.db
+            assert state_worktree.indexer.project_path == worktree.resolve()
+            assert state_worktree.base_path == str(repo.resolve())
+            meta = read_project_meta(state_trunk.db.db_path)
+            assert meta["project_path"] == str(repo.resolve())
+            assert str(worktree.resolve()) in meta["alias_paths"]
         finally:
             self._cleanup_worktree(repo, worktree)
 
@@ -813,11 +798,12 @@ class TestInMemoryDedup:
             result = remove_project(ctx, str(worktree))
             assert result["removed"] is True
 
-            # Trunk path should still work
+            # Trunk path and its store should still work
             trunk_key = str(repo.resolve())
             assert trunk_key in ctx.projects, (
-                "Trunk should remain accessible after removing aliased worktree path"
+                "Trunk should remain accessible after removing its worktree path"
             )
+            assert ctx.projects[trunk_key].db in ctx._stores.values()
         finally:
             self._cleanup_worktree(repo, worktree)
 
@@ -1058,3 +1044,397 @@ class TestAliasFlock:
         meta = read_project_meta(db_path)
         assert meta is not None
         assert "/wt/no_lock" in meta.get("alias_paths", [])
+
+
+_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@t",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@t",
+}
+
+_TRUNK_SHARED = "def shared():\n    return 'trunk version'\n"
+_BRANCH_SHARED = "def shared():\n    return 'branch version'\n"
+
+
+class _RecordingEmbedder:
+    """Embedder double: deterministic vectors, records every embedded text."""
+
+    def __init__(self):
+        self.texts: list[str] = []
+
+    def embed_documents(self, texts, cancel_event=None):
+        from types import SimpleNamespace
+
+        from lgrep.embeddings import MODEL_NAME
+
+        self.texts.extend(texts)
+        return SimpleNamespace(
+            embeddings=[_vector(t) for t in texts],
+            token_usage=len(texts),
+            model=MODEL_NAME,
+        )
+
+
+def _vector(text: str) -> list[float]:
+    import hashlib
+
+    from lgrep.storage import EMBEDDING_DIM
+
+    digest = hashlib.sha256(text.encode()).digest()
+    return [(digest[i % 32] - 128) / 128.0 for i in range(EMBEDDING_DIM)]
+
+
+class TestWorktreeOverlay:
+    """Base + overlay semantic cache under LGREP_WORKTREE_DEDUP.
+
+    Trunk files: shared.py, same.py, trunk_only.py. The worktree changes
+    shared.py, keeps same.py, deletes trunk_only.py, and adds branch_only.py.
+    """
+
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("LGREP_WORKTREE_DEDUP", "1")
+        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        (repo / "shared.py").write_text(_TRUNK_SHARED)
+        (repo / "same.py").write_text("def same():\n    return 'unchanged'\n")
+        (repo / "trunk_only.py").write_text("def trunk_only():\n    return 'trunk only'\n")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, env=_GIT_ENV)
+        worktree = tmp_path / "wt"
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "-b", "feature", str(worktree)], cwd=repo, check=True
+        )
+        (worktree / "shared.py").write_text(_BRANCH_SHARED)
+        (worktree / "trunk_only.py").unlink()
+        (worktree / "branch_only.py").write_text("def branch_only():\n    return 'branch only'\n")
+        return repo.resolve(), worktree.resolve()
+
+    def _index(self, path, embedder):
+        """Index a checkout through a view of one shared owner store, as the server does."""
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore, checkout_scope, get_project_db_path
+
+        owner, checkout = checkout_scope(path)
+        owners = self.__dict__.setdefault("_owners", {})
+        if owner not in owners:
+            owners[owner] = ChunkStore(get_project_db_path(owner), project_path=owner)
+        store = owners[owner].for_checkout(checkout)
+        Indexer(path, store, embedder).index_all()
+        return store
+
+    def _visible(self, store) -> dict[str, str]:
+        """Map each file the store's vector and hybrid searches return to its text."""
+        hits: dict[str, list[str]] = {}
+        vector = store.search_vector(_vector("probe"), limit=100).results
+        hybrid = store.search_hybrid(_vector("probe"), "return", limit=100).results
+        for result in [*vector, *hybrid]:
+            hits.setdefault(result.file_path, []).append(result.content)
+        return {path: "\n".join(sorted(set(texts))) for path, texts in hits.items()}
+
+    def test_worktree_sees_own_files(self, tmp_path, monkeypatch):
+        """A worktree searches its own version of every file, one query per search."""
+        import asyncio
+
+        from lgrep.server.lifecycle import LgrepContext, _ensure_project_initialized
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        store = self._index(worktree, embedder)
+
+        visible = self._visible(store)
+        assert set(visible) == {"shared.py", "same.py", "branch_only.py"}
+        assert "branch version" in visible["shared.py"]
+        assert "trunk version" not in visible["shared.py"]
+        assert store.get_indexed_files() == {"shared.py", "same.py", "branch_only.py"}
+
+        ctx = LgrepContext(voyage_api_key="k")
+        with patch("lgrep.server.lifecycle.VoyageEmbedder", return_value=MagicMock()):
+            state = asyncio.run(_ensure_project_initialized(ctx, worktree))
+        assert state.indexer.project_path == worktree
+        found = {str(p.relative_to(worktree)) for p in state.indexer.discovery.find_files()}
+        assert found == {"shared.py", "same.py", "branch_only.py"}
+
+    @pytest.mark.parametrize("scenario", ["fresh", "overlay_indexed_before", "all_files_differ"])
+    def test_first_worktree_search_never_serves_trunk_versions(
+        self, tmp_path, monkeypatch, scenario
+    ):
+        """A worktree's first search, before its overlay is embedded, hides the
+        base rows of files it changed or deleted and schedules the embedding."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from mcp.server.fastmcp import Context
+
+        from lgrep.server import search_semantic
+        from lgrep.server.lifecycle import LgrepContext
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        # A branch file edited after an earlier overlay pass must not serve
+        # its stale overlay rows either.
+        if scenario == "overlay_indexed_before":
+            (worktree / "branch_only.py").write_text("def branch_only():\n    return 'old'\n")
+            self._index(worktree, embedder)
+            (worktree / "branch_only.py").write_text(
+                "def branch_only():\n    return 'branch only'\n"
+            )
+        (repo / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
+        (worktree / "same.py").write_text("def same():\n    return 'unchanged'\n# trunk moved\n")
+        if scenario == "all_files_differ":
+            (worktree / "same.py").write_text("def same():\n    return 'branch same'\n")
+        self._index(repo, embedder)
+
+        app_ctx = LgrepContext(voyage_api_key="k")
+        query_embedder = MagicMock()
+        query_embedder.embed_query_async = AsyncMock(return_value=_vector("probe"))
+        ctx = MagicMock(spec=Context)
+        ctx.request_context.lifespan_context = app_ctx
+        with (
+            patch("lgrep.server.lifecycle.VoyageEmbedder", return_value=query_embedder),
+            patch(
+                "lgrep.server.tools_semantic._schedule_background_reindex", new=AsyncMock()
+            ) as schedule,
+        ):
+            response = asyncio.run(
+                search_semantic(query="return", path=str(worktree), limit=50, ctx=ctx)
+            )
+
+        assert "results" in response, response
+        hits = {hit["file_path"]: hit["snippet"] for hit in response["results"]}
+        assert "trunk_only.py" not in hits
+        assert "trunk version" not in hits.get("shared.py", "")
+        assert "old" not in hits.get("branch_only.py", "")
+        if scenario == "all_files_differ":
+            assert hits == {}
+        else:
+            assert "same.py" in hits
+        assert schedule.await_count == 1
+
+    def test_first_cli_worktree_search_never_serves_trunk_versions(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The CLI search reconciles a worktree overlay before searching it."""
+        import json
+
+        from lgrep.cli import _cmd_search_semantic
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        self._index(repo, _RecordingEmbedder())
+        monkeypatch.setenv("VOYAGE_API_KEY", "k")
+        query_embedder = MagicMock()
+        query_embedder.embed_query.return_value = _vector("probe")
+
+        with patch("lgrep.embeddings.VoyageEmbedder", return_value=query_embedder):
+            rc = _cmd_search_semantic(["return", str(worktree), "--limit", "50"])
+
+        assert rc == 0
+        # Structured logs share stdout; the command's JSON is the last line.
+        results = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["results"]
+        hits = {r["file_path"]: r["content"] for r in results}
+        assert set(hits) == {"same.py"}
+
+    @pytest.mark.parametrize("checkout", ["trunk", "worktree"])
+    def test_zero_chunk_file_is_indexed_after_it_gains_code(self, tmp_path, monkeypatch, checkout):
+        """A file that produced no chunks is embedded once its content changes."""
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        root = repo if checkout == "trunk" else worktree
+        (root / "empty.py").write_text("")
+        store = self._index(root, embedder)
+        assert "empty.py" in store.get_zero_chunk_files()
+
+        (root / "empty.py").write_text("def gained():\n    return 'gained code'\n")
+        # A reconcile after the edit (a search, for example) must forget the
+        # marker, so the staleness check still sees the file as unindexed.
+        from lgrep.indexing import Indexer
+        from lgrep.server.lifecycle import ProjectState, _check_staleness
+
+        indexer = Indexer(root, store, embedder)
+        indexer.reconcile_checkout()
+        assert "empty.py" not in store.get_zero_chunk_files()
+        base_path = str(repo) if checkout == "worktree" else None
+        state = ProjectState(db=store, indexer=indexer, base_path=base_path)
+        assert _check_staleness(state)[0] is True
+
+        embedder.texts.clear()
+        store = self._index(root, embedder)
+        assert "gained code" in "\n".join(embedder.texts)
+        assert "empty.py" in store.get_indexed_files()
+        assert "empty.py" not in store.get_zero_chunk_files()
+
+    def test_filter_indexes_keep_overlay_search_correct(self, tmp_path, monkeypatch):
+        """Scalar indexes on the prefilter columns persist and keep results exact."""
+        from lgrep.storage import ChunkStore, get_project_db_path
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        trunk = self._index(repo, embedder)
+        overlay = self._index(worktree, embedder)
+        trunk.prepare_hybrid_indexes(vector_index_row_threshold=0)
+
+        columns = {c for index in trunk.table.list_indices() for c in index.columns}
+        assert {"checkout", "file_path"} <= columns
+        reopened = ChunkStore(get_project_db_path(repo), project_path=repo)
+        reopened.table  # noqa: B018 - opening the table probes its indexes
+        assert reopened._filter_indexed
+
+        visible = self._visible(overlay)
+        assert set(visible) == {"shared.py", "same.py", "branch_only.py"}
+        assert "branch version" in visible["shared.py"]
+        assert set(self._visible(trunk)) == {"shared.py", "same.py", "trunk_only.py"}
+
+    def test_trunk_search_excludes_overlay(self, tmp_path, monkeypatch):
+        """Trunk search never returns a worktree's overlay rows."""
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        trunk = self._index(repo, embedder)
+        self._index(worktree, embedder)
+
+        visible = self._visible(trunk)
+        assert set(visible) == {"shared.py", "same.py", "trunk_only.py"}
+        assert "trunk version" in visible["shared.py"]
+        assert "branch version" not in visible["shared.py"]
+        assert trunk.get_indexed_files() == {"shared.py", "same.py", "trunk_only.py"}
+        assert trunk.count_chunks() < trunk.table.count_rows()
+
+        # A trunk pass after the worktree indexed changes and embeds nothing.
+        embedder.texts.clear()
+        self._index(repo, embedder)
+        assert embedder.texts == []
+
+    def test_worktree_embeds_only_diff(self, tmp_path, monkeypatch):
+        """A worktree's first index embeds only files that differ from base."""
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+
+        embedder.texts.clear()
+        self._index(worktree, embedder)
+        embedded = "\n".join(embedder.texts)
+        assert "branch version" in embedded
+        assert "branch only" in embedded
+        assert "unchanged" not in embedded
+        assert "trunk" not in embedded
+
+        embedder.texts.clear()
+        overlay = self._index(worktree, embedder)
+        assert embedder.texts == []
+
+        # A watcher event for a file edited back to its base content drops
+        # the overlay and serves base rows again, with no embedding.
+        from lgrep.indexing import Indexer
+        from lgrep.storage import ChunkStore
+
+        (worktree / "shared.py").write_text(_TRUNK_SHARED)
+        Indexer(worktree, overlay, embedder).index_file(worktree / "shared.py")
+        assert embedder.texts == []
+        assert set(ChunkStore.get_file_hashes(overlay)) == {"branch_only.py"}
+        assert "trunk version" in self._visible(overlay)["shared.py"]
+
+    def test_worktree_rechecks_after_base_change(self, tmp_path, monkeypatch):
+        """After base rows change, a worktree re-compares every file with base."""
+        from lgrep.indexing import Indexer
+        from lgrep.server.lifecycle import ProjectState, _check_staleness
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        overlay = self._index(worktree, embedder)
+        state = ProjectState(
+            db=overlay, indexer=Indexer(worktree, overlay, embedder), base_path=str(repo)
+        )
+        assert _check_staleness(state) == (False, 0)
+
+        # Trunk moves: shared.py now equals the branch version, same.py changes.
+        (repo / "shared.py").write_text(_BRANCH_SHARED)
+        (repo / "same.py").write_text("def same():\n    return 'trunk moved'\n")
+        self._index(repo, embedder)
+
+        assert overlay.needs_full_recheck()
+        assert _check_staleness(state)[0] is True
+
+        embedder.texts.clear()
+        overlay = self._index(worktree, embedder)
+        # Only same.py differs from base now; shared.py's overlay rows are dropped.
+        assert "unchanged" in "\n".join(embedder.texts)
+        assert "branch version" not in "\n".join(embedder.texts)
+        from lgrep.storage import ChunkStore
+
+        assert set(ChunkStore.get_file_hashes(overlay)) == {"same.py", "branch_only.py"}
+        visible = self._visible(overlay)
+        assert "unchanged" in visible["same.py"]
+        assert "trunk moved" not in visible["same.py"]
+        assert "branch version" in visible["shared.py"]
+        assert not overlay.needs_full_recheck()
+
+    def test_shared_cache_migrates_without_embedding(self, tmp_path, monkeypatch):
+        """A cache from before per-checkout rows becomes base with no embedding."""
+        import lancedb
+
+        from lgrep.storage import CHUNKS_TABLE, get_project_db_path
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        db_path = get_project_db_path(repo)
+        old = lancedb.connect(str(db_path)).open_table(CHUNKS_TABLE)
+        old.drop_columns(["checkout"])
+        rows = old.count_rows()
+        assert "checkout" not in old.schema.names
+        self._owners.clear()
+
+        embedder.texts.clear()
+        trunk = self._index(repo, embedder)
+        assert embedder.texts == []
+        assert "checkout" in trunk.table.schema.names
+        assert trunk.table.count_rows() == rows
+        assert trunk.count_chunks() == rows
+        assert "trunk version" in self._visible(trunk)["shared.py"]
+
+        self._index(worktree, embedder)
+        embedded = "\n".join(embedder.texts)
+        assert "unchanged" not in embedded
+        assert "branch version" in embedded
+
+    def test_gc_removes_dead_worktree_overlay(self, tmp_path, monkeypatch):
+        """gc deletes overlay rows and state of worktrees that no longer exist."""
+        from lgrep.storage import get_project_db_path
+        from lgrep.tools.prune_orphans import gc_worktree_meta
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        live = tmp_path / "live"
+        subprocess.run(["git", "worktree", "add", "-q", str(live)], cwd=repo, check=True)
+        (live / "live_only.py").write_text("def live_only():\n    return 1\n")
+        embedder = _RecordingEmbedder()
+        trunk = self._index(repo, embedder)
+        self._index(worktree, embedder)
+        self._index(live.resolve(), embedder)
+        base_rows = trunk.count_chunks()
+        overlay_where = f"checkout = '{worktree}'"
+        assert trunk.table.count_rows(overlay_where) > 0
+        state_files = list((get_project_db_path(repo) / "overlays").glob("*.json"))
+        assert len(state_files) == 2
+
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(worktree)], cwd=repo, check=True
+        )
+
+        preview = gc_worktree_meta(cache_dir=tmp_path / "cache", dry_run=True)
+        assert preview["overlays_removed"] == 1
+        assert trunk.table.count_rows(overlay_where) > 0
+
+        report = gc_worktree_meta(cache_dir=tmp_path / "cache", dry_run=False)
+        assert report["overlays_removed"] == 1
+        assert report["overlay_rows_removed"] > 0
+        trunk.table.checkout_latest()
+        assert trunk.table.count_rows(overlay_where) == 0
+        assert trunk.table.count_rows(f"checkout = '{live.resolve()}'") > 0
+        assert trunk.count_chunks() == base_rows
+        assert len(list((get_project_db_path(repo) / "overlays").glob("*.json"))) == 1
