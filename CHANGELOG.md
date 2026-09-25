@@ -1,3 +1,8 @@
+## 2026-09-25 (v3.6.1)
+
+- fix(semantic): worktrees search their own files in the shared dedup cache (#26)
+- docs: update changelog for v3.6.0
+
 ## 2026-09-24 (v3.6.0)
 
 - feat(search_semantic): compact hits by default; fix method chunk line ranges (#25)
