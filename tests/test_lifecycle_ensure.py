@@ -409,3 +409,85 @@ def _released() -> threading.Event:
     event = threading.Event()
     event.set()
     return event
+
+
+def _slow_indexer(started: threading.Event, release: threading.Event, constructions: list):
+    class SlowIndexer:
+        def __init__(self, *args, **kwargs):
+            constructions.append(1)
+            started.set()
+            release.wait(timeout=10)
+
+    return SlowIndexer
+
+
+async def test_concurrent_same_checkout_assembles_once(tmp_path, monkeypatch):
+    """Two concurrent ensures of one path share one checkout assembly."""
+    import lgrep.server.lifecycle as lifecycle
+
+    started, release = threading.Event(), threading.Event()
+    constructions: list = []
+    monkeypatch.setattr(lifecycle, "Indexer", _slow_indexer(started, release, constructions))
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    first = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    second = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await _wait_for_event(started)
+    await asyncio.sleep(0.05)
+    release.set()
+    a, b = await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
+
+    assert isinstance(a, ProjectState)
+    assert a is b
+    assert len(constructions) == 1, "same checkout assembled twice concurrently"
+    assert ctx._checkout_assemblies == {}
+    await lifecycle._shutdown(ctx)
+
+
+async def test_cancelled_checkout_retry_joins_and_leaves_query_lane_free(tmp_path, monkeypatch):
+    """Cancelled callers detach; retries join; a query still gets a worker."""
+    import lgrep.server.lifecycle as lifecycle
+    from lgrep.server.runtime import RuntimeSupervisor
+
+    started, release = threading.Event(), threading.Event()
+    constructions: list = []
+    monkeypatch.setattr(lifecycle, "Indexer", _slow_indexer(started, release, constructions))
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    runtime = RuntimeSupervisor(max_workers=2, max_build_workers=1)
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio", runtime=runtime)
+    ctx.embedder = object()
+
+    try:
+        for _ in range(3):
+            caller = asyncio.create_task(_ensure_project_initialized(ctx, project))
+            await _wait_for_event(started)
+            await asyncio.sleep(0.01)
+            caller.cancel()
+            start = time.monotonic()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(caller, timeout=2)
+            assert time.monotonic() - start < 0.5, "cancelled caller waited for assembly"
+
+        assert len(constructions) == 1, "a retry started a second checkout assembly"
+        # One query worker is held by the shared assembly; the other is free.
+        result = await asyncio.wait_for(
+            runtime.run_blocking("search_vector", "probe", str(project), lambda: "ok"),
+            timeout=1,
+        )
+        assert result == "ok"
+
+        release.set()
+        state = await asyncio.wait_for(_ensure_project_initialized(ctx, project), timeout=5)
+        assert isinstance(state, ProjectState)
+        assert len(constructions) == 1
+    finally:
+        release.set()
+        await lifecycle._shutdown(ctx)

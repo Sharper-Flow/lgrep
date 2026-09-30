@@ -125,6 +125,9 @@ class LgrepContext:
     # registered task rather than constructing a second store against the
     # same cache concurrently.
     _store_assemblies: dict[str, asyncio.Task] = field(default_factory=dict)
+    # In-flight per-path checkout assemblies (owner store + checkout view +
+    # publication), registered on the same terms as owner assemblies.
+    _checkout_assemblies: dict[str, asyncio.Task] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     transport: str | None = None
@@ -176,13 +179,17 @@ async def _shutdown(ctx: LgrepContext) -> None:
     async with ctx._lock:
         ctx._closed = True
 
-    # Cancel outstanding background reindexes and in-flight owner-store
-    # assemblies; await terminal state so cooperative cancellation
-    # propagates through run_blocking and the bounded executor's worker
-    # thread reaches a terminal status before we tear down. A cancelled
-    # assembly task never reaches its publish step, so no store can appear
-    # in the context after shutdown returns.
-    tasks = list(ctx._bg_reindex_tasks.values()) + list(ctx._store_assemblies.values())
+    # Cancel outstanding background reindexes and in-flight checkout and
+    # owner-store assemblies; await terminal state so cooperative
+    # cancellation propagates through run_blocking and the bounded
+    # executor's worker thread reaches a terminal status before we tear
+    # down. A cancelled assembly never reaches its publish step, and the
+    # closed flag refuses any publication that races teardown.
+    tasks = (
+        list(ctx._bg_reindex_tasks.values())
+        + list(ctx._checkout_assemblies.values())
+        + list(ctx._store_assemblies.values())
+    )
     for t in tasks:
         t.cancel()
     if tasks:
@@ -203,6 +210,7 @@ async def _shutdown(ctx: LgrepContext) -> None:
         await asyncio.gather(*still_running, return_exceptions=True)
     ctx._bg_reindex_tasks.clear()
     ctx._store_assemblies.clear()
+    ctx._checkout_assemblies.clear()
     ctx._index_owner_releases.clear()
 
     for proj_path, state in ctx.projects.items():
@@ -425,11 +433,13 @@ async def _ensure_project_initialized(
 
     Both blocking phases run in the runtime's worker pool, never on the
     event loop: the owner store's assembly (``ensure_store`` job — LanceDB
-    connect plus first table touch) is single-flight per cache, with a
-    cancelled or retried caller joining the in-flight assembly to terminal
-    completion; the checkout view's assembly (``ensure_checkout`` job —
-    overlay init, alias meta write, Indexer construction) runs per path.
-    The app lock stays on the event loop for coordination only.
+    connect plus first table touch) is single-flight per cache, and the
+    checkout view's assembly (``ensure_checkout`` job — overlay init, alias
+    meta write, Indexer construction) is single-flight per path. Each is a
+    registered task that owns its work through publication: a cancelled
+    caller detaches promptly, and a concurrent or retried caller joins the
+    registered task instead of starting a second assembly. The app lock
+    stays on the event loop for coordination only.
 
     Returns ProjectState on success, or a ToolError dict on failure.
     """
@@ -439,12 +449,6 @@ async def _ensure_project_initialized(
     if path_key in app_ctx.projects:
         return app_ctx.projects[path_key]
 
-    # The cache owner is the trunk under dedup and the path itself
-    # otherwise; checkout is BASE_CHECKOUT unless the path is a linked
-    # worktree of the owner.
-    owner, checkout = checkout_scope(project_path)
-    owner_str = str(owner)
-
     async with app_ctx._lock:
         # Double-check after acquiring lock
         if path_key in app_ctx.projects:
@@ -452,22 +456,51 @@ async def _ensure_project_initialized(
 
         if not app_ctx.voyage_api_key:
             return _error_response("VOYAGE_API_KEY not set.")
+        if app_ctx._closed:
+            return _error_response("lgrep is shutting down.")
 
+        task = app_ctx._checkout_assemblies.get(path_key)
+        if task is None:
+            task = asyncio.create_task(
+                _assemble_project_state_task(app_ctx, project_path, path_key),
+                name=f"ensure_checkout:{path_key}",
+            )
+            app_ctx._checkout_assemblies[path_key] = task
+
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        current = asyncio.current_task()
+        if task.cancelled() and not (current is not None and current.cancelling()):
+            # Shutdown cancelled the shared assembly; this caller was not
+            # itself cancelled.
+            return _error_response("lgrep is shutting down.")
+        raise
+
+
+async def _assemble_project_state_task(
+    app_ctx: LgrepContext, project_path: Path, path_key: str
+) -> ProjectState | dict:
+    """Assemble and publish one path's ProjectState, then clear its registry entry.
+
+    The registry entry is retained until the assembly is physically
+    terminal, so a retry always finds either this entry or the published
+    state, and never starts a duplicate checkout assembly.
+    """
+    # The cache owner is the trunk under dedup and the path itself
+    # otherwise; checkout is BASE_CHECKOUT unless the path is a linked
+    # worktree of the owner.
+    owner, checkout = checkout_scope(project_path)
+    owner_str = str(owner)
     try:
         # Create shared embedder on first use
         if app_ctx.embedder is None:
             app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
 
-        # Owner-store assembly (LanceDB connect + first table touch) is
-        # single-flight per cache and runs in the worker pool; a cancelled
-        # or retried caller joins the in-flight assembly.
         store = await _ensure_owner_store(app_ctx, owner, owner_str)
         if isinstance(store, dict):
             return store
 
-        # Checkout-view assembly (overlay init, alias meta write behind a
-        # file lock, Indexer construction) is blocking I/O too: run it in
-        # the worker pool, never on the event loop.
         state = await app_ctx.runtime.run_blocking(
             "ensure_checkout",
             "_ensure_project_initialized",
@@ -498,6 +531,10 @@ async def _ensure_project_initialized(
     except Exception as e:
         log.exception("initialization_failed", project=path_key, error=str(e))
         return _error_response("Failed to initialize project.")
+    finally:
+        async with app_ctx._lock:
+            if app_ctx._checkout_assemblies.get(path_key) is asyncio.current_task():
+                app_ctx._checkout_assemblies.pop(path_key, None)
 
 
 async def _run_blocking_or_thread(
