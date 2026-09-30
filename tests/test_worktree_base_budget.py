@@ -106,10 +106,20 @@ def _register_base(ctx: LgrepContext, base_path: Path, mode: str) -> ProjectStat
 
 
 async def _cleanup(ctx: LgrepContext) -> None:
+    """Cancel this test's tasks and wait for its executor jobs to finish.
+
+    A budget-abandoned job keeps running in its worker thread and logs
+    ``runtime_job_finished`` when it ends. Returning before that lets the
+    event leak into a later test's captured logs.
+    """
     for task in list(ctx._bg_reindex_tasks.values()):
         task.cancel()
     if ctx._bg_reindex_tasks:
         await asyncio.gather(*ctx._bg_reindex_tasks.values(), return_exceptions=True)
+    deadline = time.monotonic() + 5.0
+    while ctx.runtime.snapshot_active_jobs():
+        assert time.monotonic() < deadline, "test-owned executor jobs never finished"
+        await asyncio.sleep(0.01)
     ctx.runtime.shutdown(cancel_futures=True)
 
 
@@ -191,5 +201,32 @@ async def test_zero_budget_goes_straight_to_background(tmp_path, monkeypatch):
 
     assert result is False
     assert str(base) in ctx._bg_reindex_tasks
+    assert state.indexer.windows_started == 0
+    await _cleanup(ctx)
+
+
+async def test_slow_staleness_check_is_bounded_by_budget(tmp_path, monkeypatch):
+    """The budget covers the staleness check, not just the index window."""
+    monkeypatch.setenv("LGREP_ENSURE_BUDGET_S", "0.05")
+    base = tmp_path / "trunk"
+    base.mkdir()
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    state = _register_base(ctx, base, "converges")
+
+    def slow_fresh_check(state_arg):
+        time.sleep(0.3)
+        return False, 0
+
+    monkeypatch.setattr("lgrep.server.lifecycle._check_staleness", slow_fresh_check)
+
+    start = time.monotonic()
+    with capture_logs() as logs:
+        result = await asyncio.wait_for(_base_index_ready(ctx, str(base), wait=False), timeout=5)
+    elapsed = time.monotonic() - start
+
+    assert result is False
+    assert elapsed < 0.2, f"staleness check escaped the budget ({elapsed:.2f}s)"
+    assert str(base) in ctx._bg_reindex_tasks, "no background continuation scheduled"
+    assert any(e["event"] == "base_window_budget_exceeded" for e in logs)
     assert state.indexer.windows_started == 0
     await _cleanup(ctx)

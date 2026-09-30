@@ -42,28 +42,6 @@ DEFAULT_HISTORY_LIMIT = 100
 QUERY_LANE = "query"
 BUILD_LANE = "build"
 
-# Job kinds whose work is build or maintenance (index windows, pending-file
-# computation, full re-index, orphan/prune sweeps, remote repo indexing).
-# They run on the dedicated build executor so a build window cannot occupy
-# the worker threads a query needs. Every other kind runs on the query
-# executor sized by LGREP_WORKER_MAX_THREADS.
-BUILD_JOB_KINDS = frozenset(
-    {
-        "index_window",
-        "compute_pending_files",
-        "index_all",
-        "startup_orphan_sweep",
-        "prune_orphans",
-        "prune_symbols",
-        "index_repo",
-    }
-)
-
-
-def _lane_for_kind(kind: str) -> str:
-    """Return the executor lane a job kind runs on by default."""
-    return BUILD_LANE if kind in BUILD_JOB_KINDS else QUERY_LANE
-
 
 class JobStatus(StrEnum):
     """Lifecycle state for a blocking daemon job."""
@@ -184,7 +162,7 @@ class RuntimeSupervisor:
         fn: Callable[..., T],
         *args: Any,
         cancel_event: threading.Event | None = None,
-        lane: str | None = None,
+        lane: str = QUERY_LANE,
         **kwargs: Any,
     ) -> T:
         """Run a synchronous function under bounded, observable supervision.
@@ -200,16 +178,16 @@ class RuntimeSupervisor:
                 calls ``cancel_event.set()`` BEFORE propagating the
                 ``CancelledError``, so the blocking thread can observe
                 the signal at the next safe point and unwind.
-            lane: Executor lane for the job: "query" or "build". Defaults
-                to the lane the job kind maps to (see ``BUILD_JOB_KINDS``).
+            lane: Executor lane for the job: "query" or "build". Query is
+                the default; build and maintenance call sites pass
+                ``lane="build"`` so they cannot occupy query threads.
             **kwargs: Keyword args forwarded to ``fn`` (not including
                 ``cancel_event`` or ``lane``).
         """
-        resolved_lane = lane if lane is not None else _lane_for_kind(kind)
-        if resolved_lane not in (QUERY_LANE, BUILD_LANE):
-            raise ValueError(f"unknown lane: {resolved_lane!r}")
-        executor = self._executor if resolved_lane == QUERY_LANE else self._build_executor
-        job = self._create_job(kind=kind, caller=caller, project=project, lane=resolved_lane)
+        if lane not in (QUERY_LANE, BUILD_LANE):
+            raise ValueError(f"unknown lane: {lane!r}")
+        executor = self._executor if lane == QUERY_LANE else self._build_executor
+        job = self._create_job(kind=kind, caller=caller, project=project, lane=lane)
 
         def invoke() -> T:
             self._mark_started(job.id)

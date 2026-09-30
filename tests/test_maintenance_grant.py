@@ -68,7 +68,7 @@ def _tool_fn(name: str):
 class _InlineRuntime:
     """Runs supervised work inline so the guard, not the scheduler, is under test."""
 
-    async def run_blocking(self, kind, caller, project, fn, *args, **kwargs):
+    async def run_blocking(self, kind, caller, project, fn, *args, lane="query", **kwargs):
         kwargs.pop("cancel_event", None)
         return fn(*args, **kwargs)
 

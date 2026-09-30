@@ -30,7 +30,7 @@ def _runtime_ctx():
         started_at = time.time()
         max_workers = 4
 
-        async def run_blocking(self, kind, caller, project, fn, *args, **kwargs):
+        async def run_blocking(self, kind, caller, project, fn, *args, lane="query", **kwargs):
             kwargs.pop("cancel_event", None)
             return fn(*args, **kwargs)
 

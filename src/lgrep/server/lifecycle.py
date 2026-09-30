@@ -120,6 +120,11 @@ class LgrepContext:
     # worktree dedup every worktree of a repo reads a view of its trunk's
     # store, so connections and tables stay bounded by repository count.
     _stores: dict[str, ChunkStore] = field(default_factory=dict)
+    # In-flight owner-store assemblies. A cancelled caller detaches while its
+    # assembly keeps running here, and any retry for the same owner joins the
+    # registered task rather than constructing a second store against the
+    # same cache concurrently.
+    _store_assemblies: dict[str, asyncio.Task] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
     transport: str | None = None
@@ -127,6 +132,9 @@ class LgrepContext:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
     _bg_reindex_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+    # Release tasks of cancelled index leaders: each holds the project's
+    # single-flight event until the leader's physical window has stopped.
+    _index_owner_releases: set[asyncio.Task] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +169,13 @@ async def _shutdown(ctx: LgrepContext) -> None:
     """Gracefully shut down all projects: stop watchers and release resources."""
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
 
-    # Cancel outstanding background reindexes; await terminal state so
-    # cooperative cancellation propagates through run_blocking and the bounded
-    # executor's worker thread reaches a terminal status before we tear down.
-    tasks = list(ctx._bg_reindex_tasks.values())
+    # Cancel outstanding background reindexes and in-flight owner-store
+    # assemblies; await terminal state so cooperative cancellation
+    # propagates through run_blocking and the bounded executor's worker
+    # thread reaches a terminal status before we tear down. A cancelled
+    # assembly task never reaches its publish step, so no store can appear
+    # in the context after shutdown returns.
+    tasks = list(ctx._bg_reindex_tasks.values()) + list(ctx._store_assemblies.values())
     for t in tasks:
         t.cancel()
     if tasks:
@@ -175,7 +186,17 @@ async def _shutdown(ctx: LgrepContext) -> None:
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and ctx.runtime.snapshot_active_jobs():
             await asyncio.sleep(0.01)
+    # Cancelled index leaders hand their ownership to release tasks that end
+    # when the physical window stops; give them the same bounded window.
+    releases = list(ctx._index_owner_releases)
+    if releases:
+        _done, still_running = await asyncio.wait(releases, timeout=2.0)
+        for t in still_running:
+            t.cancel()
+        await asyncio.gather(*still_running, return_exceptions=True)
     ctx._bg_reindex_tasks.clear()
+    ctx._store_assemblies.clear()
+    ctx._index_owner_releases.clear()
 
     for proj_path, state in ctx.projects.items():
         _stop_watcher(state, proj_path)
@@ -225,6 +246,7 @@ async def _schedule_startup_sweep(ctx: LgrepContext) -> None:
             _prune_orphans,
             dry_run=False,
             active_set=active_set,
+            lane="build",
         )
         log.info(
             "startup_orphan_sweep_done",
@@ -259,41 +281,121 @@ def _stop_watcher(state: ProjectState, project_path: str) -> bool:
     return True
 
 
-def _assemble_project_state(
-    owner: Path,
-    owner_str: str,
-    checkout: str,
-    project_path: Path,
-    store: ChunkStore | None,
-    embedder: VoyageEmbedder,
-) -> tuple[ChunkStore, ProjectState]:
-    """Assemble the store view, meta, indexer, and first table touch.
+def _assemble_owner_store(owner: Path, owner_str: str) -> ChunkStore:
+    """Construct the owner cache's ChunkStore and force its first table touch.
 
     Pure assembly with no event-loop or app-context access so it can run
-    inside a single ``ensure_store`` job on the worker pool. Everything it
-    touches is synchronous disk I/O that must not run on the event loop:
-    ChunkStore construction (LanceDB connect + metadata persistence),
-    ``for_checkout`` overlay init (overlay-state read), the worktree alias
-    meta write, Indexer construction, and the forced first table touch
-    (``open_table`` + ``count_rows`` + rebuild check + index probes).
+    inside a single ``ensure_store`` job on the worker pool: ChunkStore
+    construction (LanceDB connect + metadata persistence) and the first
+    table touch (``open_table`` + ``count_rows`` + rebuild check + index
+    probes) are the synchronous I/O that must never run on the event loop.
     """
-    if store is None:
-        store = ChunkStore(get_project_db_path(owner), project_path=owner_str)
+    store = ChunkStore(get_project_db_path(owner), project_path=owner_str)
+    _ = store.table
+    return store
+
+
+def _assemble_checkout_state(
+    store: ChunkStore,
+    checkout: str,
+    owner_str: str,
+    project_path: Path,
+    embedder: VoyageEmbedder,
+) -> ProjectState:
+    """Assemble one checkout's ProjectState view of an owner store.
+
+    Runs inside an ``ensure_checkout`` job on the worker pool:
+    ``for_checkout`` reads the overlay-state json, the worktree alias meta
+    write takes a blocking ``LOCK_EX`` file lock, Indexer construction
+    walks discovery, and the first table touch may yet happen for a
+    checkout opened after the owner store published. None of that may run
+    on the event loop.
+    """
     db = store.for_checkout(checkout)
     base_path = None
     if checkout != BASE_CHECKOUT:
         base_path = owner_str
         write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
-    indexer = Indexer(
-        project_path=project_path,
-        storage=db,
-        embedder=embedder,
-    )
+    indexer = Indexer(project_path=project_path, storage=db, embedder=embedder)
     state = ProjectState(db=db, indexer=indexer, base_path=base_path)
-    # Force the first table touch inside the ensure job so the expensive
-    # LanceDB I/O never lands on the event loop through a later query path.
     _ = db.table
-    return store, state
+    return state
+
+
+async def _assemble_owner_store_task(
+    app_ctx: LgrepContext, owner: Path, owner_str: str
+) -> ChunkStore:
+    """Assemble the owner store, publish it, and clear the registry entry.
+
+    The registry entry is retained until the assembly job is physically
+    terminal, so a retry always finds either this entry or the published
+    store — never a half-open cache.
+    """
+    try:
+        store = await app_ctx.runtime.run_blocking(
+            "ensure_store",
+            "_ensure_project_initialized",
+            owner_str,
+            _assemble_owner_store,
+            owner,
+            owner_str,
+        )
+        async with app_ctx._lock:
+            app_ctx._stores[owner_str] = store
+        return store
+    finally:
+        async with app_ctx._lock:
+            if app_ctx._store_assemblies.get(owner_str) is asyncio.current_task():
+                app_ctx._store_assemblies.pop(owner_str, None)
+
+
+async def _join_owner_assembly(task: asyncio.Task) -> None:
+    """Wait for an owner assembly without ever cancelling it.
+
+    The await is shielded, so a cancelled waiter detaches promptly — the
+    caller's own timeout is never extended by the shared assembly — while
+    the assembly keeps running under its registry entry. A retry arriving
+    mid-assembly therefore always finds the registry entry or the
+    published store, never a half-open cache.
+    """
+    await asyncio.shield(task)
+
+
+async def _ensure_owner_store(
+    app_ctx: LgrepContext, owner: Path, owner_str: str
+) -> ChunkStore | dict:
+    """Return the owner cache's store, assembling it at most once.
+
+    Admission and registration are one atomic step under the app lock:
+    ``MAX_PROJECTS`` counts published stores plus in-flight assemblies, so
+    concurrent distinct owners cannot each pass admission while nothing is
+    published yet. Concurrent or retried ensures for the same owner join
+    the registered in-flight assembly task instead of constructing a second
+    ChunkStore against the same cache.
+    """
+    while True:
+        async with app_ctx._lock:
+            store = app_ctx._stores.get(owner_str)
+            if store is not None:
+                return store
+            task = app_ctx._store_assemblies.get(owner_str)
+            if task is None:
+                # MAX_PROJECTS counts caches (owners), not worktree views,
+                # and counts an in-flight assembly as soon as it reserves.
+                count = len(app_ctx._stores) + len(app_ctx._store_assemblies)
+                if count >= MAX_PROJECTS:
+                    return _error_response(
+                        f"Maximum project limit ({MAX_PROJECTS}) reached. "
+                        "Restart the server or use the CLI to evict unused projects."
+                    )
+                if count >= int(MAX_PROJECTS * 0.8):
+                    log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
+                task = asyncio.create_task(
+                    _assemble_owner_store_task(app_ctx, owner, owner_str),
+                    name=f"ensure_store:{owner_str}",
+                )
+                app_ctx._store_assemblies[owner_str] = task
+        await _join_owner_assembly(task)
 
 
 async def _ensure_project_initialized(
@@ -309,11 +411,13 @@ async def _ensure_project_initialized(
     shares its trunk's cache: the trunk's ChunkStore is opened once, and the
     worktree's state reads and writes an ``OverlayStore`` view of it.
 
-    The blocking half of initialization (store construction, overlay init,
-    meta write, indexer assembly, first table touch) runs as one
-    ``ensure_store`` job in the runtime's worker pool. The app lock stays on
-    the event loop; only the store/indexer assembly leaves it, so concurrent
-    callers are never frozen behind first-touch LanceDB I/O.
+    Both blocking phases run in the runtime's worker pool, never on the
+    event loop: the owner store's assembly (``ensure_store`` job — LanceDB
+    connect plus first table touch) is single-flight per cache, with a
+    cancelled or retried caller joining the in-flight assembly to terminal
+    completion; the checkout view's assembly (``ensure_checkout`` job —
+    overlay init, alias meta write, Indexer construction) runs per path.
+    The app lock stays on the event loop for coordination only.
 
     Returns ProjectState on success, or a ToolError dict on failure.
     """
@@ -323,66 +427,63 @@ async def _ensure_project_initialized(
     if path_key in app_ctx.projects:
         return app_ctx.projects[path_key]
 
-    # Slow path: need to create (under lock to prevent duplicate entries)
+    # The cache owner is the trunk under dedup and the path itself
+    # otherwise; checkout is BASE_CHECKOUT unless the path is a linked
+    # worktree of the owner.
+    owner, checkout = checkout_scope(project_path)
+    owner_str = str(owner)
+
     async with app_ctx._lock:
         # Double-check after acquiring lock
         if path_key in app_ctx.projects:
             return app_ctx.projects[path_key]
 
-        # The cache owner is the trunk under dedup and the path itself
-        # otherwise; checkout is BASE_CHECKOUT unless the path is a linked
-        # worktree of the owner.
-        owner, checkout = checkout_scope(project_path)
-        owner_str = str(owner)
-
-        store = app_ctx._stores.get(owner_str)
-        if store is None:
-            # Check MAX_PROJECTS limit (counts caches, not worktree views)
-            count = len(app_ctx._stores)
-            if count >= MAX_PROJECTS:
-                return _error_response(
-                    f"Maximum project limit ({MAX_PROJECTS}) reached. "
-                    "Restart the server or use the CLI to evict unused projects."
-                )
-            if count >= int(MAX_PROJECTS * 0.8):
-                log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
-
         if not app_ctx.voyage_api_key:
             return _error_response("VOYAGE_API_KEY not set.")
 
-        try:
-            # Create shared embedder on first use
-            if app_ctx.embedder is None:
-                app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
+    try:
+        # Create shared embedder on first use
+        if app_ctx.embedder is None:
+            app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
 
-            # Store/table assembly is synchronous LanceDB I/O; run it in the
-            # worker pool under the lock so concurrent callers on the loop
-            # stay responsive.
-            new_store, state = await app_ctx.runtime.run_blocking(
-                "ensure_store",
-                "_ensure_project_initialized",
-                owner_str,
-                _assemble_project_state,
-                owner,
-                owner_str,
-                checkout,
-                project_path,
-                store,
-                app_ctx.embedder,
-            )
-            if store is None:
-                app_ctx._stores[owner_str] = new_store
+        # Owner-store assembly (LanceDB connect + first table touch) is
+        # single-flight per cache and runs in the worker pool; a cancelled
+        # or retried caller joins the in-flight assembly.
+        store = await _ensure_owner_store(app_ctx, owner, owner_str)
+        if isinstance(store, dict):
+            return store
+
+        # Checkout-view assembly (overlay init, alias meta write behind a
+        # file lock, Indexer construction) is blocking I/O too: run it in
+        # the worker pool, never on the event loop.
+        state = await app_ctx.runtime.run_blocking(
+            "ensure_checkout",
+            "_ensure_project_initialized",
+            owner_str,
+            _assemble_checkout_state,
+            store,
+            checkout,
+            owner_str,
+            project_path,
+            app_ctx.embedder,
+        )
+        async with app_ctx._lock:
+            existing = app_ctx.projects.get(path_key)
+            if existing is not None:
+                return existing
             app_ctx.projects[path_key] = state
-            log.info(
-                "project_initialized",
-                project=path_key,
-                cache_owner=owner_str,
-                overlay=state.base_path is not None,
-            )
-            return state
-        except Exception as e:
-            log.exception("initialization_failed", project=path_key, error=str(e))
-            return _error_response("Failed to initialize project.")
+        log.info(
+            "project_initialized",
+            project=path_key,
+            cache_owner=owner_str,
+            overlay=state.base_path is not None,
+        )
+        return state
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        log.exception("initialization_failed", project=path_key, error=str(e))
+        return _error_response("Failed to initialize project.")
 
 
 async def _run_blocking_or_thread(
@@ -583,12 +684,12 @@ async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -
         log.warning("overlay_base_unavailable", base=base_path, error=base.get("error"))
         return True
     if not _index_in_flight(app_ctx, base_path):
-        stale, _ = await app_ctx.runtime.run_blocking(
-            "staleness_check", "_base_index_ready", base_path, _check_staleness, base
-        )
-        if not stale and not base.pending_index_files:
-            return True
         if wait:
+            stale, _ = await app_ctx.runtime.run_blocking(
+                "staleness_check", "_base_index_ready", base_path, _check_staleness, base
+            )
+            if not stale and not base.pending_index_files:
+                return True
             await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
         else:
             return await _run_budgeted_base_window(app_ctx, base_path, base)
@@ -609,31 +710,51 @@ async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -
 async def _run_budgeted_base_window(
     app_ctx: LgrepContext, base_path: str, base: ProjectState
 ) -> bool:
-    """Run at most one base index window inside ``LGREP_ENSURE_BUDGET_S``.
+    """Make the base current inside ``LGREP_ENSURE_BUDGET_S``, then defer.
 
-    The single-flight pass runs the staleness check (self-bounded by
-    ``LGREP_STALENESS_DEADLINE_S``) and one bounded window. When the budget
-    runs out first, the pass is cancelled at its next await and the
-    remaining work continues as the existing single-flight background
-    continuation, so the worktree search answers from the partial index
-    instead of timing out behind trunk work.
+    The budget covers the whole foreground pass — the staleness check
+    (including its queue wait) plus the wait for at most one base window —
+    so neither phase can consume the caller's tool timeout on its own.
+
+    The base window never runs as part of the caller: it runs as the
+    registered single-flight background reindex, and the caller only waits
+    for it. When the budget runs out, the caller stops waiting and the
+    worktree search answers from the partial index; the window keeps its
+    single-flight ownership until it physically finishes and then hands any
+    remaining files to the existing continuation. Cancelling the window at
+    the deadline would release ownership while its storage writes were
+    still running, and a second window could then interleave with them.
     """
     budget_s = float(os.environ.get("LGREP_ENSURE_BUDGET_S", DEFAULT_ENSURE_BUDGET_S))
     deadline = time.monotonic() + budget_s
-    completed = True
     try:
-        await asyncio.wait_for(
-            _auto_index_project_single_flight(app_ctx, base_path, Path(base_path)),
+        stale, _ = await asyncio.wait_for(
+            app_ctx.runtime.run_blocking(
+                "staleness_check", "_base_index_ready", base_path, _check_staleness, base
+            ),
             timeout=max(0.0, deadline - time.monotonic()),
         )
     except TimeoutError:
-        completed = False
         log.info("base_window_budget_exceeded", base=base_path, budget_s=budget_s)
-    if not completed or base.pending_index_files or _index_in_flight(app_ctx, base_path):
-        # Hand the remaining base work to the existing background
-        # continuation; it is single-flight, so this is a no-op when the
-        # window already scheduled one.
         await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+        return False
+    if not stale and not base.pending_index_files:
+        return True
+
+    await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+    owner = app_ctx._bg_reindex_tasks.get(base_path)
+    event = app_ctx._indexing_events.get(base_path)
+    try:
+        remaining = max(0.0, deadline - time.monotonic())
+        if owner is not None:
+            await asyncio.wait_for(asyncio.shield(owner), timeout=remaining)
+        elif event is not None:
+            await asyncio.wait_for(event.wait(), timeout=remaining)
+    except TimeoutError:
+        log.info("base_window_budget_exceeded", base=base_path, budget_s=budget_s)
+        return False
+    # Let the finished owner's done callback unregister it.
+    await asyncio.sleep(0)
     return not _index_in_flight(app_ctx, base_path) and not base.pending_index_files
 
 
@@ -764,6 +885,7 @@ async def _auto_index_project_single_flight(
         project=project_path,
         continue_until_complete=continue_until_complete,
     )
+    ownership_handed_off = False
     try:
         result = await _ensure_project_initialized(app_ctx, path_obj)
         if isinstance(result, dict):
@@ -785,6 +907,7 @@ async def _auto_index_project_single_flight(
                     "_auto_index_project_single_flight",
                     project_path,
                     state.indexer.compute_pending_files,
+                    lane="build",
                 )
             except Exception as e:
                 log.warning("compute_pending_files_failed", project=project_path, error=str(e))
@@ -800,8 +923,8 @@ async def _auto_index_project_single_flight(
                 # OperationCancelled, allowing the bounded executor worker
                 # thread to exit instead of holding the slot forever.
                 cancel_event = threading.Event()
-                try:
-                    window = await app_ctx.runtime.run_blocking(
+                window_job = asyncio.ensure_future(
+                    app_ctx.runtime.run_blocking(
                         "index_window",
                         "_auto_index_project_single_flight",
                         project_path,
@@ -811,8 +934,22 @@ async def _auto_index_project_single_flight(
                             )
                         ),
                         cancel_event=cancel_event,
+                        lane="build",
                     )
+                )
+                try:
+                    window = await asyncio.shield(window_job)
                     break
+                except asyncio.CancelledError:
+                    # The caller detaches now. The physical window keeps the
+                    # single-flight ownership until it stops at its next
+                    # file boundary, so no second window can interleave
+                    # with its storage writes.
+                    cancel_event.set()
+                    state.pending_index_files = pending
+                    ownership_handed_off = True
+                    _retain_ownership_until_stopped(app_ctx, project_path, event, window_job)
+                    raise
                 except OperationCancelled:
                     # Preserve whatever pending set we had before cancellation
                     # so a future continuation can resume.
@@ -898,7 +1035,29 @@ async def _auto_index_project_single_flight(
             "Failed to auto-index project on first search. Check server logs for details."
         )
     finally:
-        await _finish_single_flight_indexing(app_ctx, project_path, event)
+        if not ownership_handed_off:
+            await _finish_single_flight_indexing(app_ctx, project_path, event)
+
+
+def _retain_ownership_until_stopped(
+    app_ctx: LgrepContext, project_path: str, event: asyncio.Event, window_job: asyncio.Future
+) -> None:
+    """Release a cancelled leader's single-flight ownership only after its window stops.
+
+    The release task is tracked so shutdown can reconcile it.
+    """
+
+    async def _release() -> None:
+        try:
+            await asyncio.wait({window_job})
+            if not window_job.cancelled():
+                window_job.exception()  # retrieved; the leader already logged its cancel
+        finally:
+            await _finish_single_flight_indexing(app_ctx, project_path, event)
+
+    task = asyncio.create_task(_release(), name=f"index_owner_release:{project_path}")
+    app_ctx._index_owner_releases.add(task)
+    task.add_done_callback(app_ctx._index_owner_releases.discard)
 
 
 async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> ProjectState | dict:

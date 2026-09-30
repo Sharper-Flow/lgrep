@@ -139,6 +139,7 @@ async def index_symbols_repo(
             ),
         ),
     ] = None,
+    ctx: Context | None = None,
 ) -> IndexSymbolsRepoResult | ToolError:
     """Index symbols from a GitHub repository via the REST API (no git clone).
 
@@ -152,7 +153,24 @@ async def index_symbols_repo(
         Files indexed, symbols count, repo, and meta envelope.
     """
     t0 = time.monotonic()
-    result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
+    app_ctx = None
+    if ctx is not None:
+        app_ctx = ctx.request_context.lifespan_context
+
+    if app_ctx is not None:
+        # Parsing and persistence are synchronous tree-sitter and disk work:
+        # route them through the build lane so they cannot block the loop or
+        # occupy query threads.
+        async def _run_sync(fn, _repo=repo):
+            return await app_ctx.runtime.run_blocking(
+                "index_repo", "index_symbols_repo", _repo, fn, lane="build"
+            )
+
+        result = await _index_repo(
+            repo, ref=ref, max_files=max_files, github_token=github_token, run_sync=_run_sync
+        )
+    else:
+        result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
     if "error" in result:
         return error_response(result["error"])
     return IndexSymbolsRepoResult(

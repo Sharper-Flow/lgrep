@@ -67,6 +67,7 @@ async def index_repo(
     storage_dir: Path | str | None = None,
     max_files: int = 500,
     github_token: str | None = None,
+    run_sync=None,
 ) -> dict:
     """Index symbols from a GitHub repository via the REST API.
 
@@ -107,6 +108,11 @@ async def index_repo(
     from lgrep.parser.extractor import _extract_symbols_from_tree
     from lgrep.parser.languages import get_language_spec
 
+    if run_sync is None:
+        # Without a supervisor, parsing still leaves the event loop.
+        async def run_sync(fn):  # noqa: F811 — local default runner
+            return await asyncio.to_thread(fn)
+
     headers = {"Accept": "application/vnd.github.v3+json"}
     resolved_token = _resolve_github_token(github_token)
     if resolved_token:
@@ -115,9 +121,7 @@ async def index_repo(
     store = IndexStore(storage_dir=storage_dir)
     repo_key = f"github:{repo}@{ref}"
 
-    files_dict: dict[str, str] = {}
-    symbols_dict: dict[str, dict] = {}
-    files_processed = 0
+    fetched: list[tuple[str, object, bytes]] = []
     truncated = False
     truncation_reason: str | None = None
 
@@ -183,8 +187,7 @@ async def index_repo(
                     "index_repo_deadline_reached",
                     repo=repo,
                     budget_s=round(budget_s, 2),
-                    files_indexed=files_processed,
-                    symbols_indexed=len(symbols_dict),
+                    files_fetched=len(fetched),
                     files_unattempted=len(eligible) - wave_start,
                 )
                 break
@@ -206,41 +209,51 @@ async def index_repo(
                     continue
 
                 _file_path, content = result
-                file_hash = hashlib.sha256(content).hexdigest()
-                files_dict[file_path] = file_hash
+                fetched.append((file_path, spec, content))
 
-                # Parse symbols
-                try:
-                    parser = get_parser(spec.name)
-                    tree = parser.parse(content)
-                    syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
-                    for sym in syms:
-                        symbol_id = sym.id
-                        if symbol_id in symbols_dict:
-                            symbol_id = f"{sym.id}@{sym.start_byte}"
+    # Parsing and persistence are synchronous tree-sitter and disk work;
+    # they run through the caller's runner so a supervised server puts
+    # them on the build lane and a bare coroutine still leaves the loop.
+    files_processed = len(fetched)
 
-                        symbols_dict[symbol_id] = {
-                            "id": symbol_id,
-                            "name": sym.name,
-                            "kind": sym.kind,
-                            "file_path": sym.file_path,
-                            "start_byte": sym.start_byte,
-                            "end_byte": sym.end_byte,
-                            "docstring": sym.docstring,
-                            "decorators": sym.decorators,
-                            "parent": sym.parent,
-                        }
-                except Exception as e:
-                    log.warning("github_parse_failed", file=file_path, error=str(e))
+    def _parse_and_persist():
+        files_dict: dict[str, str] = {}
+        symbols_dict: dict[str, dict] = {}
+        for file_path, spec, content in fetched:
+            file_hash = hashlib.sha256(content).hexdigest()
+            files_dict[file_path] = file_hash
+            try:
+                parser = get_parser(spec.name)
+                tree = parser.parse(content)
+                syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
+                for sym in syms:
+                    symbol_id = sym.id
+                    if symbol_id in symbols_dict:
+                        symbol_id = f"{sym.id}@{sym.start_byte}"
 
-                files_processed += 1
+                    symbols_dict[symbol_id] = {
+                        "id": symbol_id,
+                        "name": sym.name,
+                        "kind": sym.kind,
+                        "file_path": sym.file_path,
+                        "start_byte": sym.start_byte,
+                        "end_byte": sym.end_byte,
+                        "docstring": sym.docstring,
+                        "decorators": sym.decorators,
+                        "parent": sym.parent,
+                    }
+            except Exception as e:
+                log.warning("github_parse_failed", file=file_path, error=str(e))
 
-    index = CodeIndex(
-        repo_path=repo_key,
-        files=files_dict,
-        symbols=symbols_dict,
-    )
-    store.save(index)
+        index = CodeIndex(
+            repo_path=repo_key,
+            files=files_dict,
+            symbols=symbols_dict,
+        )
+        store.save(index)
+        return symbols_dict
+
+    symbols_dict = await run_sync(_parse_and_persist)
 
     return {
         "repo": repo,

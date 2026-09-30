@@ -209,7 +209,9 @@ class TestSymbolToolResponses:
         calls = []
 
         class RuntimeStub:
-            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+            async def run_blocking(
+                self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
+            ):
                 calls.append(
                     {
                         "kind": kind,
@@ -314,7 +316,9 @@ class TestSymbolToolResponses:
         calls = []
 
         class RuntimeStub:
-            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+            async def run_blocking(
+                self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
+            ):
                 calls.append({"kind": kind, "caller": caller, "project": project})
                 return fn_to_run(*args, **kwargs)
 
@@ -391,7 +395,9 @@ class TestPruneSymbolsTool:
         """Build a fake MCP Context with the given transport kind."""
 
         class RuntimeStub:
-            async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+            async def run_blocking(
+                self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
+            ):
                 return fn_to_run(*args, **kwargs)
 
         return SimpleNamespace(
@@ -643,7 +649,9 @@ def offline_runtime_ctx(monkeypatch):
     """
 
     class RuntimeStub:
-        async def run_blocking(self, kind, caller, project, fn_to_run, *args, **kwargs):
+        async def run_blocking(
+            self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
+        ):
             return fn_to_run(*args, **kwargs)
 
     fake_ctx = SimpleNamespace(
