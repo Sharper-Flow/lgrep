@@ -166,10 +166,13 @@ async def _shutdown(ctx: LgrepContext) -> None:
     """Gracefully shut down all projects: stop watchers and release resources."""
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
 
-    # Cancel outstanding background reindexes; await terminal state so
-    # cooperative cancellation propagates through run_blocking and the bounded
-    # executor's worker thread reaches a terminal status before we tear down.
-    tasks = list(ctx._bg_reindex_tasks.values())
+    # Cancel outstanding background reindexes and in-flight owner-store
+    # assemblies; await terminal state so cooperative cancellation
+    # propagates through run_blocking and the bounded executor's worker
+    # thread reaches a terminal status before we tear down. A cancelled
+    # assembly task never reaches its publish step, so no store can appear
+    # in the context after shutdown returns.
+    tasks = list(ctx._bg_reindex_tasks.values()) + list(ctx._store_assemblies.values())
     for t in tasks:
         t.cancel()
     if tasks:
@@ -181,6 +184,7 @@ async def _shutdown(ctx: LgrepContext) -> None:
         while time.monotonic() < deadline and ctx.runtime.snapshot_active_jobs():
             await asyncio.sleep(0.01)
     ctx._bg_reindex_tasks.clear()
+    ctx._store_assemblies.clear()
 
     for proj_path, state in ctx.projects.items():
         _stop_watcher(state, proj_path)
@@ -334,26 +338,15 @@ async def _assemble_owner_store_task(
 
 
 async def _join_owner_assembly(task: asyncio.Task) -> None:
-    """Wait for an owner assembly; cancellations never reach it.
+    """Wait for an owner assembly without ever cancelling it.
 
-    Every await is shielded, so cancelling the waiter — once or repeatedly —
-    cannot cancel the shared assembly. The waiter stays until the assembly
-    job is physically terminal (store published or assembly failed) and only
-    then re-raises its own cancellation. A retry arriving mid-assembly
-    therefore always finds the registry entry or the published store, never
-    a half-open cache.
+    The await is shielded, so a cancelled waiter detaches promptly — the
+    caller's own timeout is never extended by the shared assembly — while
+    the assembly keeps running under its registry entry. A retry arriving
+    mid-assembly therefore always finds the registry entry or the
+    published store, never a half-open cache.
     """
-    cancelled = False
-    while True:
-        try:
-            await asyncio.shield(task)
-            break
-        except asyncio.CancelledError:
-            cancelled = True
-            if task.done():
-                break
-    if cancelled:
-        raise asyncio.CancelledError
+    await asyncio.shield(task)
 
 
 async def _ensure_owner_store(

@@ -136,8 +136,8 @@ async def test_ensure_store_failure_registers_nothing(tmp_path, monkeypatch):
     ctx.runtime.shutdown(cancel_futures=True)
 
 
-async def test_cancelled_ensure_joins_assembly_before_propagating(tmp_path, monkeypatch):
-    """A cancelled caller waits for its assembly to publish, then re-raises."""
+async def test_cancelled_ensure_detaches_promptly_and_assembly_publishes(tmp_path, monkeypatch):
+    """A cancelled caller returns at once; the shared assembly still publishes."""
     opened, release = threading.Event(), threading.Event()
     constructions: list = []
     monkeypatch.setattr(
@@ -153,11 +153,16 @@ async def test_cancelled_ensure_joins_assembly_before_propagating(tmp_path, monk
     first = asyncio.create_task(_ensure_project_initialized(ctx, project))
     await _wait_for_event(opened)
     first.cancel()
-    release.set()
+    start = time.monotonic()
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(first, timeout=5)
+    assert time.monotonic() - start < 0.5, "cancelled caller waited for the assembly"
 
-    assert len(ctx._stores) == 1, "joined assembly did not publish the store"
+    release.set()
+    deadline = time.monotonic() + 5
+    while not ctx._stores and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    assert len(ctx._stores) == 1, "detached assembly never published the store"
     assert ctx._store_assemblies == {}
     ctx.runtime.shutdown(cancel_futures=True)
 
@@ -300,3 +305,36 @@ async def test_concurrent_owners_obey_project_limit(tmp_path, monkeypatch):
     assert isinstance(result_b, dict) and "Maximum project limit" in result_b["error"]
     assert len(ctx._stores) == 1
     ctx.runtime.shutdown(cancel_futures=True)
+
+
+async def test_shutdown_cancels_and_reconciles_in_flight_assemblies(tmp_path, monkeypatch):
+    """Shutdown owns outstanding assemblies; nothing publishes after teardown."""
+    from lgrep.server.lifecycle import _shutdown
+
+    opened, release = threading.Event(), threading.Event()
+    constructions: list = []
+    monkeypatch.setattr(
+        "lgrep.server.lifecycle.ChunkStore", _make_slow_store(opened, release, constructions)
+    )
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    ensure_task = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await _wait_for_event(opened)
+    ensure_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(ensure_task, timeout=5)
+    assert ctx._store_assemblies, "no in-flight assembly to reconcile"
+
+    await _shutdown(ctx)
+
+    assert ctx._store_assemblies == {}
+    assert ctx._stores == {}
+
+    release.set()
+    await asyncio.sleep(0.1)
+    assert ctx._stores == {}, "store published after shutdown returned"
