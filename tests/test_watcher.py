@@ -48,7 +48,7 @@ class TestFileWatcher:
 
         runtime = MagicMock()
 
-        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+        async def run_blocking(kind, caller, project, fn, *args, lane="query", **kwargs):
             calls.append((kind, caller, project))
             return fn(*args, **kwargs)
 
@@ -73,7 +73,7 @@ class TestFileWatcher:
 
         runtime = MagicMock()
 
-        async def run_blocking(kind, caller, project, fn, *args, **kwargs):
+        async def run_blocking(kind, caller, project, fn, *args, lane="query", **kwargs):
             calls.append((kind, caller, project))
             return fn(*args, **kwargs)
 

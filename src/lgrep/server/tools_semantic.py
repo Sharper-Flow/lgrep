@@ -322,7 +322,12 @@ async def index_semantic(
             base = await _ensure_project_initialized(app_ctx, Path(state.base_path))
             if not isinstance(base, dict):
                 base_status = await _run_blocking(
-                    app_ctx, "index_all", "index_semantic", state.base_path, base.indexer.index_all
+                    app_ctx,
+                    "index_all",
+                    "index_semantic",
+                    state.base_path,
+                    base.indexer.index_all,
+                    lane="build",
                 )
                 base_tokens = base_status.total_tokens
                 base.latest_indexed_at = None
@@ -332,6 +337,7 @@ async def index_semantic(
             "index_semantic",
             str(project_path),
             state.indexer.index_all,
+            lane="build",
         )
         # Refresh cached freshness timestamp so staleness pre-flight sees the
         # just-rebuilt index on the next search call.

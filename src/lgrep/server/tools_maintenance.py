@@ -52,6 +52,9 @@ async def _run_blocking(
             *args,
             **kwargs,
         )
+    # The supervisor owns the lane parameter; the thread fallback has no
+    # executor split, so it must not reach the wrapped function.
+    kwargs.pop("lane", None)
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
@@ -131,6 +134,7 @@ async def prune_orphans(
         _prune_orphans,
         dry_run=effective_dry_run,
         active_set=active_set,
+        lane="build",
     )
     result.setdefault("refused_reason", refused_reason)
     result["_meta"] = make_meta(t0, "prune_orphans")
@@ -186,6 +190,7 @@ async def prune_symbols(
         _prune_symbols,
         dry_run=effective_dry_run,
         active_set=active_set,
+        lane="build",
     )
     result.setdefault("refused_reason", refused_reason)
     result["_meta"] = make_meta(t0, "prune_symbols")

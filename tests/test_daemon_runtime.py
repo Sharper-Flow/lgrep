@@ -177,11 +177,11 @@ async def test_never_started_job_reports_null_queue_and_run_ms():
 
 
 @pytest.mark.asyncio
-async def test_build_kind_jobs_run_on_dedicated_build_lane():
+async def test_build_lane_jobs_run_on_dedicated_executor():
     supervisor = RuntimeSupervisor(max_workers=2, max_build_workers=2, history_limit=10)
 
     build_thread = await supervisor.run_blocking(
-        "index_window", "test", None, threading.current_thread
+        "index_window", "test", None, threading.current_thread, lane="build"
     )
     query_thread = await supervisor.run_blocking(
         "search_vector", "test", None, threading.current_thread
@@ -202,14 +202,16 @@ async def test_query_completes_while_build_lane_saturated():
         started.set()
         release.wait(timeout=5)
 
-    first = asyncio.create_task(supervisor.run_blocking("index_window", "test", None, hold_build))
+    first = asyncio.create_task(
+        supervisor.run_blocking("index_window", "test", None, hold_build, lane="build")
+    )
     deadline = time.monotonic() + 5
     while not started.is_set() and time.monotonic() < deadline:
         await asyncio.sleep(0.001)
     assert started.is_set(), "build job never started"
 
     queued = asyncio.create_task(
-        supervisor.run_blocking("index_all", "test", None, lambda: "built")
+        supervisor.run_blocking("index_all", "test", None, lambda: "built", lane="build")
     )
     await asyncio.sleep(0.05)
     assert not queued.done(), "queued build job should wait behind the running one"
@@ -230,7 +232,7 @@ async def test_query_completes_while_build_lane_saturated():
 
 
 @pytest.mark.asyncio
-async def test_lane_param_overrides_kind_routing():
+async def test_lane_param_selects_executor():
     supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
 
     forced_build = await supervisor.run_blocking(
@@ -258,7 +260,9 @@ async def test_job_event_carries_lane():
     supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
 
     with capture_logs() as logs:
-        await supervisor.run_blocking("index_all", "test", project="/tmp/project", fn=lambda: "ok")
+        await supervisor.run_blocking(
+            "index_all", "test", project="/tmp/project", fn=lambda: "ok", lane="build"
+        )
     event = _job_events(logs)[0]
     assert event["lane"] == "build"
 
@@ -275,7 +279,9 @@ async def test_job_snapshot_includes_lane():
     supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
     release = threading.Event()
     task = asyncio.create_task(
-        supervisor.run_blocking("index_window", "test", None, lambda: release.wait(timeout=2))
+        supervisor.run_blocking(
+            "index_window", "test", None, lambda: release.wait(timeout=2), lane="build"
+        )
     )
     await asyncio.sleep(0.05)
 
