@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.6)
+
+- fix(server): single-flight checkout assembly per path (#31)
+- docs: update changelog for v3.6.5
+
 ## 2026-09-30 (v3.6.5)
 
 - fix(server): a closed context publishes no store or project state (#30)
