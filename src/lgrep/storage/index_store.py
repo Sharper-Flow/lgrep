@@ -50,6 +50,12 @@ class CodeIndex:
         symbols: Dict mapping symbol IDs to symbol metadata dicts
         occurrences: Dict mapping identifier names to lists of occurrence dicts
         version: Index format version (for future compatibility)
+        walk_truncated: True when the indexing walk stopped at max_files
+            before covering the whole tree, so ``files`` is a partial
+            projection of the working tree and file-set equality with a
+            fresh walk can never hold. Freshness gates use this to ignore
+            un-indexed additions on truncated indexes. Absent on legacy
+            index bodies, which load as False (complete).
     """
 
     repo_path: str
@@ -57,6 +63,7 @@ class CodeIndex:
     symbols: dict[str, dict]  # symbol_id → symbol metadata
     occurrences: dict[str, list[dict]] = field(default_factory=dict)  # name → occurrences
     version: str = "2.0"
+    walk_truncated: bool = False
 
 
 def normalize_repo_key(repo_path: str) -> str:
@@ -316,6 +323,7 @@ class IndexStore:
                 "symbols": index.symbols,
                 "occurrences": index.occurrences,
                 "version": index.version,
+                "walk_truncated": index.walk_truncated,
             }
             # Compact serialization. Measured on the real symbol store,
             # pretty-print padding was 19.1% of stored bytes (~480MB of 2.5GB).
@@ -397,6 +405,10 @@ class IndexStore:
                 symbols=data.get("symbols", {}),
                 occurrences=data.get("occurrences", {}),
                 version=data.get("version", "2.0"),
+                # Legacy bodies carry no marker and load as complete; the
+                # freshness gate then refreshes them once, and the refreshed
+                # save lands the marker.
+                walk_truncated=bool(data.get("walk_truncated", False)),
             )
             self._cache[index_file] = (stat.st_mtime_ns, stat.st_size, index)
             return index

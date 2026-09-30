@@ -70,6 +70,36 @@ class TestIndexStoreAtomicSaveLoad:
         # File must exist
         assert any(tmp_path.iterdir()), "save() must create at least one file"
 
+    def test_walk_truncated_round_trips_and_defaults_false(self, tmp_path):
+        """The truncation marker must persist, and legacy bodies load as complete."""
+        import json
+
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+
+        store = IndexStore(storage_dir=tmp_path)
+        store.save(
+            CodeIndex(repo_path="/repo/truncated", files={}, symbols={}, walk_truncated=True)
+        )
+        loaded = store.load("/repo/truncated")
+        assert loaded is not None
+        assert loaded.walk_truncated is True
+
+        store.save(CodeIndex(repo_path="/repo/complete", files={}, symbols={}))
+        loaded = store.load("/repo/complete")
+        assert loaded is not None
+        assert loaded.walk_truncated is False
+
+        # A body saved before the marker existed must load as complete.
+        index_file = store._index_path("/repo/legacy")
+        store.save(CodeIndex(repo_path="/repo/legacy", files={}, symbols={}))
+        data = json.loads(index_file.read_text(encoding="utf-8"))
+        data.pop("walk_truncated", None)
+        index_file.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+        IndexStore._cache.pop(index_file, None)
+        loaded = store.load("/repo/legacy")
+        assert loaded is not None
+        assert loaded.walk_truncated is False
+
     def test_load_returns_saved_index(self, tmp_path):
         """load() must return the same index that was saved."""
         from lgrep.storage.index_store import CodeIndex, IndexStore
