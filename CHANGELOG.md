@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.5)
+
+- fix(server): a closed context publishes no store or project state (#30)
+- docs: update changelog for v3.6.4
+
 ## 2026-09-30 (v3.6.4)
 
 - Cover staleness in the ensure budget; single-flight owner assembly; explicit build lane (#29)
