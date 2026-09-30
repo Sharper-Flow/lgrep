@@ -1841,6 +1841,8 @@ class TestBackgroundReindex:
             elapsed = _time.monotonic() - start
 
             assert "error" not in response, response
+            assert response["is_stale"] is True, response
+            assert response["_meta"]["tool"] == "search_semantic", response
             assert elapsed < 0.3, f"Search took {elapsed:.2f}s; should not await reindex"
             assert index_started.is_set(), "index_window should have started in background"
             assert project_path in app_ctx._bg_reindex_tasks
@@ -1899,4 +1901,6 @@ class TestBackgroundReindex:
         state.indexer.index_all.reset_mock()
         response2 = await lgrep_search(query="anything", path=project_path, ctx=mock_ctx)
         assert "error" not in response2, response2
+        assert response2["is_stale"] is False, response2
+        assert response2["_meta"]["tool"] == "search_semantic", response2
         state.indexer.index_all.assert_not_called()

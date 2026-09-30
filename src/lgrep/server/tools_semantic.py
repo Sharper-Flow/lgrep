@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -33,6 +34,7 @@ from lgrep.server.responses import (
     error_response,
 )
 from lgrep.storage import has_disk_cache, open_checkout_store
+from lgrep.tools._meta import make_meta
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
@@ -100,6 +102,7 @@ async def _execute_search(
     include_content: bool = False,
 ) -> SearchSemanticResult | ToolError:
     """Run embedding + storage search and return structured result."""
+    t0 = time.monotonic()
     if app_ctx.embedder is None:
         return error_response("VOYAGE_API_KEY not set. Cannot perform semantic search.")
     try:
@@ -187,6 +190,8 @@ async def _execute_search(
             query=query,
             path=project_path,
             engine="hybrid" if hybrid else "vector",
+            is_stale=stale,
+            _meta=make_meta(t0, "search_semantic"),
         )
     except Exception as e:
         log.exception("search_failed", project=project_path, error=str(e))
