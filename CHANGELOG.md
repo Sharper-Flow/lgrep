@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.4)
+
+- Cover staleness in the ensure budget; single-flight owner assembly; explicit build lane (#29)
+- docs: update changelog for v3.6.3
+
 ## 2026-09-30 (v3.6.3)
 
 - perf(server): budget worktree ensure work; move store assembly off the loop; add build lane (#28)
