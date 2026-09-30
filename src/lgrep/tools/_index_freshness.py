@@ -24,12 +24,26 @@ def auto_refresh_enabled() -> bool:
     return os.environ.get("LGREP_AUTO_REFRESH", "1") != "0"
 
 
-def _index_is_behind(root: Path, index_files: dict[str, str], indexed_at: float) -> bool:
+def _index_is_behind(
+    root: Path,
+    index_files: dict[str, str],
+    indexed_at: float,
+    walk_truncated: bool,
+) -> bool:
     """Compare the walked working tree against the index in one pass.
 
     Fires when any source file is newer than the last index window closed
-    (mtime branch) or when the walked file set differs from the indexed file
-    set (set branch — the only signal for deletions, which change no mtime).
+    (mtime branch) or when the index cannot account for the walked tree
+    (set branch). The set branch differs by index kind:
+
+    - Complete index (the marker absent or False): any set difference is
+      staleness — additions, or deletions the refresh will prune.
+    - Truncated index (the walk stopped at max_files): the un-indexed
+      remainder makes the set difference permanent, so additions alone
+      never fire — otherwise every query on a repo past max_files would
+      re-index and re-save an unchanged index forever. Only indexed
+      entries confirmed missing on disk (deletions) count as staleness;
+      the refresher prunes confirmed deletions even on truncated walks.
     """
     from lgrep.discovery import FileDiscovery
 
@@ -45,7 +59,11 @@ def _index_is_behind(root: Path, index_files: dict[str, str], indexed_at: float)
         walked.add(rel_path)
         if mtime > indexed_at:
             return True
-    return walked != set(index_files)
+    if walked == set(index_files):
+        return False
+    if not walk_truncated:
+        return True
+    return any(not (root / rel_path).exists() for rel_path in set(index_files) - walked)
 
 
 def refresh_stale_index(repo_path: str, storage_dir: Path | str | None = None) -> dict | None:
@@ -77,7 +95,12 @@ def refresh_stale_index(repo_path: str, storage_dir: Path | str | None = None) -
         return None
 
     try:
-        behind = _index_is_behind(root, index.files, indexed_at)
+        behind = _index_is_behind(
+            root,
+            index.files,
+            indexed_at,
+            walk_truncated=index.walk_truncated,
+        )
     except OSError as e:
         log.warning("index_freshness_check_failed", repo=repo_key, error=str(e))
         return None

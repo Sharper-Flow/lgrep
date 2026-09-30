@@ -203,12 +203,22 @@ def index_folder(
             files_processed += 1
 
         # Detect files that disappeared from disk since the last index and prune
-        # them. Only safe to do when we walked the full tree — if max_files
-        # truncated the walk, unscanned files would falsely appear "deleted".
+        # them. On a complete walk the set difference against the previous index
+        # is exact. A truncated walk must not use that difference — unscanned
+        # files would falsely appear "deleted" — so it prunes only indexed
+        # entries confirmed missing on disk, which leaves out-of-window entries
+        # intact and lets the freshness gate's deletion branch settle.
         files_deleted = 0
-        if incremental and not walk_truncated:
-            changes = store.detect_changes(resolved_root, walked_files)
-            deleted_set = set(changes.get("deleted", []))
+        if incremental:
+            if walk_truncated:
+                deleted_set = {
+                    path
+                    for path in existing_files.keys() - walked_files.keys()
+                    if not (root / path).exists()
+                }
+            else:
+                changes = store.detect_changes(resolved_root, walked_files)
+                deleted_set = set(changes.get("deleted", []))
             if deleted_set:
                 for path in deleted_set:
                     files_dict.pop(path, None)
@@ -230,6 +240,7 @@ def index_folder(
             symbols=symbols_dict,
             occurrences=occurrences_dict,
             version=_INDEX_VERSION,
+            walk_truncated=walk_truncated,
         )
         store.save(index)
 
@@ -244,6 +255,7 @@ def index_folder(
         occurrences=occurrence_count,
         incremental=incremental,
         refreshed_occurrences=needs_occurrence_refresh,
+        walk_truncated=walk_truncated,
     )
 
     return {
