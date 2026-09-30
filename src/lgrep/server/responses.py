@@ -55,6 +55,11 @@ class SearchSemanticResult(TypedDict):
       - ``path``: the project path the search ran against.
       - ``engine``: enum — ``"hybrid"`` when the handler ran a hybrid
         (vector + keyword) search, ``"vector"`` when vector-only.
+      - ``is_stale``: True when the staleness pre-flight confirmed the
+        served index lags the on-disk files (a background reindex was
+        scheduled); False on a fresh index.
+      - ``_meta``: canonical timing envelope produced by
+        ``lgrep.tools._meta.make_meta``.
     """
 
     results: list[SearchChunk]
@@ -62,6 +67,8 @@ class SearchSemanticResult(TypedDict):
     query: str
     path: str
     engine: str
+    is_stale: bool
+    _meta: _Meta
 
 
 class _SearchChunkRequired(TypedDict):

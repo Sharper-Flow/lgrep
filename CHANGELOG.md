@@ -24,6 +24,7 @@
 - fix(server): single-flight index ownership lasts until the physical window stops — the ensure budget and a cancelled caller stop waiting instead of cancelling the window, so a second window can never interleave with an abandoned window's storage writes; cancelled ensure callers detach promptly; shutdown reconciles in-flight store assemblies; `index_symbols_repo` parses and persists on the build lane
 - fix(server): a shut-down context admits no new store assembly or background reindex and publishes no store or project state, so a checkout assembly still running in a worker thread cannot repopulate the context after teardown
 - fix(server): checkout assembly is single-flight per path — concurrent or retried ensures of one path join one registered assembly (owner store, checkout view, publication) instead of each running their own `ensure_checkout` job, so cancelled retries can no longer fill the query lane with duplicate work
+- fix(server): search_semantic now surfaces staleness — the response carries an is_stale flag set from the staleness pre-flight and the canonical _meta timing envelope, so answers served from a stale or partial index are visible to the caller
 
 ## 2026-09-30 (v3.6.2)
 
