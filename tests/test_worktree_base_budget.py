@@ -106,10 +106,20 @@ def _register_base(ctx: LgrepContext, base_path: Path, mode: str) -> ProjectStat
 
 
 async def _cleanup(ctx: LgrepContext) -> None:
+    """Cancel this test's tasks and wait for its executor jobs to finish.
+
+    A budget-abandoned job keeps running in its worker thread and logs
+    ``runtime_job_finished`` when it ends. Returning before that lets the
+    event leak into a later test's captured logs.
+    """
     for task in list(ctx._bg_reindex_tasks.values()):
         task.cancel()
     if ctx._bg_reindex_tasks:
         await asyncio.gather(*ctx._bg_reindex_tasks.values(), return_exceptions=True)
+    deadline = time.monotonic() + 5.0
+    while ctx.runtime.snapshot_active_jobs():
+        assert time.monotonic() < deadline, "test-owned executor jobs never finished"
+        await asyncio.sleep(0.01)
     ctx.runtime.shutdown(cancel_futures=True)
 
 
