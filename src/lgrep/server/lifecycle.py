@@ -7,7 +7,7 @@ import hashlib
 import os
 import threading
 import time
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -279,10 +279,42 @@ def _assemble_owner_store(owner: Path, owner_str: str) -> ChunkStore:
     return store
 
 
+def _assemble_checkout_state(
+    store: ChunkStore,
+    checkout: str,
+    owner_str: str,
+    project_path: Path,
+    embedder: VoyageEmbedder,
+) -> ProjectState:
+    """Assemble one checkout's ProjectState view of an owner store.
+
+    Runs inside an ``ensure_checkout`` job on the worker pool:
+    ``for_checkout`` reads the overlay-state json, the worktree alias meta
+    write takes a blocking ``LOCK_EX`` file lock, Indexer construction
+    walks discovery, and the first table touch may yet happen for a
+    checkout opened after the owner store published. None of that may run
+    on the event loop.
+    """
+    db = store.for_checkout(checkout)
+    base_path = None
+    if checkout != BASE_CHECKOUT:
+        base_path = owner_str
+        write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
+    indexer = Indexer(project_path=project_path, storage=db, embedder=embedder)
+    state = ProjectState(db=db, indexer=indexer, base_path=base_path)
+    _ = db.table
+    return state
+
+
 async def _assemble_owner_store_task(
     app_ctx: LgrepContext, owner: Path, owner_str: str
 ) -> ChunkStore:
-    """Assemble the owner store, publish it, and clear the registry entry."""
+    """Assemble the owner store, publish it, and clear the registry entry.
+
+    The registry entry is retained until the assembly job is physically
+    terminal, so a retry always finds either this entry or the published
+    store — never a half-open cache.
+    """
     try:
         store = await app_ctx.runtime.run_blocking(
             "ensure_store",
@@ -302,28 +334,39 @@ async def _assemble_owner_store_task(
 
 
 async def _join_owner_assembly(task: asyncio.Task) -> None:
-    """Wait for an owner assembly; a cancelled caller still joins to terminal.
+    """Wait for an owner assembly; cancellations never reach it.
 
-    Cancelling the waiter does not cancel the shared assembly. The waiter
-    joins the running task to completion first — so the store either
-    publishes or the assembly fails — and only then re-raises the caller's
-    cancellation. A retry arriving mid-assembly therefore always finds the
-    registry entry or the published store, never a half-open cache.
+    Every await is shielded, so cancelling the waiter — once or repeatedly —
+    cannot cancel the shared assembly. The waiter stays until the assembly
+    job is physically terminal (store published or assembly failed) and only
+    then re-raises its own cancellation. A retry arriving mid-assembly
+    therefore always finds the registry entry or the published store, never
+    a half-open cache.
     """
-    try:
-        await asyncio.shield(task)
-    except asyncio.CancelledError:
-        with suppress(BaseException):
-            await task
-        raise
+    cancelled = False
+    while True:
+        try:
+            await asyncio.shield(task)
+            break
+        except asyncio.CancelledError:
+            cancelled = True
+            if task.done():
+                break
+    if cancelled:
+        raise asyncio.CancelledError
 
 
-async def _ensure_owner_store(app_ctx: LgrepContext, owner: Path, owner_str: str) -> ChunkStore:
+async def _ensure_owner_store(
+    app_ctx: LgrepContext, owner: Path, owner_str: str
+) -> ChunkStore | dict:
     """Return the owner cache's store, assembling it at most once.
 
-    Concurrent or retried ensures for the same owner join the registered
-    in-flight assembly task instead of constructing a second ChunkStore
-    against the same cache.
+    Admission and registration are one atomic step under the app lock:
+    ``MAX_PROJECTS`` counts published stores plus in-flight assemblies, so
+    concurrent distinct owners cannot each pass admission while nothing is
+    published yet. Concurrent or retried ensures for the same owner join
+    the registered in-flight assembly task instead of constructing a second
+    ChunkStore against the same cache.
     """
     while True:
         async with app_ctx._lock:
@@ -332,6 +375,16 @@ async def _ensure_owner_store(app_ctx: LgrepContext, owner: Path, owner_str: str
                 return store
             task = app_ctx._store_assemblies.get(owner_str)
             if task is None:
+                # MAX_PROJECTS counts caches (owners), not worktree views,
+                # and counts an in-flight assembly as soon as it reserves.
+                count = len(app_ctx._stores) + len(app_ctx._store_assemblies)
+                if count >= MAX_PROJECTS:
+                    return _error_response(
+                        f"Maximum project limit ({MAX_PROJECTS}) reached. "
+                        "Restart the server or use the CLI to evict unused projects."
+                    )
+                if count >= int(MAX_PROJECTS * 0.8):
+                    log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
                 task = asyncio.create_task(
                     _assemble_owner_store_task(app_ctx, owner, owner_str),
                     name=f"ensure_store:{owner_str}",
@@ -353,12 +406,13 @@ async def _ensure_project_initialized(
     shares its trunk's cache: the trunk's ChunkStore is opened once, and the
     worktree's state reads and writes an ``OverlayStore`` view of it.
 
-    The owner store's assembly (ChunkStore construction plus the first table
-    touch) runs as one ``ensure_store`` job in the runtime's worker pool,
-    single-flight per cache: a cancelled caller joins its assembly to
-    terminal completion, and a retried caller joins the in-flight assembly
-    instead of racing a second store open against the same cache. The app
-    lock stays on the event loop; only the store assembly leaves it.
+    Both blocking phases run in the runtime's worker pool, never on the
+    event loop: the owner store's assembly (``ensure_store`` job — LanceDB
+    connect plus first table touch) is single-flight per cache, with a
+    cancelled or retried caller joining the in-flight assembly to terminal
+    completion; the checkout view's assembly (``ensure_checkout`` job —
+    overlay init, alias meta write, Indexer construction) runs per path.
+    The app lock stays on the event loop for coordination only.
 
     Returns ProjectState on success, or a ToolError dict on failure.
     """
@@ -379,17 +433,6 @@ async def _ensure_project_initialized(
         if path_key in app_ctx.projects:
             return app_ctx.projects[path_key]
 
-        if owner_str not in app_ctx._stores:
-            # Check MAX_PROJECTS limit (counts caches, not worktree views)
-            count = len(app_ctx._stores)
-            if count >= MAX_PROJECTS:
-                return _error_response(
-                    f"Maximum project limit ({MAX_PROJECTS}) reached. "
-                    "Restart the server or use the CLI to evict unused projects."
-                )
-            if count >= int(MAX_PROJECTS * 0.8):
-                log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
-
         if not app_ctx.voyage_api_key:
             return _error_response("VOYAGE_API_KEY not set.")
 
@@ -402,20 +445,23 @@ async def _ensure_project_initialized(
         # single-flight per cache and runs in the worker pool; a cancelled
         # or retried caller joins the in-flight assembly.
         store = await _ensure_owner_store(app_ctx, owner, owner_str)
+        if isinstance(store, dict):
+            return store
 
-        # Checkout-level assembly is small (overlay-state json read, alias
-        # meta write, Indexer construction) and stays on the loop.
-        db = store.for_checkout(checkout)
-        base_path = None
-        if checkout != BASE_CHECKOUT:
-            base_path = owner_str
-            write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
-        indexer = Indexer(
-            project_path=project_path,
-            storage=db,
-            embedder=app_ctx.embedder,
+        # Checkout-view assembly (overlay init, alias meta write behind a
+        # file lock, Indexer construction) is blocking I/O too: run it in
+        # the worker pool, never on the event loop.
+        state = await app_ctx.runtime.run_blocking(
+            "ensure_checkout",
+            "_ensure_project_initialized",
+            owner_str,
+            _assemble_checkout_state,
+            store,
+            checkout,
+            owner_str,
+            project_path,
+            app_ctx.embedder,
         )
-        state = ProjectState(db=db, indexer=indexer, base_path=base_path)
         async with app_ctx._lock:
             existing = app_ctx.projects.get(path_key)
             if existing is not None:
@@ -425,7 +471,7 @@ async def _ensure_project_initialized(
             "project_initialized",
             project=path_key,
             cache_owner=owner_str,
-            overlay=base_path is not None,
+            overlay=state.base_path is not None,
         )
         return state
     except asyncio.CancelledError:

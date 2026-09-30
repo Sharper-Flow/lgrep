@@ -89,7 +89,7 @@ async def test_slow_store_open_keeps_loop_responsive(tmp_path, monkeypatch):
     assert str(project) in ctx.projects
     assert len(ctx._stores) == 1
     events = _job_events(logs)
-    assert [e["kind"] for e in events] == ["ensure_store"]
+    assert [e["kind"] for e in events] == ["ensure_store", "ensure_checkout"]
     assert events[0]["lane"] == "query"
     ctx.runtime.shutdown(cancel_futures=True)
 
@@ -111,7 +111,7 @@ async def test_ensure_store_real_assembly_registers_store_and_opens_table(tmp_pa
     assert len(ctx._stores) == 1
     assert result.db._table is not None, "first table touch did not happen during ensure"
     kinds = [e["kind"] for e in _job_events(logs)]
-    assert kinds == ["ensure_store"]
+    assert kinds == ["ensure_store", "ensure_checkout"]
     ctx.runtime.shutdown(cancel_futures=True)
 
 
@@ -191,5 +191,112 @@ async def test_retry_during_assembly_joins_instead_of_duplicating(tmp_path, monk
 
     assert isinstance(result, ProjectState)
     assert len(constructions) == 1
+    assert len(ctx._stores) == 1
+    ctx.runtime.shutdown(cancel_futures=True)
+
+
+async def test_checkout_assembly_stays_off_loop(tmp_path, monkeypatch):
+    """Overlay init, the alias meta write, and Indexer run off the loop."""
+    import lgrep.server.lifecycle as lifecycle
+
+    blocked = threading.Event()
+    release = threading.Event()
+
+    class SlowIndexer:
+        def __init__(self, *args, **kwargs):
+            blocked.set()
+            release.wait(timeout=10)
+
+    monkeypatch.setattr(lifecycle, "Indexer", SlowIndexer)
+    monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 20)
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    ensure_task = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await _wait_for_event(blocked)
+
+    ticks = 0
+    end = time.monotonic() + 0.15
+    while time.monotonic() < end:
+        ticks += 1
+        await asyncio.sleep(0.001)
+
+    release.set()
+    result = await asyncio.wait_for(ensure_task, timeout=5)
+
+    assert ticks >= 10, "event loop was blocked during checkout assembly"
+    assert isinstance(result, ProjectState)
+
+
+async def test_repeated_cancellation_keeps_owner_single_flight(tmp_path, monkeypatch):
+    """A second cancellation still cannot break the owner assembly."""
+    opened, release = threading.Event(), threading.Event()
+    constructions: list = []
+    monkeypatch.setattr(
+        "lgrep.server.lifecycle.ChunkStore", _make_slow_store(opened, release, constructions)
+    )
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    first = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await _wait_for_event(opened)
+    first.cancel()
+    await asyncio.sleep(0)
+    first.cancel()
+    await asyncio.sleep(0)
+
+    retry = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await asyncio.sleep(0.1)
+    assert len(constructions) == 1, "repeated cancellation broke owner single-flight"
+    assert ctx._store_assemblies, "registry dropped the in-flight assembly early"
+
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(first, timeout=5)
+    result = await asyncio.wait_for(retry, timeout=5)
+
+    assert isinstance(result, ProjectState)
+    assert len(constructions) == 1
+    ctx.runtime.shutdown(cancel_futures=True)
+
+
+async def test_concurrent_owners_obey_project_limit(tmp_path, monkeypatch):
+    """Admission counts in-flight assemblies, so concurrent owners cannot bypass the cap."""
+    import lgrep.server.lifecycle as lifecycle
+
+    monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 1)
+    opened, release = threading.Event(), threading.Event()
+    constructions: list = []
+    monkeypatch.setattr(
+        "lgrep.server.lifecycle.ChunkStore", _make_slow_store(opened, release, constructions)
+    )
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    proj_a = tmp_path / "a"
+    proj_a.mkdir()
+    proj_b = tmp_path / "b"
+    proj_b.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    first = asyncio.create_task(_ensure_project_initialized(ctx, proj_a))
+    await _wait_for_event(opened)
+
+    second = asyncio.create_task(_ensure_project_initialized(ctx, proj_b))
+    result_b = await asyncio.wait_for(second, timeout=5)
+
+    release.set()
+    result_a = await asyncio.wait_for(first, timeout=5)
+
+    assert isinstance(result_a, ProjectState)
+    assert isinstance(result_b, dict) and "Maximum project limit" in result_b["error"]
     assert len(ctx._stores) == 1
     ctx.runtime.shutdown(cancel_futures=True)
