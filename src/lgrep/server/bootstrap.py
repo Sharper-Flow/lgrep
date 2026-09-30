@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import logging
 import os
@@ -76,10 +77,14 @@ def _try_attach_file_sink() -> None:
         return
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    except OSError as exc:
         os.close(lock_fd)
+        if exc.errno in (errno.EACCES, errno.EAGAIN):
+            reason = "is held by another process"
+        else:
+            reason = f"could not be locked ({exc.strerror})"
         print(
-            f"lgrep: LGREP_LOG_FILE {log_file} is held by another process "
+            f"lgrep: LGREP_LOG_FILE {log_file} {reason} "
             f"(lock {log_file}.lock); keeping stderr-only logging",
             file=sys.stderr,
         )

@@ -6,6 +6,7 @@ Verifies that the startup transport is preserved for diagnostics without using
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import logging
@@ -172,6 +173,24 @@ class TestConfigureLogging:
         lines = capsys.readouterr().err.strip().splitlines()
         assert len(lines) == 1
         assert json.loads(lines[0])["event"] == "probe_event"
+
+    def test_non_contention_flock_error_reports_actual_cause(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
+    ):
+        log_file = tmp_path / "lgrep.log"
+        monkeypatch.setenv("LGREP_LOG_FILE", str(log_file))
+
+        def injected_eio(fd, op):
+            raise OSError(errno.EIO, "Input/output error")
+
+        monkeypatch.setattr(bootstrap_module.fcntl, "flock", injected_eio)
+        bootstrap_module.configure_logging()
+
+        root = logging.getLogger()
+        assert [h for h in root.handlers if isinstance(h, RotatingFileHandler)] == []
+        err = capsys.readouterr().err
+        assert "held by another process" not in err
+        assert "Input/output error" in err
 
     def test_missing_log_parent_directory_keeps_stderr_only(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
