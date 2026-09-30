@@ -140,6 +140,52 @@ class TestConfigureLogging:
         assert sys.stderr in [getattr(h, "stream", None) for h in root.handlers]
         assert str(log_file) in capsys.readouterr().err
 
+    def test_preinstalled_stdout_handler_is_evicted_and_stdout_stays_clean(
+        self, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
+    ):
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+        logging.getLogger().handlers[:] = [logging.StreamHandler(sys.stdout)]
+
+        bootstrap_module.configure_logging()
+        structlog.get_logger("tests.probe").info("probe_event")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
+        streams = [getattr(handler, "stream", None) for handler in logging.getLogger().handlers]
+        assert sys.stdout not in streams
+        assert capsys.readouterr().out == ""
+
+    def test_preinstalled_stderr_handler_is_not_duplicated(self, capsys, clean_logging_state):
+        logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
+
+        bootstrap_module.configure_logging()
+        structlog.get_logger("tests.probe").info("probe_event")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
+        stderr_streams = [
+            getattr(handler, "stream", None)
+            for handler in logging.getLogger().handlers
+            if getattr(handler, "stream", None) is sys.stderr
+        ]
+        assert len(stderr_streams) == 1
+        lines = capsys.readouterr().err.strip().splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["event"] == "probe_event"
+
+    def test_missing_log_parent_directory_keeps_stderr_only(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
+    ):
+        log_file = tmp_path / "missing-parent" / "lgrep.log"
+        monkeypatch.setenv("LGREP_LOG_FILE", str(log_file))
+
+        bootstrap_module.configure_logging()
+
+        root = logging.getLogger()
+        assert [h for h in root.handlers if isinstance(h, RotatingFileHandler)] == []
+        assert sys.stderr in [getattr(h, "stream", None) for h in root.handlers]
+        assert str(log_file) in capsys.readouterr().err
+
     def test_reconfigure_replaces_owned_handlers_without_duplicates(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch, clean_logging_state
     ):

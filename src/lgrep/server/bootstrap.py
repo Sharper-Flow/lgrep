@@ -65,7 +65,15 @@ def _try_attach_file_sink() -> None:
     if not log_file:
         return
 
-    lock_fd = os.open(f"{log_file}.lock", os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        lock_fd = os.open(f"{log_file}.lock", os.O_CREAT | os.O_RDWR, 0o644)
+    except OSError as exc:
+        print(
+            f"lgrep: cannot open lock sidecar {log_file}.lock ({exc.strerror}); "
+            f"keeping stderr-only logging",
+            file=sys.stderr,
+        )
+        return
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -99,9 +107,10 @@ def _try_attach_file_sink() -> None:
 def configure_logging() -> None:
     """Configure structlog through stdlib logging for the MCP server.
 
-    A stderr StreamHandler is always attached (current behavior). When
-    ``LGREP_LOG_FILE`` is set, a rotating JSON file sink is added after
-    winning the single-writer lock. stdout is never a log sink: the stdio
+    Takes over the root handler set: every handler installed before this
+    call is removed, so structured events reach exactly one formatted
+    stderr handler (plus the optional locked file sink) and never a
+    preinstalled stdout handler. stdout is never a log sink: the stdio
     MCP channel owns it.
     """
     log_level = getattr(
@@ -115,6 +124,8 @@ def configure_logging() -> None:
 
     root = logging.getLogger()
     root.setLevel(log_level)
+    for foreign_handler in root.handlers[:]:
+        root.removeHandler(foreign_handler)
 
     stderr_handler = logging.StreamHandler(sys.stderr)
     _owned_handlers.append(stderr_handler)
