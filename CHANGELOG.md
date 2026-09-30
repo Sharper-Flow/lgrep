@@ -1,3 +1,7 @@
+## 2026-09-30 (v3.7.0)
+
+- feat(logging): opt-in `LGREP_LOG_FILE` rotating JSON sink with a single-writer flock; per-call `call_id`/`path` on tool events; `runtime_job_finished` with queue/run/total timing
+
 ## 2026-09-25 (v3.6.1)
 
 - fix(semantic): worktrees search their own files in the shared dedup cache (#26)

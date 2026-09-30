@@ -8,6 +8,7 @@ owner: bounded execution plus observable job lifecycle state.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import itertools
 import os
 import threading
@@ -18,10 +19,21 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypeVar
 
+import structlog
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 T = TypeVar("T")
+
+log = structlog.get_logger(__name__)
+
+# Correlation id for the MCP tool call that started a job. Set by
+# ``time_tool`` on the event loop and read by ``_create_job`` in the calling
+# coroutine's context, so ``run_blocking`` callers need no extra parameter.
+call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "lgrep_call_id", default=None
+)
 
 DEFAULT_WORKER_MAX_THREADS = 4
 DEFAULT_HISTORY_LIMIT = 100
@@ -66,6 +78,7 @@ class RuntimeJob:
     finished_at: float | None = None
     error: str | None = None
     abandoned: bool = False
+    call_id: str | None = None
     future: Future[Any] | None = None
 
     def snapshot(self, *, now: float | None = None) -> dict[str, Any]:
@@ -204,6 +217,7 @@ class RuntimeSupervisor:
             project=project,
             status=JobStatus.QUEUED,
             created_at=time.time(),
+            call_id=call_id_var.get(),
         )
         with self._lock:
             self._active[job.id] = job
@@ -267,6 +281,31 @@ class RuntimeSupervisor:
             if status in {JobStatus.FINISHED_AFTER_ABANDON, JobStatus.FAILED_AFTER_ABANDON}:
                 job.abandoned = True
             self._recent.append(job)
+            queue_ms = (
+                round((job.started_at - job.created_at) * 1000, 2)
+                if job.started_at is not None
+                else None
+            )
+            run_ms = (
+                round((job.finished_at - job.started_at) * 1000, 2)
+                if job.started_at is not None
+                else None
+            )
+            total_ms = round((job.finished_at - job.created_at) * 1000, 2)
+            fields = {
+                "job_id": job.id,
+                "call_id": job.call_id,
+                "kind": job.kind,
+                "caller": job.caller,
+                "project": job.project,
+                "status": status.value,
+                "queue_ms": queue_ms,
+                "run_ms": run_ms,
+                "total_ms": total_ms,
+                "abandoned": job.abandoned,
+                "error": job.error,
+            }
+        log.info("runtime_job_finished", **fields)
 
 
 def _worker_limit_from_env() -> int:

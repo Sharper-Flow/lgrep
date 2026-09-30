@@ -452,6 +452,7 @@ Security notes:
 |---|---|---|---|
 | `VOYAGE_API_KEY` | For semantic search | none | Voyage API key |
 | `LGREP_LOG_LEVEL` | No | `INFO` | Log verbosity |
+| `LGREP_LOG_FILE` | No | unset | Opt-in rotating JSON log file (10 MiB, 3 backups) in addition to the always-on stderr sink. One writer is enforced by an exclusive `flock` on a `<file>.lock` sidecar held for process life; a second writer warns on stderr and keeps stderr-only logging. stdout is never a log sink (the stdio MCP channel owns it). |
 | `LGREP_CACHE_DIR` | No | `~/.cache/lgrep` | Cache directory |
 | `LGREP_WARM_PATHS` | No | none | Colon-separated projects to warm on startup |
 | `LGREP_AUTO_WARM_DISK` | No | `true` | Auto-load all discoverable disk caches on startup when no explicit warm paths are set. Set `false` for large shared machines. |
