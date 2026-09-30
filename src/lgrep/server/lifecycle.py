@@ -49,6 +49,13 @@ MAX_PROJECTS: int = 20  # overridden by __init__.py import
 AUTO_INDEX_MAX_ATTEMPTS: int = 2  # overridden by __init__.py import
 AUTO_INDEX_RETRY_BASE_DELAY_S: float = 0.1  # overridden by __init__.py import
 
+# Foreground budget (seconds) for a worktree search to make its trunk's base
+# index current: the staleness check plus at most one base index window.
+# Beyond the budget the remaining base work continues as the existing
+# background continuation and the search answers from the partial index.
+# Keep below LGREP_TOOL_TIMEOUT_S.
+DEFAULT_ENSURE_BUDGET_S = 8.0
+
 
 # ---------------------------------------------------------------------------
 # Error helper
@@ -252,6 +259,43 @@ def _stop_watcher(state: ProjectState, project_path: str) -> bool:
     return True
 
 
+def _assemble_project_state(
+    owner: Path,
+    owner_str: str,
+    checkout: str,
+    project_path: Path,
+    store: ChunkStore | None,
+    embedder: VoyageEmbedder,
+) -> tuple[ChunkStore, ProjectState]:
+    """Assemble the store view, meta, indexer, and first table touch.
+
+    Pure assembly with no event-loop or app-context access so it can run
+    inside a single ``ensure_store`` job on the worker pool. Everything it
+    touches is synchronous disk I/O that must not run on the event loop:
+    ChunkStore construction (LanceDB connect + metadata persistence),
+    ``for_checkout`` overlay init (overlay-state read), the worktree alias
+    meta write, Indexer construction, and the forced first table touch
+    (``open_table`` + ``count_rows`` + rebuild check + index probes).
+    """
+    if store is None:
+        store = ChunkStore(get_project_db_path(owner), project_path=owner_str)
+    db = store.for_checkout(checkout)
+    base_path = None
+    if checkout != BASE_CHECKOUT:
+        base_path = owner_str
+        write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
+    indexer = Indexer(
+        project_path=project_path,
+        storage=db,
+        embedder=embedder,
+    )
+    state = ProjectState(db=db, indexer=indexer, base_path=base_path)
+    # Force the first table touch inside the ensure job so the expensive
+    # LanceDB I/O never lands on the event loop through a later query path.
+    _ = db.table
+    return store, state
+
+
 async def _ensure_project_initialized(
     app_ctx: LgrepContext, project_path: Path
 ) -> ProjectState | dict:
@@ -264,6 +308,12 @@ async def _ensure_project_initialized(
     checkout. When ``LGREP_WORKTREE_DEDUP`` is enabled, a linked worktree
     shares its trunk's cache: the trunk's ChunkStore is opened once, and the
     worktree's state reads and writes an ``OverlayStore`` view of it.
+
+    The blocking half of initialization (store construction, overlay init,
+    meta write, indexer assembly, first table touch) runs as one
+    ``ensure_store`` job in the runtime's worker pool. The app lock stays on
+    the event loop; only the store/indexer assembly leaves it, so concurrent
+    callers are never frozen behind first-touch LanceDB I/O.
 
     Returns ProjectState on success, or a ToolError dict on failure.
     """
@@ -305,26 +355,29 @@ async def _ensure_project_initialized(
             if app_ctx.embedder is None:
                 app_ctx.embedder = VoyageEmbedder(api_key=app_ctx.voyage_api_key)
 
-            if store is None:
-                store = ChunkStore(get_project_db_path(owner), project_path=owner_str)
-                app_ctx._stores[owner_str] = store
-            db = store.for_checkout(checkout)
-            base_path = None
-            if checkout != BASE_CHECKOUT:
-                base_path = owner_str
-                write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
-            indexer = Indexer(
-                project_path=project_path,
-                storage=db,
-                embedder=app_ctx.embedder,
+            # Store/table assembly is synchronous LanceDB I/O; run it in the
+            # worker pool under the lock so concurrent callers on the loop
+            # stay responsive.
+            new_store, state = await app_ctx.runtime.run_blocking(
+                "ensure_store",
+                "_ensure_project_initialized",
+                owner_str,
+                _assemble_project_state,
+                owner,
+                owner_str,
+                checkout,
+                project_path,
+                store,
+                app_ctx.embedder,
             )
-            state = ProjectState(db=db, indexer=indexer, base_path=base_path)
+            if store is None:
+                app_ctx._stores[owner_str] = new_store
             app_ctx.projects[path_key] = state
             log.info(
                 "project_initialized",
                 project=path_key,
                 cache_owner=owner_str,
-                overlay=base_path is not None,
+                overlay=state.base_path is not None,
             )
             return state
         except Exception as e:
@@ -516,9 +569,14 @@ async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -
     A worktree overlay holds only files that differ from base, so an
     overlay computed against a stale or partial base embeds files the base
     would have covered. When the base is stale, a background pass waits for
-    the base reindex; a foreground pass runs one base window. Returns True
-    when the base has no pending work, or when the base cannot be indexed
-    (the overlay then covers every differing file).
+    the base reindex; a foreground pass runs the staleness check plus at
+    most one base window, bounded by ``LGREP_ENSURE_BUDGET_S`` (default
+    8.0). Beyond the budget, or when the window does not converge, the
+    remaining base work continues as the existing background continuation
+    and the worktree search answers from the current partial index (the
+    staleness pre-flight keeps surfacing freshness). Returns True when the
+    base has no pending work, or when the base cannot be indexed (the
+    overlay then covers every differing file).
     """
     base = await _ensure_project_initialized(app_ctx, Path(base_path))
     if isinstance(base, dict):
@@ -533,8 +591,7 @@ async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -
         if wait:
             await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
         else:
-            await _auto_index_project_single_flight(app_ctx, base_path, Path(base_path))
-            return not _index_in_flight(app_ctx, base_path) and not base.pending_index_files
+            return await _run_budgeted_base_window(app_ctx, base_path, base)
     if not wait:
         return False
     while _index_in_flight(app_ctx, base_path):
@@ -547,6 +604,37 @@ async def _base_index_ready(app_ctx: LgrepContext, base_path: str, wait: bool) -
         # Let the finished task's done callback unregister it.
         await asyncio.sleep(0)
     return not base.pending_index_files
+
+
+async def _run_budgeted_base_window(
+    app_ctx: LgrepContext, base_path: str, base: ProjectState
+) -> bool:
+    """Run at most one base index window inside ``LGREP_ENSURE_BUDGET_S``.
+
+    The single-flight pass runs the staleness check (self-bounded by
+    ``LGREP_STALENESS_DEADLINE_S``) and one bounded window. When the budget
+    runs out first, the pass is cancelled at its next await and the
+    remaining work continues as the existing single-flight background
+    continuation, so the worktree search answers from the partial index
+    instead of timing out behind trunk work.
+    """
+    budget_s = float(os.environ.get("LGREP_ENSURE_BUDGET_S", DEFAULT_ENSURE_BUDGET_S))
+    deadline = time.monotonic() + budget_s
+    completed = True
+    try:
+        await asyncio.wait_for(
+            _auto_index_project_single_flight(app_ctx, base_path, Path(base_path)),
+            timeout=max(0.0, deadline - time.monotonic()),
+        )
+    except TimeoutError:
+        completed = False
+        log.info("base_window_budget_exceeded", base=base_path, budget_s=budget_s)
+    if not completed or base.pending_index_files or _index_in_flight(app_ctx, base_path):
+        # Hand the remaining base work to the existing background
+        # continuation; it is single-flight, so this is a no-op when the
+        # window already scheduled one.
+        await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+    return not _index_in_flight(app_ctx, base_path) and not base.pending_index_files
 
 
 async def _finish_single_flight_indexing(

@@ -1,3 +1,7 @@
+## Unreleased
+
+- feat(runtime): keep worktree ensure work and index builds off the query path — first-touch store assembly (ChunkStore open, overlay init, meta write, indexer, first table touch) runs as an `ensure_store` job in the worker pool; `LGREP_ENSURE_BUDGET_S` (default 8.0) bounds the foreground base index window and defers the rest to the background continuation; a dedicated build lane (`LGREP_BUILD_MAX_THREADS`, default 1) isolates index/prune jobs from query threads, with a `lane` field on `runtime_job_finished`
+
 ## 2026-09-30 (v3.6.2)
 
 - Persist per-call tool logs: LGREP_LOG_FILE sink, call_id/path, job queue/run timing (#27)
