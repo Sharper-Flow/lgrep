@@ -46,8 +46,14 @@ def _make_slow_store(opened: threading.Event, release: threading.Event, counter:
     return SlowStore
 
 
-def _job_events(logs: list[dict]) -> list[dict]:
-    return [entry for entry in logs if entry["event"] == "runtime_job_finished"]
+def _job_events(logs: list[dict], project) -> list[dict]:
+    # Scope to this test's project: an abandoned job from an earlier test can
+    # finish and log while this test captures.
+    return [
+        entry
+        for entry in logs
+        if entry["event"] == "runtime_job_finished" and entry.get("project") == str(project)
+    ]
 
 
 async def _wait_for_event(event: threading.Event, timeout: float = 5.0) -> None:
@@ -88,7 +94,7 @@ async def test_slow_store_open_keeps_loop_responsive(tmp_path, monkeypatch):
     assert isinstance(result, ProjectState)
     assert str(project) in ctx.projects
     assert len(ctx._stores) == 1
-    events = _job_events(logs)
+    events = _job_events(logs, project)
     assert [e["kind"] for e in events] == ["ensure_store", "ensure_checkout"]
     assert events[0]["lane"] == "query"
     ctx.runtime.shutdown(cancel_futures=True)
@@ -110,7 +116,7 @@ async def test_ensure_store_real_assembly_registers_store_and_opens_table(tmp_pa
     assert str(project) in ctx.projects
     assert len(ctx._stores) == 1
     assert result.db._table is not None, "first table touch did not happen during ensure"
-    kinds = [e["kind"] for e in _job_events(logs)]
+    kinds = [e["kind"] for e in _job_events(logs, project)]
     assert kinds == ["ensure_store", "ensure_checkout"]
     ctx.runtime.shutdown(cancel_futures=True)
 

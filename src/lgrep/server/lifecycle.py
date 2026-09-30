@@ -120,10 +120,10 @@ class LgrepContext:
     # worktree dedup every worktree of a repo reads a view of its trunk's
     # store, so connections and tables stay bounded by repository count.
     _stores: dict[str, ChunkStore] = field(default_factory=dict)
-    # In-flight owner-store assemblies. A cancelled caller joins its assembly
-    # to terminal completion instead of abandoning it, and any retry for the
-    # same owner joins the registered task rather than constructing a second
-    # store against the same cache concurrently.
+    # In-flight owner-store assemblies. A cancelled caller detaches while its
+    # assembly keeps running here, and any retry for the same owner joins the
+    # registered task rather than constructing a second store against the
+    # same cache concurrently.
     _store_assemblies: dict[str, asyncio.Task] = field(default_factory=dict)
     embedder: VoyageEmbedder | None = None
     voyage_api_key: str | None = None
@@ -132,6 +132,9 @@ class LgrepContext:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
     _bg_reindex_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+    # Release tasks of cancelled index leaders: each holds the project's
+    # single-flight event until the leader's physical window has stopped.
+    _index_owner_releases: set[asyncio.Task] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +186,17 @@ async def _shutdown(ctx: LgrepContext) -> None:
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and ctx.runtime.snapshot_active_jobs():
             await asyncio.sleep(0.01)
+    # Cancelled index leaders hand their ownership to release tasks that end
+    # when the physical window stops; give them the same bounded window.
+    releases = list(ctx._index_owner_releases)
+    if releases:
+        _done, still_running = await asyncio.wait(releases, timeout=2.0)
+        for t in still_running:
+            t.cancel()
+        await asyncio.gather(*still_running, return_exceptions=True)
     ctx._bg_reindex_tasks.clear()
     ctx._store_assemblies.clear()
+    ctx._index_owner_releases.clear()
 
     for proj_path, state in ctx.projects.items():
         _stop_watcher(state, proj_path)
@@ -701,15 +713,20 @@ async def _run_budgeted_base_window(
     """Make the base current inside ``LGREP_ENSURE_BUDGET_S``, then defer.
 
     The budget covers the whole foreground pass — the staleness check
-    (including its queue wait) plus at most one base window — so neither
-    phase can consume the caller's tool timeout on its own. When the budget
-    runs out first, the cancelled pass's remaining work continues as the
-    existing single-flight background continuation, and the worktree search
-    answers from the partial index instead of timing out behind trunk work.
+    (including its queue wait) plus the wait for at most one base window —
+    so neither phase can consume the caller's tool timeout on its own.
+
+    The base window never runs as part of the caller: it runs as the
+    registered single-flight background reindex, and the caller only waits
+    for it. When the budget runs out, the caller stops waiting and the
+    worktree search answers from the partial index; the window keeps its
+    single-flight ownership until it physically finishes and then hands any
+    remaining files to the existing continuation. Cancelling the window at
+    the deadline would release ownership while its storage writes were
+    still running, and a second window could then interleave with them.
     """
     budget_s = float(os.environ.get("LGREP_ENSURE_BUDGET_S", DEFAULT_ENSURE_BUDGET_S))
     deadline = time.monotonic() + budget_s
-    completed = True
     try:
         stale, _ = await asyncio.wait_for(
             app_ctx.runtime.run_blocking(
@@ -717,20 +734,27 @@ async def _run_budgeted_base_window(
             ),
             timeout=max(0.0, deadline - time.monotonic()),
         )
-        if not stale and not base.pending_index_files:
-            return True
-        await asyncio.wait_for(
-            _auto_index_project_single_flight(app_ctx, base_path, Path(base_path)),
-            timeout=max(0.0, deadline - time.monotonic()),
-        )
     except TimeoutError:
-        completed = False
         log.info("base_window_budget_exceeded", base=base_path, budget_s=budget_s)
-    if not completed or base.pending_index_files or _index_in_flight(app_ctx, base_path):
-        # Hand the remaining base work to the existing background
-        # continuation; it is single-flight, so this is a no-op when the
-        # window already scheduled one.
         await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+        return False
+    if not stale and not base.pending_index_files:
+        return True
+
+    await _schedule_background_reindex(app_ctx, base_path, Path(base_path))
+    owner = app_ctx._bg_reindex_tasks.get(base_path)
+    event = app_ctx._indexing_events.get(base_path)
+    try:
+        remaining = max(0.0, deadline - time.monotonic())
+        if owner is not None:
+            await asyncio.wait_for(asyncio.shield(owner), timeout=remaining)
+        elif event is not None:
+            await asyncio.wait_for(event.wait(), timeout=remaining)
+    except TimeoutError:
+        log.info("base_window_budget_exceeded", base=base_path, budget_s=budget_s)
+        return False
+    # Let the finished owner's done callback unregister it.
+    await asyncio.sleep(0)
     return not _index_in_flight(app_ctx, base_path) and not base.pending_index_files
 
 
@@ -861,6 +885,7 @@ async def _auto_index_project_single_flight(
         project=project_path,
         continue_until_complete=continue_until_complete,
     )
+    ownership_handed_off = False
     try:
         result = await _ensure_project_initialized(app_ctx, path_obj)
         if isinstance(result, dict):
@@ -898,8 +923,8 @@ async def _auto_index_project_single_flight(
                 # OperationCancelled, allowing the bounded executor worker
                 # thread to exit instead of holding the slot forever.
                 cancel_event = threading.Event()
-                try:
-                    window = await app_ctx.runtime.run_blocking(
+                window_job = asyncio.ensure_future(
+                    app_ctx.runtime.run_blocking(
                         "index_window",
                         "_auto_index_project_single_flight",
                         project_path,
@@ -911,7 +936,20 @@ async def _auto_index_project_single_flight(
                         cancel_event=cancel_event,
                         lane="build",
                     )
+                )
+                try:
+                    window = await asyncio.shield(window_job)
                     break
+                except asyncio.CancelledError:
+                    # The caller detaches now. The physical window keeps the
+                    # single-flight ownership until it stops at its next
+                    # file boundary, so no second window can interleave
+                    # with its storage writes.
+                    cancel_event.set()
+                    state.pending_index_files = pending
+                    ownership_handed_off = True
+                    _retain_ownership_until_stopped(app_ctx, project_path, event, window_job)
+                    raise
                 except OperationCancelled:
                     # Preserve whatever pending set we had before cancellation
                     # so a future continuation can resume.
@@ -997,7 +1035,29 @@ async def _auto_index_project_single_flight(
             "Failed to auto-index project on first search. Check server logs for details."
         )
     finally:
-        await _finish_single_flight_indexing(app_ctx, project_path, event)
+        if not ownership_handed_off:
+            await _finish_single_flight_indexing(app_ctx, project_path, event)
+
+
+def _retain_ownership_until_stopped(
+    app_ctx: LgrepContext, project_path: str, event: asyncio.Event, window_job: asyncio.Future
+) -> None:
+    """Release a cancelled leader's single-flight ownership only after its window stops.
+
+    The release task is tracked so shutdown can reconcile it.
+    """
+
+    async def _release() -> None:
+        try:
+            await asyncio.wait({window_job})
+            if not window_job.cancelled():
+                window_job.exception()  # retrieved; the leader already logged its cancel
+        finally:
+            await _finish_single_flight_indexing(app_ctx, project_path, event)
+
+    task = asyncio.create_task(_release(), name=f"index_owner_release:{project_path}")
+    app_ctx._index_owner_releases.add(task)
+    task.add_done_callback(app_ctx._index_owner_releases.discard)
 
 
 async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> ProjectState | dict:
