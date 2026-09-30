@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.3)
+
+- perf(server): budget worktree ensure work; move store assembly off the loop; add build lane (#28)
+- docs: update changelog for v3.6.2
+
 ## Unreleased
 
 - feat(runtime): keep worktree ensure work and index builds off the query path — first-touch store assembly (ChunkStore open, overlay init, meta write, indexer, first table touch) runs as an `ensure_store` job in the worker pool; `LGREP_ENSURE_BUDGET_S` (default 8.0) bounds the foreground base index window and defers the rest to the background continuation; a dedicated build lane (`LGREP_BUILD_MAX_THREADS`, default 1) isolates index/prune jobs from query threads, with a `lane` field on `runtime_job_finished`
