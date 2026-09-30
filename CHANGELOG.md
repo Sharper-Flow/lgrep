@@ -12,6 +12,7 @@
 
 - feat(runtime): keep worktree ensure work and index builds off the query path — first-touch store assembly (ChunkStore open, overlay init, meta write, indexer, first table touch) runs as an `ensure_store` job in the worker pool; `LGREP_ENSURE_BUDGET_S` (default 8.0) bounds the foreground base index window and defers the rest to the background continuation; a dedicated build lane (`LGREP_BUILD_MAX_THREADS`, default 1) isolates index/prune jobs from query threads, with a `lane` field on `runtime_job_finished`
 - fix(server): single-flight index ownership lasts until the physical window stops — the ensure budget and a cancelled caller stop waiting instead of cancelling the window, so a second window can never interleave with an abandoned window's storage writes; cancelled ensure callers detach promptly; shutdown reconciles in-flight store assemblies; `index_symbols_repo` parses and persists on the build lane
+- fix(server): a shut-down context admits no new store assembly or background reindex and publishes no store or project state, so a checkout assembly still running in a worker thread cannot repopulate the context after teardown
 
 ## 2026-09-30 (v3.6.2)
 

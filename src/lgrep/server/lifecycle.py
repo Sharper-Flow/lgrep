@@ -135,6 +135,11 @@ class LgrepContext:
     # Release tasks of cancelled index leaders: each holds the project's
     # single-flight event until the leader's physical window has stopped.
     _index_owner_releases: set[asyncio.Task] = field(default_factory=set)
+    # Set under the app lock when shutdown starts. A closed context admits
+    # no new assemblies or background work and publishes no store or
+    # project state, so work that was already running in a worker thread
+    # cannot repopulate the context after teardown.
+    _closed: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +173,8 @@ async def _startup(server: FastMCP) -> LgrepContext:
 async def _shutdown(ctx: LgrepContext) -> None:
     """Gracefully shut down all projects: stop watchers and release resources."""
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
+    async with ctx._lock:
+        ctx._closed = True
 
     # Cancel outstanding background reindexes and in-flight owner-store
     # assemblies; await terminal state so cooperative cancellation
@@ -341,7 +348,10 @@ async def _assemble_owner_store_task(
             owner_str,
         )
         async with app_ctx._lock:
-            app_ctx._stores[owner_str] = store
+            # A closed context never gains a store; joiners re-read and
+            # receive the shutdown refusal.
+            if not app_ctx._closed:
+                app_ctx._stores[owner_str] = store
         return store
     finally:
         async with app_ctx._lock:
@@ -375,6 +385,8 @@ async def _ensure_owner_store(
     """
     while True:
         async with app_ctx._lock:
+            if app_ctx._closed:
+                return _error_response("lgrep is shutting down.")
             store = app_ctx._stores.get(owner_str)
             if store is not None:
                 return store
@@ -468,6 +480,8 @@ async def _ensure_project_initialized(
             app_ctx.embedder,
         )
         async with app_ctx._lock:
+            if app_ctx._closed:
+                return _error_response("lgrep is shutting down.")
             existing = app_ctx.projects.get(path_key)
             if existing is not None:
                 return existing
@@ -786,6 +800,8 @@ async def _schedule_background_reindex(
         # run before the first task gets its initial time slice, producing
         # untracked follower tasks and leaving the leader uncancellable during
         # shutdown.
+        if app_ctx._closed:
+            return
         if project_path in app_ctx._indexing_events or project_path in app_ctx._bg_reindex_tasks:
             return  # already in flight
         task = asyncio.create_task(
@@ -806,6 +822,8 @@ async def _run_index_continuation(app_ctx: LgrepContext, project_path: str, path
     the continuation.
     """
     async with app_ctx._lock:
+        if app_ctx._closed:
+            return
         # Overwriting the caller's own task entry is intentional: the caller's
         # done callback will see a different task object and no-op.
         task = asyncio.create_task(
