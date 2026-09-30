@@ -36,7 +36,33 @@ call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 DEFAULT_WORKER_MAX_THREADS = 4
+DEFAULT_BUILD_MAX_THREADS = 1
 DEFAULT_HISTORY_LIMIT = 100
+
+QUERY_LANE = "query"
+BUILD_LANE = "build"
+
+# Job kinds whose work is build or maintenance (index windows, pending-file
+# computation, full re-index, orphan/prune sweeps, remote repo indexing).
+# They run on the dedicated build executor so a build window cannot occupy
+# the worker threads a query needs. Every other kind runs on the query
+# executor sized by LGREP_WORKER_MAX_THREADS.
+BUILD_JOB_KINDS = frozenset(
+    {
+        "index_window",
+        "compute_pending_files",
+        "index_all",
+        "startup_orphan_sweep",
+        "prune_orphans",
+        "prune_symbols",
+        "index_repo",
+    }
+)
+
+
+def _lane_for_kind(kind: str) -> str:
+    """Return the executor lane a job kind runs on by default."""
+    return BUILD_LANE if kind in BUILD_JOB_KINDS else QUERY_LANE
 
 
 class JobStatus(StrEnum):
@@ -79,6 +105,7 @@ class RuntimeJob:
     error: str | None = None
     abandoned: bool = False
     call_id: str | None = None
+    lane: str = QUERY_LANE
     future: Future[Any] | None = None
 
     def snapshot(self, *, now: float | None = None) -> dict[str, Any]:
@@ -100,28 +127,48 @@ class RuntimeJob:
             "age_ms": age_ms,
             "duration_ms": duration_ms,
             "abandoned": self.abandoned,
+            "lane": self.lane,
             "error": self.error,
         }
 
 
 class RuntimeSupervisor:
-    """Owns bounded execution and lifecycle state for blocking work."""
+    """Owns bounded execution and lifecycle state for blocking work.
+
+    Two executors: the query lane (``lgrep-worker`` threads, sized by
+    ``LGREP_WORKER_MAX_THREADS``) serves tool-call work, and the build lane
+    (``lgrep-build`` threads, sized by ``LGREP_BUILD_MAX_THREADS``) serves
+    build/maintenance kinds so they cannot occupy query threads.
+    """
 
     def __init__(
-        self, *, max_workers: int | None = None, history_limit: int = DEFAULT_HISTORY_LIMIT
+        self,
+        *,
+        max_workers: int | None = None,
+        max_build_workers: int | None = None,
+        history_limit: int = DEFAULT_HISTORY_LIMIT,
     ):
         if max_workers is None:
             max_workers = _worker_limit_from_env()
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
+        if max_build_workers is None:
+            max_build_workers = _build_limit_from_env()
+        if max_build_workers < 1:
+            raise ValueError("max_build_workers must be >= 1")
         if history_limit < 1:
             raise ValueError("history_limit must be >= 1")
 
         self.max_workers = max_workers
+        self.max_build_workers = max_build_workers
         self.history_limit = history_limit
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="lgrep-worker",
+        )
+        self._build_executor = ThreadPoolExecutor(
+            max_workers=max_build_workers,
+            thread_name_prefix="lgrep-build",
         )
         self._counter = itertools.count(1)
         self._lock = threading.RLock()
@@ -137,6 +184,7 @@ class RuntimeSupervisor:
         fn: Callable[..., T],
         *args: Any,
         cancel_event: threading.Event | None = None,
+        lane: str | None = None,
         **kwargs: Any,
     ) -> T:
         """Run a synchronous function under bounded, observable supervision.
@@ -152,16 +200,22 @@ class RuntimeSupervisor:
                 calls ``cancel_event.set()`` BEFORE propagating the
                 ``CancelledError``, so the blocking thread can observe
                 the signal at the next safe point and unwind.
+            lane: Executor lane for the job: "query" or "build". Defaults
+                to the lane the job kind maps to (see ``BUILD_JOB_KINDS``).
             **kwargs: Keyword args forwarded to ``fn`` (not including
-                ``cancel_event``).
+                ``cancel_event`` or ``lane``).
         """
-        job = self._create_job(kind=kind, caller=caller, project=project)
+        resolved_lane = lane if lane is not None else _lane_for_kind(kind)
+        if resolved_lane not in (QUERY_LANE, BUILD_LANE):
+            raise ValueError(f"unknown lane: {resolved_lane!r}")
+        executor = self._executor if resolved_lane == QUERY_LANE else self._build_executor
+        job = self._create_job(kind=kind, caller=caller, project=project, lane=resolved_lane)
 
         def invoke() -> T:
             self._mark_started(job.id)
             return fn(*args, **kwargs)
 
-        future = self._executor.submit(invoke)
+        future = executor.submit(invoke)
         with self._lock:
             job.future = future
         future.add_done_callback(
@@ -195,7 +249,7 @@ class RuntimeSupervisor:
             return [job.snapshot(now=now) for job in self._recent]
 
     def shutdown(self, *, cancel_futures: bool = True) -> None:
-        """Shut down the executor and mark queued/running jobs honestly."""
+        """Shut down both executors and mark queued/running jobs honestly."""
         with self._lock:
             active_jobs = list(self._active.values())
         for job in active_jobs:
@@ -207,8 +261,11 @@ class RuntimeSupervisor:
                     if job.id in self._active and job.status not in TERMINAL_STATUSES:
                         job.status = JobStatus.CANCEL_REQUESTED
         self._executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._build_executor.shutdown(wait=False, cancel_futures=cancel_futures)
 
-    def _create_job(self, *, kind: str, caller: str, project: str | None) -> RuntimeJob:
+    def _create_job(
+        self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE
+    ) -> RuntimeJob:
         job_id = f"job-{next(self._counter):08d}"
         job = RuntimeJob(
             id=job_id,
@@ -218,6 +275,7 @@ class RuntimeSupervisor:
             status=JobStatus.QUEUED,
             created_at=time.time(),
             call_id=call_id_var.get(),
+            lane=lane,
         )
         with self._lock:
             self._active[job.id] = job
@@ -303,6 +361,7 @@ class RuntimeSupervisor:
                 "run_ms": run_ms,
                 "total_ms": total_ms,
                 "abandoned": job.abandoned,
+                "lane": job.lane,
                 "error": job.error,
             }
         log.info("runtime_job_finished", **fields)
@@ -316,6 +375,17 @@ def _worker_limit_from_env() -> int:
         value = int(raw)
     except ValueError:
         return DEFAULT_WORKER_MAX_THREADS
+    return max(1, value)
+
+
+def _build_limit_from_env() -> int:
+    raw = os.environ.get("LGREP_BUILD_MAX_THREADS")
+    if not raw:
+        return DEFAULT_BUILD_MAX_THREADS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_BUILD_MAX_THREADS
     return max(1, value)
 
 

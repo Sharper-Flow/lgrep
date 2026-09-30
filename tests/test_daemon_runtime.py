@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 
 import pytest
 from structlog.testing import capture_logs
@@ -167,3 +168,144 @@ async def test_never_started_job_reports_null_queue_and_run_ms():
     assert event["status"] == "cancelled"
 
     supervisor.shutdown(cancel_futures=True)
+
+
+# ---------------------------------------------------------------------------
+# Build lane (LGREP-25): build-kind jobs run on a dedicated executor so a
+# build window or prune sweep cannot occupy the threads a query needs.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_kind_jobs_run_on_dedicated_build_lane():
+    supervisor = RuntimeSupervisor(max_workers=2, max_build_workers=2, history_limit=10)
+
+    build_thread = await supervisor.run_blocking(
+        "index_window", "test", None, threading.current_thread
+    )
+    query_thread = await supervisor.run_blocking(
+        "search_vector", "test", None, threading.current_thread
+    )
+    assert build_thread.name.startswith("lgrep-build")
+    assert query_thread.name.startswith("lgrep-worker")
+
+    supervisor.shutdown(cancel_futures=True)
+
+
+@pytest.mark.asyncio
+async def test_query_completes_while_build_lane_saturated():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
+    started = threading.Event()
+    release = threading.Event()
+
+    def hold_build():
+        started.set()
+        release.wait(timeout=5)
+
+    first = asyncio.create_task(supervisor.run_blocking("index_window", "test", None, hold_build))
+    deadline = time.monotonic() + 5
+    while not started.is_set() and time.monotonic() < deadline:
+        await asyncio.sleep(0.001)
+    assert started.is_set(), "build job never started"
+
+    queued = asyncio.create_task(
+        supervisor.run_blocking("index_all", "test", None, lambda: "built")
+    )
+    await asyncio.sleep(0.05)
+    assert not queued.done(), "queued build job should wait behind the running one"
+
+    # The query lane owns its own thread: a query completes despite the
+    # saturated build lane. On a single shared pool this timed out.
+    result = await asyncio.wait_for(
+        supervisor.run_blocking("search_vector", "test", None, lambda: "ok"),
+        timeout=1.0,
+    )
+    assert result == "ok"
+
+    release.set()
+    assert await first is None
+    assert await queued == "built"
+
+    supervisor.shutdown(cancel_futures=True)
+
+
+@pytest.mark.asyncio
+async def test_lane_param_overrides_kind_routing():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
+
+    forced_build = await supervisor.run_blocking(
+        "search_vector", "test", None, threading.current_thread, lane="build"
+    )
+    forced_query = await supervisor.run_blocking(
+        "index_all", "test", None, threading.current_thread, lane="query"
+    )
+    assert forced_build.name.startswith("lgrep-build")
+    assert forced_query.name.startswith("lgrep-worker")
+
+    supervisor.shutdown(cancel_futures=True)
+
+
+@pytest.mark.asyncio
+async def test_unknown_lane_is_refused():
+    supervisor = RuntimeSupervisor(max_workers=1, history_limit=10)
+    with pytest.raises(ValueError, match="lane"):
+        await supervisor.run_blocking("status", "test", None, lambda: 1, lane="gpu")
+    supervisor.shutdown(cancel_futures=True)
+
+
+@pytest.mark.asyncio
+async def test_job_event_carries_lane():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
+
+    with capture_logs() as logs:
+        await supervisor.run_blocking("index_all", "test", project="/tmp/project", fn=lambda: "ok")
+    event = _job_events(logs)[0]
+    assert event["lane"] == "build"
+
+    with capture_logs() as logs:
+        await supervisor.run_blocking("status", "test", project=None, fn=lambda: "ok")
+    event = _job_events(logs)[0]
+    assert event["lane"] == "query"
+
+    supervisor.shutdown(cancel_futures=True)
+
+
+@pytest.mark.asyncio
+async def test_job_snapshot_includes_lane():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
+    release = threading.Event()
+    task = asyncio.create_task(
+        supervisor.run_blocking("index_window", "test", None, lambda: release.wait(timeout=2))
+    )
+    await asyncio.sleep(0.05)
+
+    active = supervisor.snapshot_active_jobs()
+    assert active and active[0]["lane"] == "build"
+
+    release.set()
+    await task
+    supervisor.shutdown(cancel_futures=True)
+
+
+def test_build_thread_limit_from_env(monkeypatch):
+    monkeypatch.delenv("LGREP_BUILD_MAX_THREADS", raising=False)
+    assert RuntimeSupervisor(max_workers=1).max_build_workers == 1
+
+    monkeypatch.setenv("LGREP_BUILD_MAX_THREADS", "3")
+    assert RuntimeSupervisor(max_workers=1).max_build_workers == 3
+
+    monkeypatch.setenv("LGREP_BUILD_MAX_THREADS", "0")
+    assert RuntimeSupervisor(max_workers=1).max_build_workers == 1
+
+    monkeypatch.setenv("LGREP_BUILD_MAX_THREADS", "notanumber")
+    assert RuntimeSupervisor(max_workers=1).max_build_workers == 1
+
+
+@pytest.mark.asyncio
+async def test_shutdown_shuts_down_both_executors():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, history_limit=10)
+    supervisor.shutdown(cancel_futures=True)
+    with pytest.raises(RuntimeError):
+        supervisor._executor.submit(lambda: 1)
+    with pytest.raises(RuntimeError):
+        supervisor._build_executor.submit(lambda: 1)

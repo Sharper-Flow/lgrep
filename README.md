@@ -458,8 +458,10 @@ Security notes:
 | `LGREP_AUTO_WARM_DISK` | No | `true` | Auto-load all discoverable disk caches on startup when no explicit warm paths are set. Set `false` for large shared machines. |
 | `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
+| `LGREP_ENSURE_BUDGET_S` | No | `8.0` | Budget (seconds) for a worktree search to make its trunk's base index current before answering: the staleness check plus at most one base index window. Beyond the budget the remaining base work continues as a background reindex and the search answers from the current (possibly partial) index. Keep below `LGREP_TOOL_TIMEOUT_S`. `0` always defers to the background. |
 | `LGREP_GITHUB_TOKEN` | No | unset | GitHub token used by `index_symbols_repo` when no token is passed to the call. Lifts remote indexing from the anonymous 60/hour rate limit (shared across all sessions) to the authenticated 5000/hour limit. `GITHUB_TOKEN` is used as a fallback; an explicit `github_token` argument wins over both. |
-| `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. |
+| `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. Query-lane jobs (searches, staleness checks, status counts) run here. |
+| `LGREP_BUILD_MAX_THREADS` | No | `1` | Max worker threads for the dedicated build lane: index windows, pending-file computation, full re-index, orphan/prune sweeps, and remote repo indexing. Build jobs cannot occupy the `LGREP_WORKER_MAX_THREADS` threads queries need. |
 | `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
 | `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
 | `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory share one semantic cache. Each worktree embeds only the files that differ from its trunk and still searches its own version of every file. |
@@ -488,6 +490,7 @@ lgrep:
 - `LGREP_AUTO_WARM_DISK=false` prevents surprise startup work from old cache entries.
 - Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client timeout so callers get a structured lgrep error before a transport deadline.
 - Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent agents cannot create unbounded blocking work.
+- Leave `LGREP_BUILD_MAX_THREADS` at `1` on shared daemons: builds are background work and a single lane keeps them behind queries.
 - Use `lgrep_diagnostics` when investigating high CPU/thread count. It reports PID, uptime, loaded projects, worker limit, active jobs, recent abandoned/finished jobs, and full local project paths without exposing API keys or environment values.
 - `lgrep_status_semantic(path="")` is intentionally cheap and memory-only. Pass a specific `path` when you need deep file/chunk counts.
 - Destructive cache cleanup over MCP requires the explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; without it the MCP tools return a preview/refusal. Run `lgrep prune-orphans --execute` (or `lgrep prune-symbols --execute` for symbol indexes) from a local shell when an operator intentionally wants deletion. The `invalidate_cache` and `invalidate_worktree_cache` tools have no CLI equivalent.
