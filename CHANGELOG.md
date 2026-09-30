@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.2)
+
+- Persist per-call tool logs: LGREP_LOG_FILE sink, call_id/path, job queue/run timing (#27)
+- docs: update changelog for v3.6.1
+
 ## 2026-09-30 (v3.7.0)
 
 - feat(logging): opt-in `LGREP_LOG_FILE` rotating JSON sink with a single-writer flock; per-call `call_id`/`path` on tool events; `runtime_job_finished` with queue/run/total timing
