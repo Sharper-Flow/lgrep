@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.8)
+
+- perf(symbol-tools): stop the per-query index refresh on truncated walks (#33)
+- docs: update changelog for v3.6.7
+
 ## 2026-09-30 (v3.6.7)
 
 - fix(server): surface staleness on search_semantic responses (#32)
