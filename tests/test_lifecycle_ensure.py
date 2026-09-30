@@ -344,3 +344,68 @@ async def test_shutdown_cancels_and_reconciles_in_flight_assemblies(tmp_path, mo
     release.set()
     await asyncio.sleep(0.1)
     assert ctx._stores == {}, "store published after shutdown returned"
+
+
+async def test_shutdown_refuses_checkout_published_after_teardown(tmp_path, monkeypatch):
+    """A checkout assembly still running at shutdown never publishes its state."""
+    import lgrep.server.lifecycle as lifecycle
+    from lgrep.server.lifecycle import _shutdown
+
+    blocked = threading.Event()
+    release = threading.Event()
+
+    class SlowIndexer:
+        def __init__(self, *args, **kwargs):
+            blocked.set()
+            release.wait(timeout=10)
+
+    monkeypatch.setattr(lifecycle, "Indexer", SlowIndexer)
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+
+    ensure_task = asyncio.create_task(_ensure_project_initialized(ctx, project))
+    await _wait_for_event(blocked)
+
+    await _shutdown(ctx)
+    assert ctx.projects == {}
+
+    release.set()
+    result = await asyncio.wait_for(ensure_task, timeout=5)
+
+    assert isinstance(result, dict), "checkout assembly published after shutdown"
+    assert ctx.projects == {}, "checkout published a ProjectState after shutdown completed"
+    assert ctx._stores == {}
+
+
+async def test_closed_context_admits_no_new_assembly(tmp_path, monkeypatch):
+    """After shutdown, ensure refuses instead of assembling a new store."""
+    from lgrep.server.lifecycle import _shutdown
+
+    constructions: list = []
+    monkeypatch.setattr(
+        "lgrep.server.lifecycle.ChunkStore",
+        _make_slow_store(threading.Event(), _released(), constructions),
+    )
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    ctx = LgrepContext(voyage_api_key="k", transport="stdio")
+    ctx.embedder = object()
+    await _shutdown(ctx)
+
+    result = await asyncio.wait_for(_ensure_project_initialized(ctx, project), timeout=5)
+
+    assert isinstance(result, dict)
+    assert constructions == []
+    assert ctx._stores == {} and ctx._store_assemblies == {}
+
+
+def _released() -> threading.Event:
+    event = threading.Event()
+    event.set()
+    return event
