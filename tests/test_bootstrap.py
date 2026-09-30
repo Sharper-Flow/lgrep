@@ -6,13 +6,40 @@ Verifies that the startup transport is preserved for diagnostics without using
 
 from __future__ import annotations
 
+import fcntl
+import json
+import logging
 import os
+import sys
+from logging.handlers import RotatingFileHandler
 from unittest.mock import MagicMock, patch
 
 import pytest
+import structlog
 
 import lgrep.server.bootstrap as bootstrap_module
 from lgrep.server import _startup
+
+
+@pytest.fixture()
+def clean_logging_state():
+    """Snapshot root logging state; restore it after logging tests.
+
+    structlog stays routed through stdlib logging after teardown: the
+    suite's ambient contract is that structlog never writes to stdout, and
+    ``structlog.reset_defaults()`` would restore the stdout-printing library
+    default that leaks into CLI JSON output (tests/test_cli.py relies on
+    this contract).
+    """
+    root = logging.getLogger()
+    saved_handlers = root.handlers[:]
+    saved_level = root.level
+    try:
+        yield
+    finally:
+        bootstrap_module.shutdown_logging()
+        root.handlers[:] = saved_handlers
+        root.setLevel(saved_level)
 
 
 class TestBootstrapTransportPlumbing:
@@ -44,7 +71,9 @@ class TestBootstrapTransportPlumbing:
         finally:
             bootstrap_module._startup_transport = None
 
-    def test_run_server_records_internal_transport_not_env(self, monkeypatch: pytest.MonkeyPatch):
+    def test_run_server_records_internal_transport_not_env(
+        self, monkeypatch: pytest.MonkeyPatch, clean_logging_state
+    ):
         monkeypatch.delenv("LGREP_TRANSPORT", raising=False)
 
         with patch("lgrep.server.mcp.run") as mock_run:
@@ -54,7 +83,9 @@ class TestBootstrapTransportPlumbing:
         assert "LGREP_TRANSPORT" not in os.environ
         mock_run.assert_called_once_with(transport="streamable-http")
 
-    def test_run_server_default_records_stdio_transport(self, monkeypatch: pytest.MonkeyPatch):
+    def test_run_server_default_records_stdio_transport(
+        self, monkeypatch: pytest.MonkeyPatch, clean_logging_state
+    ):
         monkeypatch.delenv("LGREP_TRANSPORT", raising=False)
 
         with patch("lgrep.server.mcp.run"):
@@ -62,3 +93,66 @@ class TestBootstrapTransportPlumbing:
 
         assert bootstrap_module.get_startup_transport() == "stdio"
         assert "LGREP_TRANSPORT" not in os.environ
+
+
+class TestConfigureLogging:
+    def test_stderr_is_always_a_sink_and_stdout_never_is(self, clean_logging_state):
+        bootstrap_module.configure_logging()
+        root = logging.getLogger()
+        streams = [getattr(handler, "stream", None) for handler in root.handlers]
+        assert sys.stderr in streams
+        assert sys.stdout not in streams
+
+    def test_log_file_env_writes_json_lines_and_lock_sidecar(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, clean_logging_state
+    ):
+        log_file = tmp_path / "lgrep.log"
+        monkeypatch.setenv("LGREP_LOG_FILE", str(log_file))
+
+        bootstrap_module.configure_logging()
+        structlog.get_logger("tests.probe").info("probe_event", path="/tmp/project")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
+        assert (tmp_path / "lgrep.log.lock").exists()
+        entries = [json.loads(line) for line in log_file.read_text().splitlines()]
+        probes = [entry for entry in entries if entry.get("event") == "probe_event"]
+        assert len(probes) == 1
+        assert probes[0]["path"] == "/tmp/project"
+        assert probes[0]["level"] == "info"
+        assert "timestamp" in probes[0]
+
+    def test_second_writer_is_refused_and_keeps_stderr_only(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
+    ):
+        log_file = tmp_path / "lgrep.log"
+        blocker = os.open(str(log_file) + ".lock", os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(blocker, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            monkeypatch.setenv("LGREP_LOG_FILE", str(log_file))
+            bootstrap_module.configure_logging()
+        finally:
+            fcntl.flock(blocker, fcntl.LOCK_UN)
+            os.close(blocker)
+
+        root = logging.getLogger()
+        assert [h for h in root.handlers if isinstance(h, RotatingFileHandler)] == []
+        assert sys.stderr in [getattr(h, "stream", None) for h in root.handlers]
+        assert str(log_file) in capsys.readouterr().err
+
+    def test_reconfigure_replaces_owned_handlers_without_duplicates(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, clean_logging_state
+    ):
+        monkeypatch.setenv("LGREP_LOG_FILE", str(tmp_path / "lgrep.log"))
+
+        bootstrap_module.configure_logging()
+        first = len(bootstrap_module._owned_handlers)
+        bootstrap_module.configure_logging()
+        second = len(bootstrap_module._owned_handlers)
+
+        assert first == 2
+        assert second == 2
+        file_handlers = [
+            h for h in logging.getLogger().handlers if isinstance(h, RotatingFileHandler)
+        ]
+        assert len(file_handlers) == 1

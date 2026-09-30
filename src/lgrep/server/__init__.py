@@ -6,6 +6,7 @@ import asyncio
 import functools
 import os
 import time
+import uuid
 from importlib import import_module
 from pathlib import Path
 
@@ -22,87 +23,108 @@ AUTO_INDEX_RETRY_BASE_DELAY_S = 0.1
 TOOL_TIMEOUT_S = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
 
 
+def _new_call_id() -> str:
+    """Return a short uuid hex id for one tool call."""
+    return uuid.uuid4().hex[:12]
+
+
+def _call_log_fields(kwargs: dict) -> dict:
+    """Correlation fields shared by every time_tool lifecycle event."""
+    fields: dict = {"call_id": call_id_var.get()}
+    path = kwargs.get("path")
+    if path is not None:
+        fields["path"] = path
+    return fields
+
+
 def time_tool(func):
     """Decorator to time tool execution, log results, and enforce timeout."""
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
+        token = call_id_var.set(_new_call_id())
         start = time.monotonic()
         tool_name = func.__name__
+        fields = _call_log_fields(kwargs)
         try:
-            result = await asyncio.wait_for(func(*args, **kwargs), timeout=TOOL_TIMEOUT_S)
-            duration = round((time.monotonic() - start) * 1000, 2)
-            log.info(f"{tool_name}_completed", duration_ms=duration)
-            return result
-        except TimeoutError:
-            duration = round((time.monotonic() - start) * 1000, 2)
-            message = (
-                f"Operation timed out after {TOOL_TIMEOUT_S}s. "
-                "The project may need re-indexing or the Voyage API may be slow. "
-                "Try again or use a non-semantic search tool."
-            )
-            log.error(
-                f"{tool_name}_timeout",
-                duration_ms=duration,
-                timeout_s=TOOL_TIMEOUT_S,
-            )
-            if tool_name == "search_text":
-                return {
-                    "results": [],
-                    "limit": kwargs.get("limit", 50),
-                    "_meta": make_meta(start, tool_name),
-                    "error": message,
-                }
+            try:
+                result = await asyncio.wait_for(func(*args, **kwargs), timeout=TOOL_TIMEOUT_S)
+                duration = round((time.monotonic() - start) * 1000, 2)
+                log.info(f"{tool_name}_completed", **fields, duration_ms=duration)
+                return result
+            except TimeoutError:
+                duration = round((time.monotonic() - start) * 1000, 2)
+                message = (
+                    f"Operation timed out after {TOOL_TIMEOUT_S}s. "
+                    "The project may need re-indexing or the Voyage API may be slow. "
+                    "Try again or use a non-semantic search tool."
+                )
+                log.error(
+                    f"{tool_name}_timeout",
+                    **fields,
+                    duration_ms=duration,
+                    timeout_s=TOOL_TIMEOUT_S,
+                )
+                if tool_name == "search_text":
+                    return {
+                        "results": [],
+                        "limit": kwargs.get("limit", 50),
+                        "_meta": make_meta(start, tool_name),
+                        "error": message,
+                    }
 
-            if tool_name == "search_references":
-                return {
-                    "query": kwargs.get("query", ""),
-                    "usage_filter": kwargs.get("usage_filter", "production_first"),
-                    "total_matches": 0,
-                    "production_matches": 0,
-                    "test_matches": 0,
-                    "returned_production": 0,
-                    "returned_tests": 0,
-                    "stale_file_count": 0,
-                    "results": [],
-                    "candidate_names": [],
-                    "disclaimer": "",
-                    "_meta": make_meta(start, tool_name),
-                    "error": message,
-                }
+                if tool_name == "search_references":
+                    return {
+                        "query": kwargs.get("query", ""),
+                        "usage_filter": kwargs.get("usage_filter", "production_first"),
+                        "total_matches": 0,
+                        "production_matches": 0,
+                        "test_matches": 0,
+                        "returned_production": 0,
+                        "returned_tests": 0,
+                        "stale_file_count": 0,
+                        "results": [],
+                        "candidate_names": [],
+                        "disclaimer": "",
+                        "_meta": make_meta(start, tool_name),
+                        "error": message,
+                    }
 
-            from lgrep.server.responses import error_response as _err
+                from lgrep.server.responses import error_response as _err
 
-            return _err(message)
-        except asyncio.CancelledError:
-            duration = round((time.monotonic() - start) * 1000, 2)
-            log.warning(f"{tool_name}_cancelled", duration_ms=duration)
-            if tool_name == "search_references":
-                return {
-                    "query": kwargs.get("query", ""),
-                    "usage_filter": kwargs.get("usage_filter", "production_first"),
-                    "total_matches": 0,
-                    "production_matches": 0,
-                    "test_matches": 0,
-                    "returned_production": 0,
-                    "returned_tests": 0,
-                    "stale_file_count": 0,
-                    "results": [],
-                    "candidate_names": [],
-                    "disclaimer": "",
-                    "_meta": make_meta(start, tool_name),
-                    "error": "Operation was cancelled.",
-                }
-            raise
-        except Exception as e:
-            duration = round((time.monotonic() - start) * 1000, 2)
-            log.exception(f"{tool_name}_failed", duration_ms=duration, error=str(e))
-            raise
+                return _err(message)
+            except asyncio.CancelledError:
+                duration = round((time.monotonic() - start) * 1000, 2)
+                log.warning(f"{tool_name}_cancelled", **fields, duration_ms=duration)
+                if tool_name == "search_references":
+                    return {
+                        "query": kwargs.get("query", ""),
+                        "usage_filter": kwargs.get("usage_filter", "production_first"),
+                        "total_matches": 0,
+                        "production_matches": 0,
+                        "test_matches": 0,
+                        "returned_production": 0,
+                        "returned_tests": 0,
+                        "stale_file_count": 0,
+                        "results": [],
+                        "candidate_names": [],
+                        "disclaimer": "",
+                        "_meta": make_meta(start, tool_name),
+                        "error": "Operation was cancelled.",
+                    }
+                raise
+            except Exception as e:
+                duration = round((time.monotonic() - start) * 1000, 2)
+                log.exception(f"{tool_name}_failed", **fields, duration_ms=duration, error=str(e))
+                raise
+        finally:
+            call_id_var.reset(token)
 
     return wrapper
 
 
 from lgrep.server import lifecycle as _lifecycle  # noqa: E402
+from lgrep.server.runtime import call_id_var  # noqa: E402
 
 _lifecycle.MAX_PROJECTS = MAX_PROJECTS
 _lifecycle.AUTO_INDEX_MAX_ATTEMPTS = AUTO_INDEX_MAX_ATTEMPTS
