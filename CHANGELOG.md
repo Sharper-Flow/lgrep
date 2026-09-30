@@ -1,3 +1,8 @@
+## 2026-09-30 (v3.6.7)
+
+- fix(server): surface staleness on search_semantic responses (#32)
+- docs: update changelog for v3.6.6
+
 ## 2026-09-30 (v3.6.6)
 
 - fix(server): single-flight checkout assembly per path (#31)
