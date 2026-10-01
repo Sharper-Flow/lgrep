@@ -31,8 +31,10 @@ Example — `search_semantic`:
 
 `total` always equals `len(results)`; it is not the corpus chunk count.
 `is_stale` is `True` when the staleness check found drift and scheduled a
-background refresh. `_meta` carries the tool name and timing on every
-response.
+background refresh. `_meta` carries the tool name and timing on the
+responses whose declared type includes it. `ToolError` and some light
+responses — `status_semantic` with no `path`, for example — carry no
+`_meta`.
 
 Hits are compact by default: the path, the correct line range, the score, the
 match type, and a 3-line snippet (first 3 non-blank chunk-body lines, 120
