@@ -18,14 +18,21 @@ Example — `search_semantic`:
     "query": "authentication flow",
     "path": "/path/to/project",
     "engine": "hybrid",
-    "total": 3,
+    "total": 1,
     "results": [
         {"file_path": "src/auth.py", "start_line": 42, "end_line": 87,
          "score": 0.91, "match_type": "hybrid",
          "snippet": "def login(username, password):\n    \"\"\"Handle user login.\"\"\"\n    if username..."},
     ],
+    "is_stale": False,
+    "_meta": {"tool": "search_semantic", "timing_ms": 412.7},
 }
 ```
+
+`total` always equals `len(results)`; it is not the corpus chunk count.
+`is_stale` is `True` when the staleness check found drift and scheduled a
+background refresh. `_meta` carries the tool name and timing on every
+response.
 
 Hits are compact by default: the path, the correct line range, the score, the
 match type, and a 3-line snippet (first 3 non-blank chunk-body lines, 120
@@ -174,7 +181,8 @@ Without dedup, multiple checkouts of one repository accumulate duplicate
 semantic indexes — one per worktree path — wasting disk (hundreds of MB per
 worktree) and Voyage API tokens.
 
-Enable it with `LGREP_WORKTREE_DEDUP` (any value) in the server environment:
+Enable it by setting `LGREP_WORKTREE_DEDUP` to any non-empty value in the
+server environment (an empty value leaves dedup off):
 
 ```bash
 export LGREP_WORKTREE_DEDUP=1

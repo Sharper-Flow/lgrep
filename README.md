@@ -175,7 +175,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_WORKER_MAX_THREADS` | `4` | Query-lane worker threads for supervised blocking jobs |
 | `LGREP_BUILD_MAX_THREADS` | `1` | Build-lane threads: index windows, re-indexes, prune sweeps, remote indexing |
 | `LGREP_PRUNE_MIN_AGE_S` | `3600` | Grace window (seconds) before pruning; `0` disables grace |
-| `LGREP_WORKTREE_DEDUP` | unset | When set, git worktrees of one repo share one semantic cache |
+| `LGREP_WORKTREE_DEDUP` | unset | Any non-empty value makes git worktrees of one repo share one semantic cache |
 | `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lets MCP prune/invalidate tools delete; keep unset on any shared server |
 
 ## Transport and security
