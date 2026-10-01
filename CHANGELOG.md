@@ -1,3 +1,8 @@
+## 2026-10-01 (v3.6.10)
+
+- docs: correct semantic freshness and LGREP_SYMBOLS_DIR scope (#35)
+- docs: update changelog for v3.6.9
+
 ## 2026-10-01 (v3.6.9)
 
 - docs: rewrite README with in-repo header image and operations guide (#34)
