@@ -1,3 +1,8 @@
+## 2026-10-01 (v3.6.9)
+
+- docs: rewrite README with in-repo header image and operations guide (#34)
+- docs: update changelog for v3.6.8
+
 ## 2026-09-30 (v3.6.8)
 
 - perf(symbol-tools): stop the per-query index refresh on truncated walks (#33)
