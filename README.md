@@ -161,7 +161,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_LOG_LEVEL` | `INFO` | Log verbosity |
 | `LGREP_LOG_FILE` | unset | Opt-in rotating JSON log file; see [operations](docs/operations.md#notes-on-selected-environment-variables) |
 | `LGREP_CACHE_DIR` | `~/.cache/lgrep` | Semantic cache directory |
-| `LGREP_SYMBOLS_DIR` | `~/.cache/lgrep/symbols` | Directory that `prune-symbols` and the `gc` symbol pass scan; indexing and symbol queries always use the default directory |
+| `LGREP_SYMBOLS_DIR` | `~/.cache/lgrep/symbols` | Directory that `prune-symbols` and the `gc` symbol pass scan. The server and the MCP tools ignore it and use the default directory; the CLI `index-symbols` and `search-symbols` commands take `--storage-dir` instead |
 | `LGREP_WARM_PATHS` | none | Colon-separated projects to warm on startup |
 | `LGREP_AUTO_WARM_DISK` | `true` | Auto-load discoverable disk caches at startup when no warm paths are set; set `false` on large shared machines |
 | `LGREP_AUTO_WATCH` | `false` | Auto-start file watchers for warmed projects |
@@ -192,7 +192,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 - **`VOYAGE_API_KEY` not set** — set it in the MCP server environment; the symbol engine still works without it.
 - **Slow first semantic index** — the first run embeds the whole project; later runs skip unchanged files by content hash.
 - **`Repository not indexed`** — symbol tools auto-build the index on first query for local git checkouts; subdirectory queries need an explicit `index_symbols_folder`. Details in [operations](docs/operations.md#freshness-and-index-budgets).
-- **Stale semantic results** — searches serve the current index and refresh in the background automatically; see [operations](docs/operations.md#freshness-and-index-budgets).
+- **Stale semantic results** — searches serve the current index, set `is_stale: true` when it has drifted, and refresh it in the background; run `index_semantic` to force a fresh index before a query. See [operations](docs/operations.md#freshness-and-index-budgets).
 - **Investigating high CPU on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, and active jobs; see [operations](docs/operations.md#shared-daemon-tuning-vision--opencode).
 - **Native dependency build issues** — prebuilt wheels usually work; otherwise install a compiler toolchain.
 
