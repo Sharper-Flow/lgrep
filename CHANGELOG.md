@@ -1,3 +1,8 @@
+## 2026-10-01 (v3.6.11)
+
+- docs: match the search_semantic response example to its contract (#36)
+- docs: update changelog for v3.6.10
+
 ## 2026-10-01 (v3.6.10)
 
 - docs: correct semantic freshness and LGREP_SYMBOLS_DIR scope (#35)
