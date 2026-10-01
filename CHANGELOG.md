@@ -1,3 +1,8 @@
+## 2026-10-01 (v3.6.12)
+
+- docs: scope LGREP_SYMBOLS_DIR and _meta claims to what source does (#37)
+- docs: update changelog for v3.6.11
+
 ## 2026-10-01 (v3.6.11)
 
 - docs: match the search_semantic response example to its contract (#36)
