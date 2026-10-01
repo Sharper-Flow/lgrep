@@ -161,7 +161,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_LOG_LEVEL` | `INFO` | Log verbosity |
 | `LGREP_LOG_FILE` | unset | Opt-in rotating JSON log file; see [operations](docs/operations.md#notes-on-selected-environment-variables) |
 | `LGREP_CACHE_DIR` | `~/.cache/lgrep` | Semantic cache directory |
-| `LGREP_SYMBOLS_DIR` | `~/.cache/lgrep/symbols` | Directory that `prune-symbols` and the `gc` symbol pass scan. The server and the MCP tools ignore it and use the default directory; the CLI `index-symbols` and `search-symbols` commands take `--storage-dir` instead |
+| `LGREP_SYMBOLS_DIR` | `~/.cache/lgrep/symbols` | Directory that `prune-symbols`, `lgrep gc`, and the MCP `prune_symbols` tool scan. Indexing and symbol queries use the default directory; the CLI `index-symbols` and `search-symbols` commands take `--storage-dir` instead |
 | `LGREP_WARM_PATHS` | none | Colon-separated projects to warm on startup |
 | `LGREP_AUTO_WARM_DISK` | `true` | Auto-load discoverable disk caches at startup when no warm paths are set; set `false` on large shared machines |
 | `LGREP_AUTO_WATCH` | `false` | Auto-start file watchers for warmed projects |
