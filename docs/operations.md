@@ -220,9 +220,12 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
 - `search_semantic` runs an auto-staleness check before every search. When
   file mtimes have moved past the index timestamp and content hashes have
   drifted, the search serves the current (possibly slightly stale) index
-  immediately and triggers a background single-flight refresh — it never
-  blocks on a full re-embed. The next search observes fresh results;
-  freshness converges with no operator configuration.
+  immediately and schedules a background single-flight refresh — it never
+  blocks on a full re-embed. The response sets `is_stale: true` when the
+  check found drift. The search does not wait for the refresh, so a later
+  search still returns stale results while the refresh runs, or if it fails.
+  Results become fresh once a refresh completes, with no operator
+  configuration.
 - `watch_start_semantic` (`LGREP_AUTO_WATCH`) is an incremental-freshness
   **optimization** (per-file background re-index on edit), not a correctness
   dependency. `index_semantic` is only needed for first-time setup or to
