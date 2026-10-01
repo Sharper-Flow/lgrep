@@ -1,242 +1,72 @@
-<h1 align="center">lgrep</h1>
-
 <p align="center">
-  <strong>Local-first code intelligence for <a href="https://github.com/opencode-ai/opencode">OpenCode</a></strong>
-</p>
-
-<p align="center">
-  <a href="https://sharperflow.com/projects/lgrep">
-    <img src="https://sharperflow.com/og/lgrep-preview.png" alt="lgrep preview banner showing semantic search and symbol lookup for OpenCode" width="640" />
-  </a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/lgrep-header-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/lgrep-header-light.svg">
+    <img alt="lgrep — local-first code intelligence" src="docs/assets/lgrep-header-light.svg" width="640">
+  </picture>
 </p>
 
 <p align="center">
   <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white" alt="Python 3.11+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/Sharper-Flow/lgrep"><img src="https://img.shields.io/github/stars/Sharper-Flow/lgrep?style=social" alt="GitHub stars" /></a>
 </p>
 
-<p align="center">
-  <a href="https://sharperflow.com/projects/lgrep">Project Page</a>
-  &middot;
-  <a href="https://github.com/Sharper-Flow/lgrep">GitHub</a>
-  &middot;
-  <a href="CHANGELOG.md">Changelog</a>
-</p>
-
----
-
-`lgrep` gives AI agents a better first move in codebases they already have on disk.
-
-It is built for active local development, where files are changing, multiple agent sessions may be exploring the same repo, and the first challenge is often finding the right implementation before anyone knows the right symbol name.
-
-Instead of starting with `glob`, `grep`, and random file reads, agents can:
-
-- search by meaning when they do not know the symbol yet
-- search by symbol when they know the name
-- inspect file and repo structure before opening code
-- reuse one warm local server across multiple sessions and agents
-
-That is the whole pitch: fewer bad searches, less wasted context, faster understanding for both humans and agents working in local repos.
-
-## What lgrep is
-
-`lgrep` combines two complementary engines in one MCP server for local repositories:
-
-- **Semantic engine** - natural-language code search using Voyage Code 4 embeddings with local LanceDB storage
-- **Symbol engine** - exact symbol, outline, and text tools using tree-sitter parsing with a local JSON index
-
-Use the semantic engine to answer questions like:
-
-- "where is auth enforced between route and service?"
-- "how does retry logic work for failed requests?"
-- "where are permissions checked?"
-
-Use the symbol engine to answer questions like:
-
-- "find the `authenticate` function"
-- "show me the outline for `src/auth.py`"
-- "get the symbol source for `UserService.login`"
-
-Your working tree stays local and searchable as it evolves. Only short semantic queries and indexing payloads go to Voyage. Symbol lookup stays fully local and works without an API key.
-
-## Why it exists
-
-AI coding agents usually fail early, not late.
-
-They miss because they start with the wrong retrieval primitive:
-
-- `grep` cannot answer concept questions
-- full-file reads waste tokens on irrelevant code
-- repeated local exploration across parallel agents duplicates work
-
-`lgrep` fixes that by giving agents a search stack that matches how they actually reason:
-
-1. find the implementation by intent
-2. narrow to the right file or symbol
-3. retrieve only the code that matters
-
-For heavy OpenCode users, this is not a convenience plugin. It is search infrastructure.
-
-## Why lgrep feels different
-
-- **Intent-first search** - agents can ask by meaning before they know names
-- **Exact structure tools** - file outlines, repo outlines, symbol lookup, and text search are in the same server
-- **Local-first storage** - vectors and indexes live on disk, not in someone else's SaaS
-- **Shared warm process** - one HTTP MCP server can serve multiple concurrent OpenCode sessions against the same local repos
-- **Commercially usable** - `lgrep` is MIT licensed, so commercial use is allowed
-
-## Comparisons
-
-### lgrep vs grep and ripgrep
-
-`grep` and `rg` are still the right tool for exact text and regex lookups. They are not good at intent discovery.
-
-If the code says `jwt.verify()` and your agent asks "where is authentication enforced?", text search often misses the right entry point. Semantic search closes that gap.
-
-### lgrep vs mgrep
-
-[`mgrep`](https://github.com/mixedbread-ai/mgrep) is the closest semantic-search comparison point.
-
-- `mgrep` is semantic-only
-- `lgrep` combines semantic search with symbol and structure tools
-- `mgrep` is cloud-oriented
-- `lgrep` keeps vectors local and shares one warm server across agents
-
-### Best-fit workflow
-
-`lgrep` is strongest when an agent is already inside a local repo and needs to move from intent to source without wasting context:
-
-1. ask by meaning when the right name is unknown
-2. inspect the matching files and outlines
-3. retrieve the exact symbol or text that matters
-4. keep the same warm local server available as the working tree changes
+`lgrep` is a local-first code-intelligence MCP server for AI coding agents such as [OpenCode](https://github.com/opencode-ai/opencode). Agents search by meaning when they do not know the symbol yet, search by symbol when they do, and inspect file and repo structure before opening code — reusing one warm local server across sessions instead of repeating `glob`/`grep`/random-file-read cycles. Working trees stay on disk; only short semantic queries and indexing payloads reach the Voyage API, and symbol lookup is fully local with no API key.
 
 ## How it works
 
-### Architecture
+Two engines behind one MCP server:
 
-```mermaid
-flowchart LR
-    A[OpenCode Session 1] --> M[lgrep MCP Server]
-    B[OpenCode Session 2] --> M
-    C[OpenCode Session N] --> M
+- **Semantic engine** — natural-language code search: Voyage Code 4 embeddings, AST-aware chunking, local LanceDB storage, hybrid retrieval with reranking. 30+ languages, text fallback where needed.
+- **Symbol engine** — exact structure via tree-sitter parsing into a local JSON index: symbol search, file/repo outlines, candidate references, and source retrieval with no API call. 165+ languages via tree-sitter-language-pack.
 
-    M --> S[Semantic Engine\nVoyage Code 4 + LanceDB]
-    M --> Y[Symbol Engine\ntree-sitter + JSON index]
-
-    S --> V[(Local vector store)]
-    Y --> J[(Local symbol store)]
-    S -. query embeddings .-> Q[Voyage API]
-```
-
-```text
-Agent -> lgrep MCP server -> semantic engine + symbol engine
-```
-
-### Semantic engine
-
-1. Discover files while respecting `.gitignore`
-2. Chunk code with AST-aware boundaries
-3. Embed chunks with Voyage Code 4
-4. Store vectors locally in LanceDB
-5. Search with hybrid retrieval and reranking
-
-### Symbol engine
-
-1. Parse source with tree-sitter
-2. Extract functions, classes, methods, and related structure
-3. Store a local symbol index
-4. Serve symbol search, outlines, and source retrieval without an API call
+Staleness is handled automatically: each semantic search runs a staleness pre-flight and refreshes in the background when the index has drifted. Details in [docs/operations.md](docs/operations.md).
 
 ## Installation
 
-### Requirements
-
-- Python 3.11+
-- a Voyage API key if you want semantic search
-
-### Install from GitHub
+Requirements: Python 3.11+, and a [Voyage API key](https://dash.voyageai.com/) for the semantic engine only.
 
 ```bash
+# From GitHub
 pip install git+https://github.com/Sharper-Flow/lgrep.git
-```
 
-### Install from source
-
-```bash
+# Or from a source checkout
 git clone https://github.com/Sharper-Flow/lgrep.git
-cd lgrep
-pip install .
+cd lgrep && pip install .
 ```
 
-## Fast setup for OpenCode
+## OpenCode setup
 
-**stdio is the local default** for single-session / single-user setups — no server process needed. For shared or multi-session deployments, see [Scale-up: shared HTTP server](#3-scale-up-shared-http-server) below.
+**stdio is the local default** for single-session, single-user setups — OpenCode starts lgrep itself and no server process is needed. For multi-session deployments, use the shared HTTP server below.
 
-### 1. Get a Voyage API key
-
-Create a key at [dash.voyageai.com](https://dash.voyageai.com/).
-
-You only need this for the semantic engine. The symbol engine works without it.
-
-### 2. Wire it into OpenCode
-
-For single-user, single-session setups, stdio is the local default. Add this to `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "instructions": [
-    "~/.config/opencode/instructions/lgrep-tools.md"
-  ],
-  "mcp": {
-    "lgrep": { "type": "local" }
-  }
-}
-```
-
-If you prefer to run a shared HTTP server (see [section 3](#3-scale-up-shared-http-server)), swap the `mcp.lgrep` block for:
-
-```json
-{
-  "mcp": {
-    "lgrep": {
-      "type": "remote",
-      "url": "http://localhost:6285/mcp",
-      "enabled": true
-    }
-  }
-}
-```
-
-Or let the installer wire the shared-HTTP path automatically:
+### 1. Run the installer
 
 ```bash
 lgrep install-opencode
 ```
 
-That installer will:
+The installer is idempotent. It:
 
-- create `~/.cache/lgrep/` for indexes and logs
-- add a `type: "remote"` MCP entry pointing at `http://localhost:6285/mcp`
-- copy the packaged `lgrep-tools.md` instruction and `skills/lgrep/SKILL.md` into your OpenCode config
-- append the instruction file to the `instructions` array so agents prefer `lgrep` first
+- creates `~/.cache/lgrep/` for indexes and logs
+- copies the packaged `instructions/lgrep-tools.md` and `skills/lgrep/SKILL.md` into `~/.config/opencode/`
+- appends the instruction file to the `instructions` array so agents prefer `lgrep` first
+- adds a `type: "remote"` MCP entry pointing at `http://localhost:6285/mcp` (the shared HTTP server)
+- edits `~/.config/opencode/opencode.json`, or `opencode.jsonc` when only that file exists; it keeps every config value but rewrites the file as plain JSON, so comments in `opencode.jsonc` are removed
+- prints systemd user-service and manual-daemon instructions for the shared server
 
-To use stdio with `lgrep install-opencode`, run the installer first and then change `mcp.lgrep` in `opencode.json` to `{ "type": "local" }`.
+`lgrep uninstall-opencode` removes the MCP entry, the instruction entry, and the skill file.
 
-Important: the active agent must also expose `lgrep_*` tool definitions in its
-tool manifest. If an agent profile only allows `read`/`glob`/`grep`, the model
-cannot choose lgrep even when the MCP server is configured and the instruction
-policy is present.
+### 2. Choose a transport
 
-The installed files land at:
+For stdio (local default), replace the `mcp.lgrep` entry with:
 
-- `~/.config/opencode/instructions/lgrep-tools.md`
-- `~/.config/opencode/skills/lgrep/SKILL.md`
+```json
+{ "mcp": { "lgrep": { "type": "local", "command": ["lgrep"], "enabled": true } } }
+```
 
-### 3. Scale-up: shared HTTP server
+OpenCode requires `command` for a `local` entry ([OpenCode MCP docs](https://opencode.ai/docs/mcp-servers/)). Put `VOYAGE_API_KEY` in its `environment` object, or in the environment OpenCode starts from.
 
-For shared or multi-session deployments, run lgrep as a persistent HTTP server instead of stdio:
+For the **shared HTTP** server, keep the installer's `remote` entry and start one warm server that handles every session:
 
 ```bash
 VOYAGE_API_KEY=your-key \
@@ -244,377 +74,129 @@ LGREP_WARM_PATHS=/path/to/project-a:/path/to/project-b \
 lgrep --transport streamable-http --host 127.0.0.1 --port 6285
 ```
 
-Why HTTP instead of stdio?
-
-With stdio, each OpenCode session spawns its own server process. With `streamable-http`, one warm server handles all sessions. After starting the HTTP server, use the `type: "remote"` MCP config from section 2 above.
-
-### 4. Optional: generate a `.lgrepignore`
-
-```bash
-lgrep init-ignore /path/to/project
+```json
+{ "mcp": { "lgrep": { "type": "remote", "url": "http://localhost:6285/mcp", "enabled": true } } }
 ```
 
-### 5. Optional: inspect or prune orphan semantic caches
+Optional: `lgrep init-ignore /path/to/project` scaffolds a `.lgrepignore` (in addition to the always-respected `.gitignore`). Cache maintenance, worktree dedup, and daemon tuning live in [docs/operations.md](docs/operations.md).
 
-```bash
-lgrep prune-orphans --dry-run
-lgrep prune-orphans --execute --cache-dir /path/to/cache
-```
+The active agent profile must also expose the lgrep tools in its manifest: a profile that allows only `read`/`glob`/`grep` cannot choose lgrep even when the server is configured.
 
-`prune-orphans` is dry-run by default. Use `--execute` to actually delete orphaned semantic cache directories. `--cache-dir` overrides `LGREP_CACHE_DIR` for a single run. `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_orphans` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
+## First use
 
-**Grace window.** Recently modified cache dirs are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). The `missing_meta` and `project_path_enoent` reasons bypass the grace check because they are unambiguous.
+1. Ask an intent question: `search_semantic(query="authentication flow", path="/path/to/project")` — cold projects auto-index on first search.
+2. Inspect structure: `get_file_outline(path=...)` or `get_repo_outline(path=...)`.
+3. Retrieve exact symbols: `search_symbols(...)`, then `get_symbol(symbol_id="src/auth.py:function:authenticate", path=...)`.
+4. Find bounded candidate usages: `search_references(query="authenticate", path=...)`.
 
-**MCP deletion requires an explicit grant.** The MCP tool coerces `dry_run=True` regardless of the caller's request unless `LGREP_ALLOW_DESTRUCTIVE_MCP` is set in the server's environment, and the refused response carries a `refused_reason` naming the grant. Transport kind is not consulted: a proxy can front a local stdio pipe with a shared network port, so `stdio` proves nothing about who is calling. Leave the grant unset on any shared deployment and use the CLI (`lgrep prune-orphans --execute`) so the operator is explicit.
+Symbol IDs are deterministic `file_path:kind:name` strings, for example `src/auth.py:class:AuthManager` or `src/auth.py:method:login`.
 
-### Troubleshooting `prune-orphans --execute`
+## Tool reference
 
-Each orphan is deleted independently. If `shutil.rmtree` fails for one entry (for example a lingering file lock or permission issue), the batch continues and the failure is recorded in the response under `failures[]` as `{path, error}`; the rest of the reclaim still lands. Re-run `lgrep prune-orphans --execute` after addressing the error, or inspect with `--dry-run` first to confirm the orphan is still present.
-
-Deletion is refused for any path outside the resolved cache directory (path-confinement guard) and for any symlinked cache entry (TOCTOU guard) — both show up in `failures[]` rather than as successful deletes.
-
-### 6. Optional: inspect or prune stale symbol-store indexes
-
-```bash
-lgrep prune-symbols --dry-run
-lgrep prune-symbols --execute --storage-dir /path/to/storage
-```
-
-`prune-symbols` is dry-run by default. Use `--execute` to actually delete stale symbol-store index files (`index_<hash>.json`) — along with their metadata sidecars, orphaned sidecars, and stale temp files left by interrupted writes. `--storage-dir` overrides `LGREP_SYMBOLS_DIR` for a single run (default: `~/.cache/lgrep/symbols/`). `--execute` and `--dry-run` are mutually exclusive; passing both exits with an error. Agents can call the same workflow via the `lgrep_prune_symbols` MCP tool listed in [Symbol tools](#symbol-tools); that path also skips projects currently loaded in the running server.
-
-**Grace window.** Recently modified index files are preserved for 1 hour by default so the pruner cannot race a live indexer. Override with `LGREP_PRUNE_MIN_AGE_S=<seconds>` (`0` disables grace entirely). Only the `unreadable_index_json` reason is grace-eligible; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass the grace check because they are unambiguous. Orphan metadata sidecars and stale temp files from interrupted writes are also grace-eligible; lock files (`.index_<hash>.lock`) are never removed.
-
-**MCP deletion requires an explicit grant.** The MCP tool coerces `dry_run=True` regardless of the caller's request unless `LGREP_ALLOW_DESTRUCTIVE_MCP` is set in the server's environment, and the refused response carries a `refused_reason` naming the grant. Transport kind is not consulted — see the note under `prune-orphans` above. Leave the grant unset on any shared deployment and use the CLI (`lgrep prune-symbols --execute`) so the operator is explicit.
-
-### Troubleshooting `prune-symbols --execute`
-
-Each stale index is deleted independently. If an unlink fails for one entry (for example a lingering file lock or permission issue), the batch continues and the failure is recorded in the response under `failures[]` as `{path, error}`; the rest of the reclaim still lands. Re-run `lgrep prune-symbols --execute` after addressing the error, or inspect with `--dry-run` first to confirm the stale index is still present.
-
-Deletion is refused for any path outside the resolved storage directory (path-confinement guard) and for any symlinked index file (TOCTOU guard) — both show up in `failures[]` rather than as successful deletes.
-
-## First-use workflow
-
-Typical OpenCode flow:
-
-1. Ask an intent question with `lgrep_search_semantic`
-2. Inspect structure with `lgrep_get_file_outline` or `lgrep_get_repo_outline`
-3. Retrieve exact symbols with `lgrep_search_symbols` and `lgrep_get_symbol`
-4. Find bounded candidate usages with `lgrep_search_references`
-
-Examples:
-
-```text
-lgrep_search_semantic(query="authentication flow", path="/path/to/project")
-lgrep_get_file_outline(path="/path/to/project/src/auth.py")
-lgrep_index_symbols_folder(path="/path/to/project")
-lgrep_search_symbols(query="authenticate", path="/path/to/project")
-lgrep_search_references(query="authenticate", path="/path/to/project")
-lgrep_get_symbol(symbol_id="src/auth.py:function:authenticate", path="/path/to/project")
-```
-
-High-value prompts:
-
-- "Where do we enforce auth between route and service?"
-- "Find the `authenticate` function"
-- "What are the main symbols in `src/auth.py`?"
-- "Show me the repo structure around billing"
-- "Find references to `verifyToken`"
-
-## Tool selection guide
-
-| Task | Best tool | Why |
-|---|---|---|
-| Intent or concept discovery | `lgrep_search_semantic` | Search by meaning |
-| Find a function or class by name | `lgrep_search_symbols` | Exact symbol lookup |
-| Find candidate usages of a symbol | `lgrep_search_references` | Bounded occurrence lookup; not exhaustive |
-| Inspect a single file's structure | `lgrep_get_file_outline` | Fast AST outline |
-| Inspect repo structure | `lgrep_get_repo_outline` | Symbol-level overview |
-| Find exact text or identifiers | `lgrep_search_text` or `grep` | Literal match |
-| Retrieve exact source for a symbol | `lgrep_get_symbol` | Targeted code retrieval |
-| Read a known file directly | `Read` | No search needed |
-
-## MCP response format
-
-As of `3.0.0`, every lgrep MCP tool returns a structured dict matching a declared TypedDict in [`src/lgrep/server/responses.py`](src/lgrep/server/responses.py). Clients should consume responses as native dicts — no `json.loads` is needed.
-
-Example — `lgrep_search_semantic`:
-
-```python
-{
-    "query": "authentication flow",
-    "path": "/path/to/project",
-    "engine": "hybrid",
-    "total": 3,
-    "results": [
-        {"file_path": "src/auth.py", "start_line": 42, "end_line": 87,
-         "score": 0.91, "match_type": "hybrid",
-         "snippet": "def login(username, password):\n    \"\"\"Handle user login.\"\"\"\n    if username..."},
-        # ...
-    ],
-}
-```
-
-Hits are compact by default: the path, the correct line range, the score, the match type, and a 3-line snippet (first 3 non-blank chunk-body lines, 120 characters each). Pass `include_content=true` to add the full stored chunk text as `content` on each hit.
-
-`engine` is `"hybrid"` when `hybrid=true` (the default) or `"vector"` when `hybrid=false`.
-
-Error responses use the shared `ToolError` shape:
-
-```python
-{"error": "VOYAGE_API_KEY not set. Cannot perform semantic search."}
-```
-
-Before `3.0.0`, tools returned these objects as `json.dumps(...)` strings. If you upgrade from `2.x`, remove any `json.loads(response)` wrappers on tool output. See the [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x) notes in the changelog for the full migration path.
-
-## MCP tools
+The server registers these bare names, and every MCP client sees them as registered. OpenCode displays them with the server-key prefix, so with an MCP entry named `lgrep`, `search_semantic` appears as `lgrep_search_semantic`. Only `lgrep_diagnostics` carries the prefix in its registered name.
 
 ### Semantic tools
 
 | Tool | Purpose |
 |---|---|
-| `lgrep_search_semantic(query, path, limit=10, hybrid=true, include_content=false)` | Search code by meaning |
-| `lgrep_index_semantic(path)` | Build or refresh a semantic index |
-| `lgrep_status_semantic(path?)` | Show semantic index and watcher status |
-| `lgrep_watch_start_semantic(path)` | Start background semantic re-indexing |
-| `lgrep_watch_stop_semantic(path?)` | Stop the watcher |
+| `search_semantic(query, path, limit=10, hybrid=true, include_content=false)` | Search code by natural-language meaning |
+| `index_semantic(path)` | Build or refresh the semantic index |
+| `status_semantic(path="")` | Index/watcher status; omit `path` for all loaded projects |
+| `watch_start_semantic(path)` | Start background re-indexing on file changes |
+| `watch_stop_semantic(path="")` | Stop one watcher or all |
 
 ### Symbol tools
 
 | Tool | Purpose |
 |---|---|
-| `lgrep_index_symbols_folder(path, max_files=500, incremental=True)` | Index symbols in a local folder |
-| `lgrep_index_symbols_repo(repo, ref="HEAD")` | Index symbols from a GitHub repo |
-| `lgrep_list_repos()` | List indexed symbol repos |
-| `lgrep_get_file_tree(path, max_files=500)` | Show repo file tree |
-| `lgrep_get_file_outline(path)` | Show symbol outline for one file |
-| `lgrep_get_repo_outline(path, max_files=500)` | Show symbol outline for a repo |
-| `lgrep_search_symbols(query, path, limit=20, kind?)` | Search symbols by name |
-| `lgrep_search_references(query, path, limit=20, usage_filter="production_first", kind?)` | Find bounded candidate symbol usages |
-| `lgrep_search_text(query, path, limit=50)` | Search literal text |
-| `lgrep_get_symbol(symbol_id, path)` | Retrieve one symbol |
-| `lgrep_get_symbols(symbol_ids, path)` | Retrieve multiple symbols |
-| `lgrep_invalidate_cache(path)` | Drop the symbol index for a repo |
-| `lgrep_prune_orphans(dry_run=True)` | Report (or with `dry_run=False`, delete) orphan semantic cache dirs; skips active projects and the `symbols/` cache |
-| `lgrep_prune_symbols(dry_run=True)` | Report (or with `dry_run=False`, delete) stale symbol-store index files; skips active projects and non-local `github:` entries |
+| `index_symbols_folder(path, max_files=500, incremental=true)` | Index symbols in a local folder |
+| `index_symbols_repo(repo, ref="HEAD", max_files=500, github_token=None)` | Index symbols from a GitHub repo via API, no clone |
+| `list_repos()` | List indexed symbol repos |
+| `get_file_tree(path, max_files=500)` | Repo file tree with ignore rules applied |
+| `get_file_outline(path, repo_root=None)` | Symbol outline for one file |
+| `get_repo_outline(path, max_files=500)` | Symbol outlines across a repo |
+| `search_symbols(query, path, limit=20, kind=None)` | Search symbols by name (case-insensitive substring) |
+| `search_text(query, path, limit=50, case_sensitive=false)` | Search literal text |
+| `search_references(query, path, limit=20, usage_filter="production_first", kind=None)` | Bounded candidate usages; not compiler-exhaustive |
+| `get_symbol(symbol_id, path)` | One symbol's metadata and source |
+| `get_symbols(symbol_ids, path)` | Batch symbol retrieval |
+| `invalidate_cache(path)` | Drop one repo's symbol index; needs the destructive-MCP grant |
 
-### Argument names
+### Maintenance and diagnostics
 
-Each concept carries one declared name in every tool schema:
-
-| Concept | Declared name |
+| Tool | Purpose |
 |---|---|
-| Search text or symbol name | `query` |
-| Local repository root or file | `path` |
-| Result cap | `limit` |
-| Files scanned during indexing | `max_files` |
+| `prune_orphans(dry_run=true)` | Preview (or delete) orphan semantic cache dirs |
+| `prune_symbols(dry_run=true)` | Preview (or delete) stale symbol-store indexes |
+| `invalidate_worktree_cache(paths)` | Remove a worktree's cache alias and overlay rows |
+| `lgrep_diagnostics()` | Read-only daemon snapshot: PID, uptime, projects, jobs |
 
-Before validation, the server renames a fixed set of legacy spellings to the declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, and `file_path`/`file`/`folder` → `path`. A synonym applies only when the tool declares the canonical name and the caller did not send both spellings. Any other undeclared argument is refused with the tool's valid argument names; `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool that declares them (`lgrep_get_symbol` and `lgrep_index_symbols_folder`).
+Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; the pruners also skip projects loaded in the running server.
 
-### Symbol ID format
+## CLI reference
 
-Symbol IDs use this deterministic format:
+| Command | Purpose |
+|---|---|
+| `lgrep` | Start the MCP server: `--transport {stdio,streamable-http}` (default `stdio`), `--host` (default `127.0.0.1`), `--port` (default `6285`) |
+| `lgrep --version` | Print the version |
+| `lgrep search-semantic <query> [path]` | One-shot semantic search; `-m/--limit N`, `--no-hybrid` |
+| `lgrep index-semantic [path]` | One-shot semantic index; `--chunk-size N` |
+| `lgrep search-symbols <query> [path]` | One-shot symbol search; `-m/--limit N`, `--storage-dir DIR` |
+| `lgrep index-symbols [path]` | Index symbols; `--storage-dir DIR`, `--max-files N` |
+| `lgrep init-ignore [path]` | Create a recommended `.lgrepignore`; `--force` |
+| `lgrep prune-orphans` | Inspect or delete orphan semantic caches; `--execute`, `--dry-run`, `--cache-dir DIR` |
+| `lgrep prune-symbols` | Inspect or delete stale symbol indexes; `--execute`, `--dry-run`, `--storage-dir DIR` |
+| `lgrep gc` | Combined GC: orphans + worktree aliases + symbol indexes; `--execute`, `--dry-run`, `--cache-dir DIR`, `--symbols-dir DIR` |
+| `lgrep remove <path>` | Show on-disk index info for a project |
+| `lgrep install-opencode` | Install into OpenCode (MCP entry + instruction + skill) |
+| `lgrep uninstall-opencode` | Remove lgrep from OpenCode |
 
-```text
-file_path:kind:name
-```
-
-Examples:
-
-```text
-src/auth.py:function:authenticate
-src/auth.py:class:AuthManager
-src/auth.py:method:login
-```
-
-## Transport and security
-
-`lgrep` supports both `stdio` and `streamable-http`. Use `stdio` for the
-local single-session default; use `streamable-http` only when you intentionally
-want one shared local daemon for multiple OpenCode/Vision sessions.
-
-```bash
-lgrep --transport streamable-http --host 127.0.0.1 --port 6285
-```
-
-Security notes:
-
-- default host is `127.0.0.1`
-- there is no built-in auth layer on the HTTP transport
-- `lgrep` does not set CORS headers, and browser-based clients should not connect directly to the streamable HTTP endpoint
-- if you do put it behind a proxy, enforce your own authentication and origin controls there
-- exposing `0.0.0.0` is a non-default, explicit opt-in; do not do it without a reverse proxy or firewall
+`search` and `index` are aliases for `search-semantic` and `index-semantic`; `init-lgrepignore` aliases `init-ignore`. Prune commands are dry-run by default and `--execute`/`--dry-run` are mutually exclusive.
 
 ## Configuration
 
-### Environment variables
+| Variable | Default | Description |
+|---|---|---|
+| `VOYAGE_API_KEY` | none | Required for semantic search; the symbol engine works without it |
+| `LGREP_LOG_LEVEL` | `INFO` | Log verbosity |
+| `LGREP_LOG_FILE` | unset | Opt-in rotating JSON log file; see [operations](docs/operations.md#notes-on-selected-environment-variables) |
+| `LGREP_CACHE_DIR` | `~/.cache/lgrep` | Semantic cache directory |
+| `LGREP_SYMBOLS_DIR` | `~/.cache/lgrep/symbols` | Directory that `prune-symbols` and the `gc` symbol pass scan; indexing and symbol queries always use the default directory |
+| `LGREP_WARM_PATHS` | none | Colon-separated projects to warm on startup |
+| `LGREP_AUTO_WARM_DISK` | `true` | Auto-load discoverable disk caches at startup when no warm paths are set; set `false` on large shared machines |
+| `LGREP_AUTO_WATCH` | `false` | Auto-start file watchers for warmed projects |
+| `LGREP_TOOL_TIMEOUT_S` | `45` | Per-tool server-side timeout (seconds) |
+| `LGREP_STALENESS_DEADLINE_S` | `4.0` | Bound on the per-search staleness check |
+| `LGREP_ENSURE_BUDGET_S` | `8.0` | Budget for a worktree search to make its trunk base index current; `0` always defers to the background |
+| `LGREP_INDEX_MAX_WALL_S` | `60.0` | Wall-clock budget per indexing window |
+| `LGREP_AUTO_REFRESH` | `1` | `0` opts out of the symbol-index freshness gate that refreshes a stale index before `search_symbols` answers |
+| `LGREP_GITHUB_TOKEN` | unset | Token for `index_symbols_repo` when the call passes none |
+| `GITHUB_TOKEN` | unset | Fallback when `LGREP_GITHUB_TOKEN` is unset; an explicit argument wins over both |
+| `LGREP_WORKER_MAX_THREADS` | `4` | Query-lane worker threads for supervised blocking jobs |
+| `LGREP_BUILD_MAX_THREADS` | `1` | Build-lane threads: index windows, re-indexes, prune sweeps, remote indexing |
+| `LGREP_PRUNE_MIN_AGE_S` | `3600` | Grace window (seconds) before pruning; `0` disables grace |
+| `LGREP_WORKTREE_DEDUP` | unset | When set, git worktrees of one repo share one semantic cache |
+| `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lets MCP prune/invalidate tools delete; keep unset on any shared server |
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `VOYAGE_API_KEY` | For semantic search | none | Voyage API key |
-| `LGREP_LOG_LEVEL` | No | `INFO` | Log verbosity |
-| `LGREP_LOG_FILE` | No | unset | Opt-in rotating JSON log file (10 MiB, 3 backups) in addition to the always-on stderr sink. One writer is enforced by an exclusive `flock` on a `<file>.lock` sidecar held for process life; a second writer warns on stderr and keeps stderr-only logging. stdout is never a log sink (the stdio MCP channel owns it). |
-| `LGREP_CACHE_DIR` | No | `~/.cache/lgrep` | Cache directory |
-| `LGREP_WARM_PATHS` | No | none | Colon-separated projects to warm on startup |
-| `LGREP_AUTO_WARM_DISK` | No | `true` | Auto-load all discoverable disk caches on startup when no explicit warm paths are set. Set `false` for large shared machines. |
-| `LGREP_AUTO_WATCH` | No | `false` | Auto-start file watchers for warmed projects |
-| `LGREP_TOOL_TIMEOUT_S` | No | `45` | Per-tool server-side timeout (seconds). Bounds each MCP tool invocation. |
-| `LGREP_ENSURE_BUDGET_S` | No | `8.0` | Budget (seconds) for a worktree search to make its trunk's base index current before answering: the staleness check plus at most one base index window. Beyond the budget the remaining base work continues as a background reindex and the search answers from the current (possibly partial) index. Keep below `LGREP_TOOL_TIMEOUT_S`. `0` always defers to the background. |
-| `LGREP_GITHUB_TOKEN` | No | unset | GitHub token used by `index_symbols_repo` when no token is passed to the call. Lifts remote indexing from the anonymous 60/hour rate limit (shared across all sessions) to the authenticated 5000/hour limit. `GITHUB_TOKEN` is used as a fallback; an explicit `github_token` argument wins over both. |
-| `LGREP_WORKER_MAX_THREADS` | No | `4` | Max worker threads for supervised blocking daemon jobs. Query-lane jobs (searches, staleness checks, status counts) run here. |
-| `LGREP_BUILD_MAX_THREADS` | No | `1` | Max worker threads for the dedicated build lane: index windows, pending-file computation, full re-index, orphan/prune sweeps, and remote repo indexing. Build jobs cannot occupy the `LGREP_WORKER_MAX_THREADS` threads queries need. |
-| `LGREP_PRUNE_MIN_AGE_S` | No | `3600` | Grace window (seconds) before `prune-orphans` will treat an ambiguous orphan (unreadable meta / missing chunks) as prunable. `0` disables grace. |
-| `LGREP_SYMBOLS_DIR` | No | `~/.cache/lgrep/symbols` | Symbol index storage directory used by `lgrep index-symbols` and `lgrep prune-symbols`. |
-| `LGREP_WORKTREE_DEDUP` | No | unset | When set (any value), git worktrees sharing a common `.git` directory share one semantic cache. Each worktree embeds only the files that differ from its trunk and still searches its own version of every file. |
-| `LGREP_ALLOW_DESTRUCTIVE_MCP` | No | unset | Allows `prune_orphans`, `prune_symbols`, `invalidate_cache` and `invalidate_worktree_cache` to actually delete when called over MCP. Unset, those tools return a preview/refusal and say why. Leave unset on any server reachable by more than one client — including a Vision-proxied server, where the subprocess transport still reports `stdio`. The CLI (`--execute`) is unaffected for the tools that have one; the invalidation tools have no CLI equivalent. |
+## Transport and security
 
-### Vision / OpenCode tuning
+`lgrep` supports `stdio` and `streamable-http`. Use stdio for the local single-session default; use the shared HTTP transport only when you intentionally want one shared local daemon.
 
-For agent-heavy local setups that route lgrep through a Vision-managed MCP
-server, prefer explicit warm paths over warming every cached repository:
-
-```yaml
-lgrep:
-  port: 6278
-  command: /home/you/.local/bin/lgrep
-  env:
-    VOYAGE_API_KEY: "${VOYAGE_API_KEY}"
-    LGREP_WORKTREE_DEDUP: "1"
-    LGREP_WARM_PATHS: "/home/you/dev/primary:/home/you/dev/tooling"
-    LGREP_AUTO_WARM_DISK: "false"
-    LGREP_TOOL_TIMEOUT_S: "8"
-    LGREP_WORKER_MAX_THREADS: "4"
-```
-
-- `LGREP_WORKTREE_DEDUP=1` avoids duplicate semantic caches for git worktrees.
-- `LGREP_WARM_PATHS` should name only repos agents actively search.
-- `LGREP_AUTO_WARM_DISK=false` prevents surprise startup work from old cache entries.
-- Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client timeout so callers get a structured lgrep error before a transport deadline.
-- Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent agents cannot create unbounded blocking work.
-- Leave `LGREP_BUILD_MAX_THREADS` at `1` on shared daemons: builds are background work and a single lane keeps them behind queries.
-- Use `lgrep_diagnostics` when investigating high CPU/thread count. It reports PID, uptime, loaded projects, worker limit, active jobs, recent abandoned/finished jobs, and full local project paths without exposing API keys or environment values.
-- `lgrep_status_semantic(path="")` is intentionally cheap and memory-only. Pass a specific `path` when you need deep file/chunk counts.
-- Destructive cache cleanup over MCP requires the explicit server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; without it the MCP tools return a preview/refusal. Run `lgrep prune-orphans --execute` (or `lgrep prune-symbols --execute` for symbol indexes) from a local shell when an operator intentionally wants deletion. The `invalidate_cache` and `invalidate_worktree_cache` tools have no CLI equivalent.
-
-Agent fallback rule: if a default hybrid `lgrep_search_semantic` call times out
-or hits a deadline, retry once with `hybrid:false` and a small limit such as
-`limit=5`, then fall back to `lgrep_search_symbols`, `lgrep_search_text`, or
-direct file reads.
-
-### Ignore behavior
-
-- `.gitignore` is respected automatically
-- `.lgrepignore` lets you exclude additional paths
-
-Example `.lgrepignore` entries:
-
-```text
-src/generated/
-docs/site/
-*.test.data
-```
-
-## Resource profile
-
-Resource use depends on repository size, enabled engines, and cache history:
-
-- **RAM/CPU** - the shared server keeps warmed project state available and does most local work during indexing or search requests
-- **Disk** - semantic vectors and symbol indexes are stored locally and grow with indexed projects
-- **Network** - semantic indexing and semantic queries call Voyage; symbol lookup, outlines, and text search stay local
-
-## Supported languages
-
-- **Semantic engine** - AST-aware chunking for 30+ languages, with text fallback when needed
-- **Symbol engine** - tree-sitter-language-pack support across 165+ languages
-
-## Git worktree workflow
-
-When using git worktrees (e.g., ADV's per-change worktree isolation), multiple checkouts of the same repository can accumulate duplicate semantic indexes — one per worktree path. This wastes disk space (hundreds of MB per worktree) and Voyage API tokens.
-
-**Enable worktree dedup** by setting `LGREP_WORKTREE_DEDUP=1` in your environment:
-
-```bash
-export LGREP_WORKTREE_DEDUP=1
-```
-
-With this flag, lgrep resolves each project path through `git rev-parse --git-common-dir` and uses the repository root (parent of `.git`) as the cache key. All worktrees of the same repository share one LanceDB cache directory and one open table, and each worktree still searches its own files:
-
-- **Base rows** hold the trunk checkout's files.
-- **Overlay rows** hold, for each linked worktree, only the files that differ from base or that base lacks. A worktree's first index embeds that difference and nothing else.
-- A worktree search returns its overlay rows plus the base rows of files it has not changed, in one prefiltered query. Base files that the worktree changed or deleted are hidden. Trunk search returns base rows only.
-- When base rows change (for example, after a trunk pull), each worktree compares every file with base again on its next search or index pass.
-- Stale-file cleanup runs for every checkout: deleting a file removes its base rows on trunk and hides them in a worktree.
-- `project_meta.json` lists every worktree that uses the cache in `alias_paths`.
-
-Caches created before overlay rows existed gain a `checkout` column when opened; existing rows become base rows with no re-embedding.
-
-**Concurrency:** Cross-process alias updates to `project_meta.json` are guarded by a POSIX advisory lock (`fcntl.flock`) on a dedicated `.meta.lock` file, so simultaneous writes from multiple lgrep instances do not lose alias entries.
-
-**ADV integration:** Call the `invalidate_worktree_cache` MCP tool during `/adv-archive` Phase 9 (before `adv_worktree_delete`) to remove the worktree's alias and overlay rows from the shared cache:
-
-```
-invalidate_worktree_cache(paths: ["/path/to/worktree"])
-```
-
-**Garbage collection:** Run `lgrep gc --execute` periodically (or via systemd timer). This runs three passes:
-
-1. `prune_orphans` — deletes whole cache directories whose project root no longer exists on disk
-2. `gc_worktree_meta` — removes stale alias entries from `project_meta.json` files and deletes the overlay rows of worktrees that no longer exist (worktrees that were deleted without calling `invalidate_worktree_cache`)
-3. `prune_symbols` — deletes stale symbol-store index files (`index_<hash>.json`) whose `repo_path` is missing, unreadable, or absent from the JSON, plus their metadata sidecars, orphaned sidecars, and stale temp files from interrupted writes
-
-The `prune_orphans` and `gc_worktree_meta` passes respect the 1-hour grace window (configurable via `LGREP_PRUNE_MIN_AGE_S`) and skip active in-memory projects. The `prune_symbols` pass respects the same grace window, but only for the `unreadable_index_json` reason; the `repo_path_enoent` and `missing_repo_path_field` reasons bypass grace, and non-local `github:` entries are skipped. Orphan sidecars and stale temp files are grace-eligible, and `.index_<hash>.lock` files are never deleted.
+- The HTTP server binds `127.0.0.1` by default; there is no built-in authentication layer.
+- lgrep sets no CORS headers, and browser-based clients should not connect directly to the streamable-HTTP endpoint.
+- Behind a proxy, enforce your own authentication and origin controls there.
+- Binding `0.0.0.0` is a non-default, explicit opt-in; do not do it without a reverse proxy or firewall.
 
 ## Troubleshooting
 
-**`VOYAGE_API_KEY` not set**
+- **`VOYAGE_API_KEY` not set** — set it in the MCP server environment; the symbol engine still works without it.
+- **Slow first semantic index** — the first run embeds the whole project; later runs skip unchanged files by content hash.
+- **`Repository not indexed`** — symbol tools auto-build the index on first query for local git checkouts; subdirectory queries need an explicit `index_symbols_folder`. Details in [operations](docs/operations.md#freshness-and-index-budgets).
+- **Stale semantic results** — searches serve the current index and refresh in the background automatically; see [operations](docs/operations.md#freshness-and-index-budgets).
+- **Investigating high CPU on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, and active jobs; see [operations](docs/operations.md#shared-daemon-tuning-vision--opencode).
+- **Native dependency build issues** — prebuilt wheels usually work; otherwise install a compiler toolchain.
 
-Set the key in your MCP server environment. The symbol engine still works without it.
-
-**Slow first semantic index**
-
-The first run embeds the whole project. Later runs skip unchanged files using hashes.
-
-**`Repository not indexed` from symbol tools**
-
-Local git checkouts build their own index on the first symbol query
-(`lgrep_search_symbols`, `lgrep_get_symbol`, `lgrep_get_symbols`,
-`lgrep_search_references`). Seeding is root-to-root: when the queried
-path is a checkout root and a linked worktree of the same repository
-already has an index, the new index is seeded from it and an incremental
-refresh re-parses only files whose content hash differs, so the answer
-always comes from the queried checkout's own files. Queries against a
-subdirectory of a checkout still report `Repository not indexed` (index
-`lgrep_index_symbols_folder(path=...)` explicitly in that case). Indexes
-for checkouts that no longer exist on disk are deleted when a new index
-is created. Run `lgrep_index_symbols_folder(path=...)` explicitly for
-non-git folders, to raise `max_files`, or to force a rebuild.
-
-**Stale semantic results**
-
-`lgrep_search_semantic` runs an auto-staleness check before every search. When
-file mtimes have moved past the index timestamp and content hashes have drifted,
-the search **serves the current (possibly slightly stale) index immediately** and
-triggers a background single-flight refresh — it never blocks on a full re-embed.
-The next search observes fresh results; freshness converges automatically with no
-operator configuration. `lgrep_watch_start_semantic(...)` (`LGREP_AUTO_WATCH`) is an
-incremental-freshness **optimization** (per-file background re-index on edit), not a
-correctness dependency. `lgrep_index_semantic(...)` is only needed for first-time
-setup or to force a guaranteed-fresh refresh before a specific query.
-
-**Native dependency build issues**
-
-`lgrep` depends on packages with native extensions. Prebuilt wheels usually work; otherwise install the required compiler toolchain.
-
-## Migration from v1.x
-
-The semantic tools were renamed in `v2.0.0`:
-
-| v1.x | v2.x |
-|---|---|
-| `lgrep_search` | `lgrep_search_semantic` |
-| `lgrep_index` | `lgrep_index_semantic` |
-| `lgrep_status` | `lgrep_status_semantic` |
-| `lgrep_watch_start` | `lgrep_watch_start_semantic` |
-| `lgrep_watch_stop` | `lgrep_watch_stop_semantic` |
+Since `3.0.0` every MCP tool returns structured dicts instead of JSON strings; upgrading from `2.x`? See [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x).
 
 ## Development
 
@@ -627,8 +209,4 @@ pytest -v
 
 ## License
 
-MIT - see `LICENSE`.
-
----
-
-[sharperflow.com/projects/lgrep](https://sharperflow.com/projects/lgrep)
+MIT — see `LICENSE`.

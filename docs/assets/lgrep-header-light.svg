@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="180" viewBox="0 0 720 180" role="img" aria-label="lgrep — local-first code intelligence">
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1f2328">
+    <text x="56" y="100" font-size="68" font-weight="700" letter-spacing="-2">lgrep</text>
+    <text x="58" y="134" font-size="17">local-first code intelligence</text>
+  </g>
+  <g fill="none" stroke="#1f2328" stroke-width="2">
+    <rect x="421" y="21" width="218" height="10" rx="5"/>
+    <rect x="421" y="47" width="158" height="10" rx="5"/>
+    <rect x="421" y="99" width="186" height="10" rx="5"/>
+    <rect x="421" y="125" width="128" height="10" rx="5"/>
+    <rect x="421" y="151" width="198" height="10" rx="5"/>
+  </g>
+  <rect x="420" y="72" width="244" height="12" rx="6" fill="#0969da"/>
+</svg>
