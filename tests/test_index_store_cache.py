@@ -112,7 +112,7 @@ def test_cache_entries_bounded_under_distinct_checkout_churn(
     tmp_path: Path, small_cache: int
 ) -> None:
     stores = [IndexStore(storage_dir=tmp_path / f"symbols-{n}") for n in range(2)]
-    repos = [tmp_path / f"checkout-{n:02d}" for n in range(24)]
+    repos = [tmp_path / f"checkout-{n:02d}" for n in range(32)]
     references = []
     sizes = []
     for n, repo in enumerate(repos):
@@ -292,4 +292,31 @@ def test_cache_accounting_reports_bound(tmp_path: Path, monkeypatch: pytest.Monk
     loaded = store.load(oversized_path)
     assert loaded is not None
     assert loaded.symbols == oversized_symbols
+    assert _info()["entries"] == _info()["tracked_bytes"] == 0
+
+
+def test_invalidation_during_load_does_not_restore_cache_custody(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = IndexStore(storage_dir=tmp_path / "symbols")
+    repo = str(tmp_path / "checkout")
+    store.save(_index(Path(repo)))
+    index_file = store._index_path(repo)
+    IndexStore._cache.clear()
+    read_text = Path.read_text
+
+    def read_then_delete(path: Path, *args: object, **kwargs: object) -> str:
+        body = read_text(path, *args, **kwargs)
+        if path == index_file:
+            store.delete_index(repo)
+        return body
+
+    monkeypatch.setattr(Path, "read_text", read_then_delete)
+    loaded = store.load(repo)
+    assert loaded is not None
+    assert not index_file.exists()
+    reference = weakref.ref(loaded)
+    del loaded
+    gc.collect()
+    assert reference() is None, "an in-flight read must not undo cache invalidation"
     assert _info()["entries"] == _info()["tracked_bytes"] == 0

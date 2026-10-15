@@ -292,6 +292,11 @@ lgrep:
   PID, uptime, loaded projects, worker limit, active jobs, recent
   abandoned/finished jobs, and full local project paths without exposing API
   keys or environment values.
+- Its `symbol_cache` snapshot reports process-global `entries`, `tracked_bytes`,
+  and `limit_bytes` without reading index files. The 64 MiB limit counts retained
+  serialized index bytes, not parsed heap or RSS. In-flight callers can keep
+  evicted objects alive. Indexes larger than the limit remain readable from disk
+  but bypass retention, so repeated queries on those indexes parse them again.
 - `status_semantic(path="")` is intentionally cheap and memory-only. Pass a
   specific `path` when you need deep file/chunk counts.
 - Destructive cache cleanup over MCP requires the explicit server-side
