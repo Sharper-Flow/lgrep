@@ -21,6 +21,7 @@ from lgrep.server.responses import (  # noqa: TC001
     TimeoutAbandonmentSummary,
 )
 from lgrep.server.runtime import JobStatus
+from lgrep.storage.index_store import IndexStore
 
 if TYPE_CHECKING:
     from lgrep.server.lifecycle import LgrepContext
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
     description=(
         "Return a read-only diagnostic snapshot of the lgrep daemon. "
         "Includes PID, uptime, loaded projects, active/recent jobs, and "
-        "timeout/abandonment summary. Contains no secrets or env vars."
+        "timeout/abandonment summary, and bounded symbol-cache accounting. "
+        "Contains no secrets or env vars."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -107,6 +109,7 @@ async def lgrep_diagnostics(
         loaded_projects=loaded_projects,
         active_jobs=active_jobs,
         recent_jobs=recent_jobs,
+        symbol_cache=IndexStore.cache_info(),
         timeout_abandonment_summary=TimeoutAbandonmentSummary(
             abandoned_count=abandoned_count,
             finished_after_abandon_count=finished_after_abandon_count,

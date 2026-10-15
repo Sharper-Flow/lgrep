@@ -67,6 +67,7 @@ import structlog
 from typing_extensions import TypedDict
 
 from lgrep.storage.index_store import DEFAULT_SYMBOLS_DIR as _DEFAULT_SYMBOLS_DIR
+from lgrep.storage.index_store import IndexStore
 from lgrep.storage.index_store import _read_sidecar_repo_path as _read_sidecar_repo_path
 from lgrep.storage.index_store import _sidecar_for_index as _sidecar_for_index
 
@@ -590,6 +591,7 @@ def prune_symbols(
 
             try:
                 entry_path.unlink()
+                IndexStore.release_cached_file(entry_path)
                 deleted_files += 1
                 reclaimed_bytes += entry["bytes"]
             except OSError as exc:

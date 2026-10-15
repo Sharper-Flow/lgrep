@@ -27,11 +27,14 @@ import os
 import shutil
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import RLock
 from typing import ClassVar
 
 import structlog
+from typing_extensions import TypedDict
 
 log = structlog.get_logger()
 
@@ -64,6 +67,79 @@ class CodeIndex:
     occurrences: dict[str, list[dict]] = field(default_factory=dict)  # name → occurrences
     version: str = "2.0"
     walk_truncated: bool = False
+
+
+class SymbolCacheInfo(TypedDict):
+    """Cache-owned serialized bytes, not heap size or caller-held references."""
+
+    entries: int
+    tracked_bytes: int
+    limit_bytes: int
+
+
+class _IndexCache:
+    """Process-global LRU custody with atomic byte accounting and invalidation."""
+
+    def __init__(self) -> None:
+        self._entries: OrderedDict[Path, tuple[int, int, CodeIndex]] = OrderedDict()
+        self._tracked_bytes = 0
+        self._generation = 0
+        self._lock = RLock()
+
+    def generation(self) -> int:
+        with self._lock:
+            return self._generation
+
+    def lookup(self, path: Path, mtime_ns: int, size: int) -> tuple[CodeIndex | None, int]:
+        with self._lock:
+            entry = self._entries.get(path)
+            if entry is not None and entry[:2] == (mtime_ns, size):
+                self._entries.move_to_end(path)
+                return entry[2], self._generation
+            if entry is not None:
+                self.pop(path)
+            return None, self._generation
+
+    def admit(
+        self, path: Path, mtime_ns: int, size: int, index: CodeIndex, limit: int, generation: int
+    ) -> None:
+        with self._lock:
+            # An invalidation during disk I/O must not let that in-flight read
+            # or publication restore a reference the cache already released.
+            if generation != self._generation:
+                return
+            previous = self._entries.pop(path, None)
+            if previous is not None:
+                self._tracked_bytes -= previous[1]
+            if size > limit:
+                return
+            while self._entries and self._tracked_bytes + size > limit:
+                _, evicted = self._entries.popitem(last=False)
+                self._tracked_bytes -= evicted[1]
+            self._entries[path] = (mtime_ns, size, index)
+            self._tracked_bytes += size
+
+    def pop(self, path: Path, default: None = None) -> tuple[int, int, CodeIndex] | None:
+        with self._lock:
+            self._generation += 1
+            entry = self._entries.pop(path, default)
+            if entry is not None:
+                self._tracked_bytes -= entry[1]
+            return entry
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+            self._tracked_bytes = 0
+            self._generation += 1
+
+    def info(self, limit: int) -> SymbolCacheInfo:
+        with self._lock:
+            return SymbolCacheInfo(
+                entries=len(self._entries),
+                tracked_bytes=self._tracked_bytes,
+                limit_bytes=limit,
+            )
 
 
 def normalize_repo_key(repo_path: str) -> str:
@@ -199,7 +275,20 @@ class IndexStore:
         store.delete_index("/path/to/repo")
     """
 
-    _cache: ClassVar[dict[Path, tuple[int, int, CodeIndex]]] = {}
+    # Serialized bytes are a cheap retention proxy; parsed heap amplification
+    # and references held by active callers are outside this budget.
+    CACHE_LIMIT_BYTES: ClassVar[int] = 64 * 1024 * 1024
+    _cache: ClassVar[_IndexCache] = _IndexCache()
+
+    @classmethod
+    def cache_info(cls) -> SymbolCacheInfo:
+        """Return a memory-only snapshot shared by every IndexStore instance."""
+        return cls._cache.info(cls.CACHE_LIMIT_BYTES)
+
+    @classmethod
+    def release_cached_file(cls, index_file: Path) -> None:
+        """Release cache custody after a guarded index-file deletion."""
+        cls._cache.pop(index_file)
 
     def __init__(self, storage_dir: Path | str | None = None) -> None:
         """Initialize the index store.
@@ -315,6 +404,7 @@ class IndexStore:
         self._dir.mkdir(parents=True, exist_ok=True)
         target = self._index_path(normalized_repo)
         tmp = _unique_temp_path(target)
+        generation = self._cache.generation()
 
         try:
             data = {
@@ -350,7 +440,9 @@ class IndexStore:
             }
             _write_sidecar(target, meta)
             stat = target.stat()
-            self._cache[target] = (stat.st_mtime_ns, stat.st_size, index)
+            self._cache.admit(
+                target, stat.st_mtime_ns, stat.st_size, index, self.CACHE_LIMIT_BYTES, generation
+            )
             log.debug(
                 "index_saved",
                 repo=normalized_repo,
@@ -387,16 +479,11 @@ class IndexStore:
         """
         normalized_repo = normalize_repo_key(repo_path)
         index_file = self._index_path(normalized_repo)
-        if not index_file.exists():
-            return None
-
         try:
             stat = index_file.stat()
-            cached = self._cache.get(index_file)
+            cached, generation = self._cache.lookup(index_file, stat.st_mtime_ns, stat.st_size)
             if cached is not None:
-                cached_mtime_ns, cached_size, cached_index = cached
-                if cached_mtime_ns == stat.st_mtime_ns and cached_size == stat.st_size:
-                    return cached_index
+                return cached
 
             data = json.loads(index_file.read_text(encoding="utf-8"))
             index = CodeIndex(
@@ -410,8 +497,18 @@ class IndexStore:
                 # save lands the marker.
                 walk_truncated=bool(data.get("walk_truncated", False)),
             )
-            self._cache[index_file] = (stat.st_mtime_ns, stat.st_size, index)
+            self._cache.admit(
+                index_file,
+                stat.st_mtime_ns,
+                stat.st_size,
+                index,
+                self.CACHE_LIMIT_BYTES,
+                generation,
+            )
             return index
+        except FileNotFoundError:
+            self.release_cached_file(index_file)
+            return None
         except (json.JSONDecodeError, KeyError, OSError) as e:
             log.warning("index_load_failed", repo=normalized_repo, error=str(e))
             return None
@@ -463,11 +560,11 @@ class IndexStore:
         index_file = self._index_path(normalized_repo)
         try:
             index_file.unlink(missing_ok=True)
+            self.release_cached_file(index_file)
             # Remove the sidecar with its index (AC4). The prune path must
             # handle its own orphan case — it unlinks index files directly
             # and never routes through this method.
             self._meta_path(normalized_repo).unlink(missing_ok=True)
-            self._cache.pop(index_file, None)
             log.info("index_deleted", repo=normalized_repo)
         except OSError as e:
             log.warning("index_delete_failed", repo=normalized_repo, error=str(e))
@@ -498,6 +595,7 @@ class IndexStore:
         try:
             shutil.copyfile(seed_file, tmp)
             os.replace(tmp, target_file)
+            self.release_cached_file(target_file)
         except OSError as e:
             with contextlib.suppress(OSError):
                 tmp.unlink(missing_ok=True)
@@ -531,7 +629,6 @@ class IndexStore:
         except (OSError, json.JSONDecodeError):
             pass
         _write_sidecar(target_file, meta)
-        self._cache.pop(target_file, None)
         log.info(
             "index_seeded",
             seed=seed_normalized,

@@ -4,9 +4,6 @@ This module defines the canonical TypedDict shapes for all MCP tool responses.
 FastMCP derives a runtime Pydantic model from these TypedDicts, so every
 field declared here is validated on every tool result.
 
-**Location:** ``lgrep.server.responses`` (moved from ``lgrep.server_responses``
-during the server split).
-
 Response convention:
   - Successful responses use their specific TypedDict.
   - Errors always return ``ToolError`` via ``error_response()``.
@@ -20,6 +17,8 @@ from __future__ import annotations
 from typing import Any
 
 from typing_extensions import TypedDict
+
+from lgrep.storage.index_store import SymbolCacheInfo  # noqa: TC001 — runtime schema
 
 
 class _Meta(TypedDict):
@@ -453,6 +452,7 @@ class DiagnosticsResult(TypedDict):
     active_jobs: list[dict[str, Any]]
     recent_jobs: list[dict[str, Any]]
     timeout_abandonment_summary: TimeoutAbandonmentSummary
+    symbol_cache: SymbolCacheInfo
 
 
 # --------------------------------------------------------------------------- #

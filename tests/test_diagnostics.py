@@ -13,6 +13,7 @@ from mcp.server.fastmcp import Context
 
 from lgrep.server import LgrepContext, mcp
 from lgrep.server.runtime import RuntimeSupervisor
+from lgrep.storage.index_store import IndexStore
 
 
 class TestDiagnosticsToolRegistration:
@@ -42,9 +43,17 @@ class TestDiagnosticsResponseShape:
             "active_jobs",
             "recent_jobs",
             "timeout_abandonment_summary",
+            "symbol_cache",
         }
         missing = required - set(result.keys())
         assert not missing, f"Missing fields: {missing}"
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_reports_symbol_cache_accounting(self, monkeypatch):
+        snapshot = {"entries": 2, "tracked_bytes": 1024, "limit_bytes": 4096}
+        monkeypatch.setattr(IndexStore, "cache_info", classmethod(lambda cls: dict(snapshot)))
+        result = await self._get_tool_fn("lgrep_diagnostics")()
+        assert result["symbol_cache"] == snapshot
 
     @pytest.mark.asyncio
     async def test_diagnostics_loaded_projects_have_required_fields(self, tmp_path):
