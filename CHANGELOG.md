@@ -1,3 +1,8 @@
+## 2026-10-15 (v3.6.13)
+
+- fix(symbols): bound parsed index retention and release deleted entries (#38)
+- docs: update changelog for v3.6.12
+
 ## 2026-10-01 (v3.6.12)
 
 - docs: scope LGREP_SYMBOLS_DIR and _meta claims to what source does (#37)
