@@ -3,7 +3,7 @@
 Walks directory trees and identifies files to index, respecting
 .gitignore and .lgrepignore patterns.
 
-Security hardening (v2.0.0):
+Security exclusions:
 - Path traversal validation (files outside root are rejected)
 - Symlink escape detection (symlinks pointing outside root are rejected)
 - Secret file detection (.env, .pem, credentials.*, etc.)
@@ -18,8 +18,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import gitignorefile
 import structlog
+from pathspec import GitIgnoreSpec
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -228,18 +228,19 @@ class FileDiscovery:
         """
         self.root_path = Path(root_path).resolve()
 
-        # Initialize gitignore matchers
-        self.gitignore_match = None
-        self.lgrepignore_match = None
+        self.gitignore_spec = None
+        self.lgrepignore_spec = None
 
         gitignore_path = self.root_path / ".gitignore"
         if gitignore_path.exists():
-            self.gitignore_match = gitignorefile.parse(str(gitignore_path))
+            with gitignore_path.open() as lines:
+                self.gitignore_spec = GitIgnoreSpec.from_lines(lines)
             log.debug("gitignore_loaded", path=str(gitignore_path))
 
         lgrepignore_path = self.root_path / ".lgrepignore"
         if lgrepignore_path.exists():
-            self.lgrepignore_match = gitignorefile.parse(str(lgrepignore_path))
+            with lgrepignore_path.open() as lines:
+                self.lgrepignore_spec = GitIgnoreSpec.from_lines(lines)
             log.debug("lgrepignore_loaded", path=str(lgrepignore_path))
 
         log.info("file_discovery_initialized", root=str(self.root_path))
@@ -304,10 +305,12 @@ class FileDiscovery:
                 return True
 
         # 7. Gitignore rules
-        str_path = str(abs_path)
-        if self.gitignore_match and self.gitignore_match(str_path):
+        match_path = abs_path.relative_to(self.root_path).as_posix()
+        if abs_path.is_dir():
+            match_path += "/"
+        if self.gitignore_spec and self.gitignore_spec.match_file(match_path):
             return True
-        if self.lgrepignore_match and self.lgrepignore_match(str_path):
+        if self.lgrepignore_spec and self.lgrepignore_spec.match_file(match_path):
             return True
 
         # 8. Legacy: always ignore .git directory parts

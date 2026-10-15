@@ -1,10 +1,4 @@
-"""Tests to verify the packaged dependencies and version metadata.
-
-These tests serve as the TDD red phase for tk-jD3Lki16:
-- Write failing tests first (deps not yet in pyproject.toml)
-- Add deps to pyproject.toml
-- Tests go green
-"""
+"""Tests for packaged dependencies and version metadata."""
 
 
 def test_tree_sitter_language_pack_importable():
@@ -118,7 +112,59 @@ def test_pathspec_gitignore_pattern():
     """pathspec must correctly match gitignore-style patterns."""
     import pathspec
 
-    spec = pathspec.PathSpec.from_lines("gitignore", ["*.pyc", "node_modules/", "__pycache__/"])
+    spec = pathspec.GitIgnoreSpec.from_lines(
+        ["*.pyc", "!keep.pyc", "node_modules/", "__pycache__/"]
+    )
     assert spec.match_file("foo.pyc")
     assert spec.match_file("node_modules/lodash/index.js")
+    assert spec.match_file("node_modules/")
+    assert not spec.match_file("keep.pyc")
     assert not spec.match_file("src/main.py")
+
+
+def test_ignore_dependency_uses_pathspec_without_gitignorefile():
+    import tomllib
+    from pathlib import Path
+
+    from packaging.requirements import Requirement
+
+    root = Path(__file__).resolve().parent.parent
+    metadata = tomllib.loads((root / "pyproject.toml").read_text())
+    names = {Requirement(raw).name for raw in metadata["project"]["dependencies"]}
+    assert "pathspec" in names
+    assert "gitignorefile" not in names
+
+
+def test_default_dev_group_reuses_published_extra():
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    metadata = tomllib.loads((root / "pyproject.toml").read_text())
+    assert metadata["dependency-groups"]["dev"] == ["lgrep[dev]"]
+    assert metadata["project"]["optional-dependencies"]["dev"]
+
+
+def test_locked_dependencies_include_default_dev_tools():
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    lock = tomllib.loads((root / "uv.lock").read_text())
+    packages = {package["name"]: package for package in lock["package"]}
+    assert "gitignorefile" not in packages
+    assert {"pathspec", "pytest", "ruff"} <= packages.keys()
+    assert packages["lgrep"]["dev-dependencies"]["dev"] == [{"name": "lgrep", "extra": ["dev"]}]
+
+
+def test_ci_checks_lock_freshness():
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(__file__).resolve().parent.parent
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    commands = [
+        step["run"] for job in workflow["jobs"].values() for step in job["steps"] if "run" in step
+    ]
+    assert any("uv lock --check" in command for command in commands)

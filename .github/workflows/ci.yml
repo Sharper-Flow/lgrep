@@ -33,6 +33,11 @@ jobs:
       - name: Ruff check
         run: python -m ruff check .
 
+      - name: Check dependency lock freshness
+        run: |
+          python -m pip install "uv==0.11.26"
+          uv lock --check
+
       - name: Format check
         run: python -m ruff format --check .
 
