@@ -1,10 +1,36 @@
-"""Security tests for discovery.py (tk-ypctQFYt).
+"""Security exclusions take precedence over project ignore rules."""
 
-RED phase: tests fail before security hardening is applied.
-GREEN phase: all pass after implementation.
+import pytest
 
-≥6 adversarial scenarios required.
-"""
+
+@pytest.mark.parametrize("ignore_name", [".gitignore", ".lgrepignore"])
+def test_negation_cannot_admit_secrets_or_outside_paths(tmp_path, ignore_name):
+    from lgrep.discovery import FileDiscovery
+
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / ignore_name).write_text("*\n!*\n!.env\n!server.pem\n!../outside.py\n")
+    secret = root / ".env"
+    secret.write_text("SECRET=fixture\n")
+    key = root / "server.pem"
+    key.write_text("fixture key\n")
+    safe = root / "main.py"
+    safe.write_text("source\n")
+    outside = tmp_path / "outside.py"
+    outside.write_text("source\n")
+    link = root / "link.py"
+    link.symlink_to(outside)
+
+    discovery = FileDiscovery(root)
+    assert discovery.is_ignored(secret) is True
+    assert discovery.is_ignored(key) is True
+    assert discovery.is_ignored(outside) is True
+    assert discovery.is_ignored("../outside.py") is True
+    assert discovery.is_ignored(link) is True
+    assert discovery.is_ignored(safe) is False
+    found = set(discovery.find_files())
+    assert safe in found
+    assert found.isdisjoint({secret, key, outside, link})
 
 
 class TestPathTraversalSecurity:
