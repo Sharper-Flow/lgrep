@@ -395,6 +395,21 @@ def _stop_watcher(state: ProjectState, project_path: str) -> bool:
     return True
 
 
+async def _unload_project_state(ctx: LgrepContext, project_path: str) -> bool:
+    """Stop a checkout's watcher before removing its published state."""
+    state = ctx.projects.get(project_path)
+    if state is None:
+        return True
+    _retain_state(ctx, project_path, state)
+    if state.watcher is not None and not await ctx.runtime.run_blocking(
+        "stop_watcher", "_unload_project_state", project_path, _stop_watcher, state, project_path
+    ):
+        return False
+    if ctx.projects.get(project_path) is state:
+        del ctx.projects[project_path]
+    return True
+
+
 def _assemble_owner_store(owner: Path, owner_str: str) -> ChunkStore:
     """Construct the owner cache's ChunkStore and force its first table touch.
 
@@ -1149,7 +1164,7 @@ async def _auto_index_project_single_flight(
                         await asyncio.sleep(delay_s)
                         continue
 
-                    app_ctx.projects.pop(project_path, None)
+                    await _unload_project_state(app_ctx, project_path)
                     log.exception(
                         "search_auto_index_failed",
                         project=project_path,
@@ -1202,7 +1217,7 @@ async def _auto_index_project_single_flight(
             # other work between bounded windows.
             await asyncio.sleep(0)
     except Exception as e:
-        app_ctx.projects.pop(project_path, None)
+        await _unload_project_state(app_ctx, project_path)
         log.exception("search_auto_index_failed", project=project_path, error=str(e))
         return _error_response(
             "Failed to auto-index project on first search. Check server logs for details."

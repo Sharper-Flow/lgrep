@@ -524,6 +524,8 @@ async def test_owner_publication_replaces_assembly_reservation_atomically(
 async def test_diagnostics_counts_index_cleanup_reservations_as_busy(
     context, lightweight, tmp_path, monkeypatch
 ):
+    from lgrep.server import remove_project
+
     monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 1)
     owner = tmp_path / "owner"
     await _ensure_project_initialized(context, owner)
@@ -531,8 +533,59 @@ async def test_diagnostics_counts_index_cleanup_reservations_as_busy(
     try:
         snapshot = lifecycle.owner_store_snapshot(context)
         assert snapshot["busy"] == 1 and snapshot["idle"] == 0
+        assert remove_project(context, str(owner))["removed"] is False
         refused = await _ensure_project_initialized(context, tmp_path / "peer")
         assert refused["code"] == "project_capacity_busy"
     finally:
         context._indexing_events.pop(str(owner))
         await _shutdown(context)
+
+
+@pytest.mark.parametrize("failure_site", ["window", "base"])
+@pytest.mark.parametrize("stop_fails", [False, True])
+async def test_failed_auto_index_cannot_orphan_a_watcher(
+    context, lightweight, tmp_path, monkeypatch, failure_site, stop_fails
+):
+    path = tmp_path / "owner"
+    state = await _ensure_project_initialized(context, path)
+    state.indexer = SimpleNamespace(
+        compute_pending_files=lambda: [],
+        index_window=Mock(side_effect=RuntimeError("index failure")),
+    )
+    stop = Mock(side_effect=RuntimeError("observer stuck") if stop_fails else None)
+    state.watcher = SimpleNamespace(stop=stop)
+    state.watching = True
+    monkeypatch.setattr(lifecycle, "AUTO_INDEX_MAX_ATTEMPTS", 1)
+    if failure_site == "base":
+        state.base_path = str(path)
+
+        async def failed_base(*args, **kwargs):
+            raise RuntimeError("base failure")
+
+        monkeypatch.setattr(lifecycle, "_base_index_ready", failed_base)
+    try:
+        result = await lifecycle._auto_index_project_single_flight(context, str(path), path)
+        assert "error" in result
+        stop.assert_called_once()
+        if stop_fails:
+            assert context.projects[str(path)] is state
+        else:
+            assert str(path) not in context.projects
+            assert state.watcher is None
+    finally:
+        await _shutdown(context)
+
+
+async def test_remove_project_stops_a_watcher_after_failed_start(context, lightweight, tmp_path):
+    from lgrep.server import remove_project
+
+    path = tmp_path / "owner"
+    state = await _ensure_project_initialized(context, path)
+    state.db.for_checkout = lambda _: state.db
+    stop = Mock()
+    state.watcher = SimpleNamespace(stop=stop)
+    state.watching = False
+    assert remove_project(context, str(path))["removed"] is True
+    stop.assert_called_once()
+    assert state.watcher is None
+    await _shutdown(context)
