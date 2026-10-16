@@ -497,29 +497,11 @@ class ChunkStore:
         # Row scope of this store and the store that owns the connection and
         # table state; OverlayStore views share the owner's.
         self.checkout = BASE_CHECKOUT
-        self._owner = self
         # Completion of the one-time line-range repair; read from disk until true.
         self._line_repair_done = False
         self.db_path.mkdir(parents=True, exist_ok=True)
 
-        try:
-            self.db: DBConnection = lancedb.connect(str(self.db_path))
-        except Exception as e:
-            log.warning(
-                "chunk_store_connection_failed",
-                db_path=str(self.db_path),
-                error=str(e),
-                action="clearing and reconnecting",
-            )
-            # Clear corrupted data and retry
-            import shutil
-
-            for item in self.db_path.iterdir():
-                if item.is_dir():
-                    shutil.rmtree(item)
-                else:
-                    item.unlink()
-            self.db = lancedb.connect(str(self.db_path))
+        self.db: DBConnection = lancedb.connect(str(self.db_path))
 
         self._table: Table | None = None
         self._fts_indexed = False
@@ -541,52 +523,39 @@ class ChunkStore:
         write_project_meta(self._project_path, db_path=self.db_path)
 
     @property
+    def _owner(self) -> ChunkStore:
+        # A base store must not retain itself after lifecycle releases it.
+        return self
+
+    @property
     def table(self) -> Table:
         """Get or create the chunks table."""
         if self._table is None:
-            created = False
             try:
-                # Use open_table directly (EAFP) — avoids lancedb
-                # list_tables() returning ListTablesResponse which
-                # breaks `in` operator checks.
-                self._table = self.db.open_table(CHUNKS_TABLE)
-                log.debug("chunk_table_opened", rows=self._table.count_rows())
+                # A local Lance table has its own directory. An exception does
+                # not establish absence or authorize deleting last-good data.
+                if (self.db_path / f"{CHUNKS_TABLE}.lance").exists():
+                    self._table = self.db.open_table(CHUNKS_TABLE)
+                    log.debug("chunk_table_opened", rows=self._table.count_rows())
+                else:
+                    self._table = self.db.create_table(
+                        CHUNKS_TABLE,
+                        schema=CodeChunk.to_arrow_schema(),
+                        exist_ok=True,
+                    )
+                    log.info("chunk_table_created")
                 if self._table_needs_rebuild():
                     self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
                     self._table = self.db.create_table(
                         CHUNKS_TABLE,
                         schema=CodeChunk.to_arrow_schema(),
                     )
-                    created = True
                     log.info("chunk_table_recreated_after_model_mismatch")
-            except (FileNotFoundError, ValueError) as _not_found:
-                # Table doesn't exist yet — normal first-run path
-                self._table = self.db.create_table(
-                    CHUNKS_TABLE,
-                    schema=CodeChunk.to_arrow_schema(),
-                )
-                created = True
-                log.info("chunk_table_created")
-            except Exception as open_err:
-                # Unexpected error (corruption, permission, etc.)
-                log.warning(
-                    "chunk_table_open_failed",
-                    error=str(open_err),
-                    action="dropping and recreating table",
-                )
-                try:
-                    self.db.drop_table(CHUNKS_TABLE, ignore_missing=True)
-                except Exception as drop_err:
-                    log.debug("drop_table_also_failed", error=str(drop_err))
-                self._table = self.db.create_table(
-                    CHUNKS_TABLE,
-                    schema=CodeChunk.to_arrow_schema(),
-                )
-                created = True
-                log.info("chunk_table_recreated_after_corruption")
-            if not created:
                 self._add_checkout_column()
                 self._probe_existing_indexes()
+            except BaseException:
+                self._table = None
+                raise
         return self._table
 
     def _add_checkout_column(self) -> None:
@@ -1175,7 +1144,7 @@ class OverlayStore(ChunkStore):
     """
 
     def __init__(self, owner: ChunkStore, checkout: str) -> None:  # noqa: D107
-        self._owner = owner
+        self._base = owner
         self.db_path = owner.db_path
         self.db = owner.db
         self._project_path = owner._project_path
@@ -1185,6 +1154,10 @@ class OverlayStore(ChunkStore):
         digest = hashlib.sha256(checkout.encode()).hexdigest()[:12]
         self._state_path = owner.db_path / _OVERLAY_DIRNAME / f"{digest}.json"
         self._state = self._load_state()
+
+    @property
+    def _owner(self) -> ChunkStore:
+        return self._base
 
     @property
     def table(self) -> Table:

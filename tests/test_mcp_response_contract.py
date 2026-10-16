@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from lgrep.server import mcp
+from lgrep.server import LgrepContext, mcp
 
 
 def _tool(name: str):
@@ -42,8 +42,7 @@ def _runtime_ctx():
 
     return SimpleNamespace(
         request_context=SimpleNamespace(
-            lifespan_context=SimpleNamespace(
-                projects={},
+            lifespan_context=LgrepContext(
                 runtime=RuntimeStub(),
                 transport="stdio",
             )

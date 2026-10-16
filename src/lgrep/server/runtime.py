@@ -153,6 +153,7 @@ class RuntimeSupervisor:
         self._active: dict[str, RuntimeJob] = {}
         self._recent: deque[RuntimeJob] = deque(maxlen=history_limit)
         self.started_at = time.time()
+        self.retain_project = None
 
     async def run_blocking(
         self,
@@ -193,12 +194,22 @@ class RuntimeSupervisor:
             self._mark_started(job.id)
             return fn(*args, **kwargs)
 
-        future = executor.submit(invoke)
+        release = self.retain_project(project) if self.retain_project and project else None
+        try:
+            future = executor.submit(invoke)
+        except BaseException:
+            if release is not None:
+                release()
+            self._finish_job(job.id, JobStatus.FAILED)
+            raise
         with self._lock:
-            job.future = future
+            if job.id in self._active:
+                job.future = future
         future.add_done_callback(
             lambda done_future: self._complete_from_future(job.id, done_future)
         )
+        if release is not None:
+            future.add_done_callback(lambda _: release())
 
         try:
             return await asyncio.wrap_future(future)
@@ -316,6 +327,8 @@ class RuntimeSupervisor:
                 job.error = error
             if status in {JobStatus.FINISHED_AFTER_ABANDON, JobStatus.FAILED_AFTER_ABANDON}:
                 job.abandoned = True
+            # History retains diagnostics, not results (stores and checkout views).
+            job.future = None
             self._recent.append(job)
             queue_ms = (
                 round((job.started_at - job.created_at) * 1000, 2)

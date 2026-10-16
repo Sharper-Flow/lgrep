@@ -48,6 +48,14 @@ class IndexingHandler(FileSystemEventHandler):
         self.debounce_ms = debounce_ms
         self.runtime = runtime
         self.pending_files: dict[Path, asyncio.TimerHandle] = {}
+        self.closed = False
+
+    def close(self):
+        """Fence queued observer callbacks and debounce timers on the loop."""
+        self.closed = True
+        for timer in self.pending_files.values():
+            timer.cancel()
+        self.pending_files.clear()
 
     def on_modified(self, event):
         """Handle file modification."""
@@ -78,6 +86,8 @@ class IndexingHandler(FileSystemEventHandler):
 
     def _debounced_schedule(self, path: Path):
         """Schedule a file for re-indexing with debounce (called on loop thread)."""
+        if self.closed:
+            return
         # Skip non-code files (images, binaries, .lock, etc.)
         if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             log.debug("watcher_skipped_non_code", path=str(path), suffix=path.suffix)
@@ -100,6 +110,8 @@ class IndexingHandler(FileSystemEventHandler):
 
     async def _do_index(self, path: Path):
         """Perform the actual indexing."""
+        if self.closed:
+            return
         if path in self.pending_files:
             del self.pending_files[path]
 
@@ -120,6 +132,8 @@ class IndexingHandler(FileSystemEventHandler):
 
     async def _async_delete_file(self, path: Path):
         """Delete file from index in a worker thread."""
+        if self.closed:
+            return
         try:
             rel_path = str(path.relative_to(self.indexer.project_path))
             if self.runtime is not None:
@@ -185,6 +199,15 @@ class FileWatcher:
 
     def stop(self):
         """Stop the observer."""
+        if self.handler is not None and not self.handler.closed:
+            try:
+                on_loop = asyncio.get_running_loop() is self.handler.loop
+            except RuntimeError:
+                on_loop = False
+            if on_loop:
+                self.handler.close()
+            else:
+                self.handler.loop.call_soon_threadsafe(self.handler.close)
         if not self._running or not self._observer:
             return
 

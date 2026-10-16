@@ -14,7 +14,7 @@ Response convention:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -41,6 +41,8 @@ class ToolError(TypedDict):
     """Error response returned by any tool on failure."""
 
     error: str
+    code: NotRequired[str]
+    retryable: NotRequired[bool]
 
 
 class SearchSemanticResult(TypedDict):
@@ -434,6 +436,18 @@ class TimeoutAbandonmentSummary(TypedDict):
     failed_after_abandon_count: int
 
 
+class OwnerStoreSnapshot(TypedDict):
+    """Canonical-owner population, excluding checkout and symbol-cache counts."""
+
+    cap: int
+    open: int
+    assembling: int
+    retiring: int
+    busy: int
+    idle: int
+    evictions: int
+
+
 class DiagnosticsResult(TypedDict):
     """Response for lgrep_diagnostics.
 
@@ -453,6 +467,7 @@ class DiagnosticsResult(TypedDict):
     recent_jobs: list[dict[str, Any]]
     timeout_abandonment_summary: TimeoutAbandonmentSummary
     symbol_cache: SymbolCacheInfo
+    owner_stores: OwnerStoreSnapshot
 
 
 # --------------------------------------------------------------------------- #

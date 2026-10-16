@@ -12,6 +12,8 @@ from pathlib import Path
 
 import structlog
 
+from lgrep.server.retention import scoped_activity
+
 log = structlog.get_logger()
 
 # Guard against unbounded memory growth.
@@ -41,6 +43,7 @@ def time_tool(func):
     """Decorator to time tool execution, log results, and enforce timeout."""
 
     @functools.wraps(func)
+    @scoped_activity
     async def wrapper(*args, **kwargs):
         token = call_id_var.set(_new_call_id())
         start = time.monotonic()
@@ -202,7 +205,16 @@ def remove_project(app_ctx: LgrepContext, path: str) -> dict:
     if not state:
         return {"removed": False, "message": "Project not loaded", "project": project_path}
 
-    _stop_watcher(state, project_path)
+    owner_key = state.owner_key or state.base_path or project_path
+    if app_ctx._activity.busy(owner_key) or owner_key in _lifecycle._protected_owners(app_ctx):
+        return {
+            "removed": False,
+            "message": "Project is busy; retry later",
+            "project": project_path,
+        }
+
+    if state.watcher is not None and not _stop_watcher(state, project_path):
+        return {"removed": False, "message": "Watcher did not stop", "project": project_path}
     del app_ctx.projects[project_path]
 
     owner = state.db.for_checkout(BASE_CHECKOUT)
@@ -213,6 +225,7 @@ def remove_project(app_ctx: LgrepContext, path: str) -> dict:
         for key, store in list(app_ctx._stores.items()):
             if store is owner:
                 del app_ctx._stores[key]
+                app_ctx._activity.forget(key)
     log.info(
         "project_removed",
         project=project_path,

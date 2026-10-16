@@ -308,7 +308,8 @@ async def test_concurrent_owners_obey_project_limit(tmp_path, monkeypatch):
     result_a = await asyncio.wait_for(first, timeout=5)
 
     assert isinstance(result_a, ProjectState)
-    assert isinstance(result_b, dict) and "Maximum project limit" in result_b["error"]
+    assert isinstance(result_b, dict) and result_b["code"] == "project_capacity_busy"
+    assert result_b["retryable"] is True
     assert len(ctx._stores) == 1
     ctx.runtime.shutdown(cancel_futures=True)
 

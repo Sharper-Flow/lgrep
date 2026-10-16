@@ -3,8 +3,8 @@
   "name": "lgrepSemanticCacheLifecycle",
   "title": "LgrepSemanticCacheLifecycle",
   "purpose": "Capability: LgrepSemanticCacheLifecycle — defines the invariants and operator-facing surfaces that keep the semantic cache directory (LanceDB chunks + metadata) consistent over time, including orphan detection, manual pruning (CLI + MCP), and lifecycle safety guards.",
-  "version": "1.0.0",
-  "updated_at": "2026-04-20T16:00:00.000Z",
+  "version": "2.0.0",
+  "updated_at": "2026-10-16T00:00:00.000Z",
   "requirements": [
     {
       "id": "rq-cache-meta-invariant",
@@ -46,16 +46,55 @@
         },
         {
           "id": "rq-cache-meta-invariant.3",
-          "title": "Corruption recovery rewrites meta",
+          "title": "A failed connection preserves data and metadata",
           "given": [
-            "A cache directory whose existing LanceDB connection fails and must be re-created",
-            "A ChunkStore reconstructed with project_path after the corruption recovery"
+            "A cache directory with stored chunks and project metadata",
+            "A connection or table-open error, including an error reported as corruption"
           ],
-          "when": "Construction completes",
+          "when": "ChunkStore opens the cache",
           "then": [
-            "`project_meta.json` is present after recovery",
-            "Its contents reflect the supplied project_path"
+            "The original error reaches the caller",
+            "Stored chunks and existing metadata remain intact",
+            "No exception triggers automatic deletion, table recreation, or reindexing",
+            "Failed validation leaves no partially initialized table handle"
           ]
+        }
+      ]
+    },
+    {
+      "id": "rq-owner-store-retention",
+      "title": "Shared-server retention is bounded by active cache owners",
+      "body": "The server MUST bound resident plus assembling plus retiring canonical owners to 20. At capacity it MUST evict the least recently used idle owner and every checkout view. Explicit activity MUST span complete calls, async gaps, checkout assembly, background indexing and queued/running physical workers, including after cancellation. Eviction MUST fence watcher callbacks and timers and stop observers off-loop before releasing the reservation. Idle watcher existence MUST NOT pin capacity permanently. All-busy admission MUST immediately return code project_capacity_busy and retryable true without a restart instruction. Reopening MUST preserve disk rows and checkout isolation without indexing or embedding. Generic open errors MUST preserve last-good bytes and original errors; legitimate first creation and verified model/schema migrations remain distinct. Diagnostics owner_stores MUST expose cap, open, assembling, retiring, busy, idle and cumulative evictions for the canonical-owner population, with busy + idle = open and open + assembling + retiring <= cap.",
+      "priority": "must",
+      "tags": ["cache", "retention", "concurrency"],
+      "scenarios": [
+        {
+          "id": "rq-owner-store-retention.1",
+          "title": "Idle owners turn over without restart",
+          "given": ["One shared server with a capacity of 20"],
+          "when": "Twenty-five distinct owners load sequentially",
+          "then": ["Every admission succeeds without restart", "Tracked owner reservations never exceed 20", "A cache hit changes idle LRU order"]
+        },
+        {
+          "id": "rq-owner-store-retention.2",
+          "title": "Active work survives peer eviction",
+          "given": ["A full server with an active owner and an idle peer"],
+          "when": "A new owner requests admission during an async wait or a cancelled worker's physical execution",
+          "then": ["The active owner remains pinned until physical completion", "Only an idle peer can be evicted", "All-busy refusal is typed and retryable"]
+        },
+        {
+          "id": "rq-owner-store-retention.3",
+          "title": "Persisted base and overlay rows reopen unchanged",
+          "given": ["A persisted owner cache with a worktree overlay"],
+          "when": "The owner is evicted and the worktree is queried again",
+          "then": ["All old checkout views leave memory", "Base and overlay rows remain correctly isolated", "Reopening makes no indexer or embedding call"]
+        },
+        {
+          "id": "rq-owner-store-retention.4",
+          "title": "Watcher retirement retains its reservation",
+          "given": ["An idle watched owner and pending observer callbacks"],
+          "when": "The owner retires while observer shutdown is slow",
+          "then": ["Callbacks and timers cannot schedule writes after fencing", "The event loop remains responsive", "The slot remains reserved until watchers stop", "A failed stop retains its reservation", "Diagnostics reports the retiring owner and successful eviction total"]
         }
       ]
     },
