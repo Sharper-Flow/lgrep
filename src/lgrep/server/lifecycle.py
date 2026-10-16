@@ -160,13 +160,19 @@ def _retain_state(ctx: LgrepContext, path: str, state: ProjectState) -> None:
     retain_for_call(ctx._activity, owner)
 
 
-def _idle_owner(ctx: LgrepContext) -> str | None:
-    for key in ctx._stores:
-        ctx._activity.register(key)
+def _protected_owners(ctx: LgrepContext) -> set[str]:
     protected = set(ctx._store_assemblies) | set(ctx._store_retirements)
     for path, state in ctx.projects.items():
         if path in ctx._checkout_assemblies or _index_in_flight(ctx, path):
             protected.add(state.owner_key or state.base_path or path)
+    return protected
+
+
+def _idle_owner(ctx: LgrepContext) -> str | None:
+    for key in ctx._stores:
+        if key not in ctx._store_retirements:
+            ctx._activity.register(key)
+    protected = _protected_owners(ctx)
     return ctx._activity.oldest(key for key in ctx._stores if key not in protected)
 
 
@@ -182,7 +188,12 @@ def owner_store_snapshot(ctx: LgrepContext | None) -> OwnerStoreSnapshot:
             evictions=0,
         )
     retiring = len(ctx._store_retirements)
-    busy = sum(ctx._activity.busy(key) for key in ctx._stores if key not in ctx._store_retirements)
+    protected = _protected_owners(ctx)
+    busy = sum(
+        ctx._activity.busy(key) or key in protected
+        for key in ctx._stores
+        if key not in ctx._store_retirements
+    )
     return {
         "cap": MAX_PROJECTS,
         "open": len(ctx._stores) - retiring,
@@ -205,7 +216,6 @@ async def _retire_owner(ctx: LgrepContext, owner: str, states: list[ProjectState
         states.clear()
         async with ctx._lock:
             ctx._stores.pop(owner)
-            ctx._activity.forget(owner)
             ctx._store_retirements.pop(owner)
             ctx._evictions += 1
         log.info("owner_store_evicted", owner=owner)
@@ -223,6 +233,9 @@ def _begin_retirement(ctx: LgrepContext, owner: str) -> asyncio.Task:
                 state.watcher.handler.close()
             states.append(state)
             del ctx.projects[path]
+    # Checkout publication and path-only worker aliases retire together, before
+    # observer shutdown yields. Semantic callers must join the retirement.
+    ctx._activity.forget(owner)
     task = asyncio.create_task(_retire_owner(ctx, owner, states), name=f"retire_store:{owner}")
     ctx._store_retirements[owner] = task
     return task
@@ -368,7 +381,7 @@ def _stop_watcher(state: ProjectState, project_path: str) -> bool:
 
     Returns True if a watcher was actually stopped, False if nothing to stop.
     """
-    if not state.watcher or not state.watching:
+    if not state.watcher:
         return False
 
     try:
@@ -446,6 +459,7 @@ async def _assemble_owner_store_task(
             # receive the shutdown refusal.
             if not app_ctx._closed:
                 app_ctx._stores[owner_str] = store
+                app_ctx._store_assemblies.pop(owner_str, None)
         return store
     finally:
         async with app_ctx._lock:

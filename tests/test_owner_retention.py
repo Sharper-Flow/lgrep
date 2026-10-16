@@ -206,8 +206,9 @@ async def test_abandoned_physical_job_keeps_owner_busy(
         release.set()
         # The executor callback can outlive the cancelled asyncio waiter. Wait
         # for this local worker, not for a guessed duration.
-        while context.runtime.snapshot_active_jobs():
-            await asyncio.sleep(0)
+        async with asyncio.timeout(5):
+            while context.runtime.snapshot_active_jobs():
+                await asyncio.sleep(0)
         assert isinstance(await _ensure_project_initialized(context, tmp_path / "b"), ProjectState)
     finally:
         release.set()
@@ -411,8 +412,9 @@ async def test_failed_watcher_retirement_does_not_free_capacity(
 
 
 @pytest.mark.parametrize("stop_fails", [False, True])
+@pytest.mark.parametrize("watching", [False, True])
 async def test_worktree_invalidation_cannot_orphan_a_watcher(
-    context, lightweight, tmp_path, monkeypatch, stop_fails
+    context, lightweight, tmp_path, monkeypatch, stop_fails, watching
 ):
     from lgrep.server import mcp, tools_maintenance
 
@@ -421,7 +423,7 @@ async def test_worktree_invalidation_cannot_orphan_a_watcher(
     state = await _ensure_project_initialized(context, path)
     stop = Mock(side_effect=RuntimeError("observer stuck") if stop_fails else None)
     state.watcher = SimpleNamespace(stop=stop)
-    state.watching = True
+    state.watching = watching
     entry = {"path": str(path), "cache_dir": str(tmp_path / "cache"), "error": None}
     monkeypatch.setattr(
         tools_maintenance, "_invalidate_worktree_cache", Mock(return_value=([entry], 1, 0))
@@ -460,4 +462,77 @@ async def test_capacity_fields_survive_mcp_validation(context, lightweight, tmp_
         assert raw["code"] == "project_capacity_busy" and raw["retryable"] is True
     finally:
         release()
+        await _shutdown(context)
+
+
+async def test_retirement_fences_path_leases_before_observer_stop(
+    context, lightweight, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 1)
+    owner = tmp_path / "owner"
+    state = await _ensure_project_initialized(context, owner)
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def stop():
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+
+    state.watcher = SimpleNamespace(handler=None, stop=stop)
+    state.watching = True
+    replacement = asyncio.create_task(_ensure_project_initialized(context, tmp_path / "peer"))
+    late_hold = None
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        # A capacity probe must not recreate aliases for the retiring owner.
+        refused = await _ensure_project_initialized(context, tmp_path / "other")
+        assert refused["code"] == "project_capacity_busy"
+        late_hold = context.runtime.retain_project(str(owner))
+        assert late_hold is None
+        release.set()
+        assert isinstance(await replacement, ProjectState)
+        snapshot = lifecycle.owner_store_snapshot(context)
+        assert snapshot["open"] == 1 and snapshot["retiring"] == 0
+        assert isinstance(await _ensure_project_initialized(context, owner), ProjectState)
+    finally:
+        if late_hold is not None:
+            late_hold()
+        release.set()
+        await replacement
+        await _shutdown(context)
+
+
+async def test_owner_publication_replaces_assembly_reservation_atomically(
+    context, lightweight, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 1)
+    snapshots = []
+
+    class ObservedLock(asyncio.Lock):
+        async def __aexit__(self, *args):
+            await super().__aexit__(*args)
+            if context._stores:
+                snapshots.append(lifecycle.owner_store_snapshot(context))
+
+    context._lock = ObservedLock()
+    assert isinstance(await _ensure_project_initialized(context, tmp_path / "owner"), ProjectState)
+    assert snapshots
+    assert all(s["open"] + s["assembling"] + s["retiring"] <= 1 for s in snapshots)
+    await _shutdown(context)
+
+
+async def test_diagnostics_counts_index_cleanup_reservations_as_busy(
+    context, lightweight, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(lifecycle, "MAX_PROJECTS", 1)
+    owner = tmp_path / "owner"
+    await _ensure_project_initialized(context, owner)
+    context._indexing_events[str(owner)] = asyncio.Event()
+    try:
+        snapshot = lifecycle.owner_store_snapshot(context)
+        assert snapshot["busy"] == 1 and snapshot["idle"] == 0
+        refused = await _ensure_project_initialized(context, tmp_path / "peer")
+        assert refused["code"] == "project_capacity_busy"
+    finally:
+        context._indexing_events.pop(str(owner))
         await _shutdown(context)
