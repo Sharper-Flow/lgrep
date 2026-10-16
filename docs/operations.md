@@ -306,6 +306,8 @@ lgrep:
   `code: "project_capacity_busy"` and `retryable: true`. Retry after active work
   finishes; a restart is not the normal remedy. A watcher stop failure keeps
   its slot reserved and logs `owner_store_retirement_failed`.
+  That owner remains unavailable until the server shuts down. Inspect the
+  logged failure before considering a restart.
 - `owner_stores` in diagnostics reports `cap`, `open`, `assembling`, `retiring`,
   `busy`, `idle`, and cumulative `evictions`. Retiring owners are not counted
   as open. `busy + idle = open`; `open + assembling + retiring` never exceeds
