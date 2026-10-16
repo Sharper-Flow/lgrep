@@ -292,6 +292,28 @@ lgrep:
   PID, uptime, loaded projects, worker limit, active jobs, recent
   abandoned/finished jobs, and full local project paths without exposing API
   keys or environment values.
+- The server retains at most 20 canonical semantic-cache owners, including
+  assemblies and stores that are still retiring. Worktree views share an owner.
+  A new owner replaces the least recently used idle owner without restarting
+  the server. Complete calls and physical workers, including workers whose
+  callers timed out, keep their owners active. Eviction preserves disk data;
+  the next query reopens an unchanged index without indexing or embedding.
+- Eviction stops an idle owner's watchers and cancels pending watcher events.
+  Reopening does not restart those watchers. Use `watch_start_semantic` if
+  incremental file watching is still wanted. Search staleness checks remain
+  available independently of watching.
+- If every owner slot is active or retiring, admission returns
+  `code: "project_capacity_busy"` and `retryable: true`. Retry after active work
+  finishes; a restart is not the normal remedy. A watcher stop failure keeps
+  its slot reserved and logs `owner_store_retirement_failed`.
+- `owner_stores` in diagnostics reports `cap`, `open`, `assembling`, `retiring`,
+  `busy`, `idle`, and cumulative `evictions`. Retiring owners are not counted
+  as open. `busy + idle = open`; `open + assembling + retiring` never exceeds
+  `cap`. These counts do not include symbol-cache entries or count each
+  checkout alias separately.
+- A connection or table-open failure returns an error without deleting the
+  last-good cache. An error alone does not authorize destructive recovery.
+  Existing model/schema migration checks still apply when a table opens.
 - Its `symbol_cache` snapshot reports process-global `entries`, `tracked_bytes`,
   and `limit_bytes` without reading index files. The 64 MiB limit counts retained
   serialized index bytes, not parsed heap or RSS. In-flight callers can keep

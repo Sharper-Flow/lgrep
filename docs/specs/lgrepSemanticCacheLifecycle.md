@@ -1,7 +1,7 @@
 # LgrepSemanticCacheLifecycle
 
-> **Version:** 1.1.0
-> **Updated:** 2026-07-23
+> **Version:** 2.0.0
+> **Updated:** 2026-10-16
 
 ## Purpose
 
@@ -44,17 +44,46 @@ When a `ChunkStore` is constructed with an explicit `project_path`, it MUST writ
 - No `project_meta.json` is written
 - The cache hash dir is never recorded as a project_path
 
-**Corruption recovery rewrites meta** (`rq-cache-meta-invariant.3`)
+**A failed connection preserves data and metadata** (`rq-cache-meta-invariant.3`)
 
 **Given:**
-- A cache directory whose existing LanceDB connection fails and must be re-created
-- A ChunkStore reconstructed with project_path after the corruption recovery
+- A cache directory with stored chunks and project metadata
+- A connection or table-open error, including an error reported as corruption
 
-**When:** Construction completes
+**When:** ChunkStore opens the cache
 
 **Then:**
-- `project_meta.json` is present after recovery
-- Its contents reflect the supplied project_path
+- The original error reaches the caller
+- Stored chunks and existing metadata remain intact
+- No exception triggers automatic deletion, table recreation, or reindexing
+- A failed table validation leaves no partially initialized handle available for later calls
+
+---
+
+### Shared-server retention is bounded by active cache owners
+
+**ID:** `rq-owner-store-retention` | **Priority:** **[MUST]**
+
+The server MUST limit resident owner stores plus in-flight assemblies and retiring stores to 20. Worktree views share their canonical owner's slot. Admission at capacity MUST evict the least recently used idle owner, including every checkout view, rather than limit the number of projects served over the server lifetime.
+
+An owner is idle only when no complete tool call, checkout assembly, background index operation, or queued/running physical worker holds it. An async embedding wait is active work. Cancellation and timeouts MUST retain ownership until physical workers finish. Last use and release order idle candidates; elapsed time alone MUST NOT establish idleness.
+
+Eviction MUST fence pending watcher callbacks and timers before stopping observers off the event loop. A retiring owner continues to reserve capacity until its watchers stop and the server releases its store and checkout references. Idle watchers do not permanently reserve a slot. Reopening does not restart a stopped watcher; an explicit watch-start request can do so.
+
+If every slot is active or retiring, admission MUST immediately return `code: "project_capacity_busy"` and `retryable: true`, without a restart instruction. A later request can succeed after a holder releases. Failed watcher retirement MUST retain its capacity reservation rather than admit a second owner over still-live resources.
+
+Eviction MUST preserve disk caches. Reopening an unchanged cache MUST preserve rows and checkout isolation without indexing or embedding. Generic connection/open errors MUST preserve the last-good cache and original error. First creation and a verified model/schema migration remain distinct from generic error recovery.
+
+`lgrep_diagnostics.owner_stores` MUST report `cap`, `open`, `assembling`, `retiring`, `busy`, `idle`, and cumulative `evictions`. `open` excludes retiring owners. `busy + idle = open`, and `open + assembling + retiring <= cap`. These counts describe canonical owners, not checkout views or symbol-cache entries.
+
+#### Scenarios
+
+- Twenty-five distinct owners load sequentially in one server lifetime without restart, while the reservation bound remains 20.
+- A hit changes LRU order. A long-running query pins its owner while an idle peer can be evicted.
+- At capacity, an async embedding wait or abandoned physical worker prevents eviction of its owner until completion.
+- Evicting a shared owner removes all aliases. Reopening restores base and overlay rows without an indexing call.
+- Queued watcher events after retirement cannot schedule writes. A slow observer stop does not block the event loop or free its reserved slot early.
+- Diagnostics counts agree with the owner registry before, during, and after eviction.
 
 ---
 
