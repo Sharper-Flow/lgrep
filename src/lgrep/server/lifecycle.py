@@ -485,13 +485,11 @@ async def _assemble_owner_store_task(
 
 
 async def _join_owner_assembly(task: asyncio.Task) -> None:
-    """Wait for an owner assembly without ever cancelling it.
+    """Join owner assembly or retirement without cancelling its task.
 
-    The await is shielded, so a cancelled waiter detaches promptly — the
-    caller's own timeout is never extended by the shared assembly — while
-    the assembly keeps running under its registry entry. A retry arriving
-    mid-assembly therefore always finds the registry entry or the
-    published store, never a half-open cache.
+    A cancelled waiter detaches promptly without extending its timeout.
+    Shared owner work keeps its registry entry and capacity reservation
+    until completion, so a retry joins it instead of opening another store.
     """
     await asyncio.shield(task)
 
