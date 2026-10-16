@@ -4,7 +4,7 @@ import hashlib
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import lancedb
 import pytest
@@ -178,34 +178,34 @@ class TestChunkStoreLifecycle:
         meta_path = temp_db_path / "project_meta.json"
         assert not meta_path.exists()
 
-    def test_init_reconnects_on_corruption(self, temp_db_path):
-        """Should clear and reconnect if database is corrupted."""
+    def test_init_reports_corruption_without_clearing(self, temp_db_path):
+        """An error named corrupt does not authorize deleting persisted data."""
         temp_db_path.mkdir()
         (temp_db_path / "junk.txt").write_text("some data")
 
-        # Mock lancedb.connect to fail once then succeed
-        with patch("lancedb.connect", side_effect=[RuntimeError("corrupt"), MagicMock()]):
-            store = ChunkStore(temp_db_path)
-            assert store.db is not None
+        with patch("lancedb.connect", side_effect=RuntimeError("corrupt")) as connect:
+            with pytest.raises(RuntimeError, match="corrupt"):
+                ChunkStore(temp_db_path)
+            connect.assert_called_once()
+        assert (temp_db_path / "junk.txt").read_text() == "some data"
 
-        # Verify directory was cleared (junk.txt should be gone)
-        assert not (temp_db_path / "junk.txt").exists()
-
-    def test_init_corruption_recovery_rewrites_meta(self, temp_db_path):
-        """Should rewrite project metadata after corruption recovery."""
+    def test_init_failure_preserves_existing_meta(self, temp_db_path):
+        """A failed open preserves the cache's reverse-mapping metadata."""
         temp_db_path.mkdir()
         (temp_db_path / "junk.txt").write_text("some data")
         project_path = temp_db_path.parent / "project_recovery"
         project_path.mkdir()
 
-        with patch("lancedb.connect", side_effect=[RuntimeError("corrupt"), MagicMock()]):
-            store = ChunkStore(temp_db_path, project_path=project_path)
-            assert store.db is not None
-
         meta_path = temp_db_path / "project_meta.json"
-        assert meta_path.exists()
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        assert meta["project_path"] == str(project_path.resolve())
+        original = json.dumps({"project_path": str(project_path.resolve())}).encode()
+        meta_path.write_bytes(original)
+        with (
+            patch("lancedb.connect", side_effect=RuntimeError("corrupt")),
+            pytest.raises(RuntimeError, match="corrupt"),
+        ):
+            ChunkStore(temp_db_path, project_path=project_path)
+        assert meta_path.read_bytes() == original
+        assert (temp_db_path / "junk.txt").read_text() == "some data"
 
     def test_init_deeply_nested_path(self):
         """Should create deeply nested database directory if needed."""

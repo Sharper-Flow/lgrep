@@ -19,6 +19,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from lgrep.server import mcp, time_tool
+from lgrep.server.lifecycle import _retain_state, _stop_watcher
 from lgrep.server.responses import (
     PruneOrphansResult,  # noqa: TC001 — FastMCP evaluates return annotation at runtime
     PruneSymbolsResult,  # noqa: TC001
@@ -264,8 +265,18 @@ async def invalidate_worktree_cache(
         for entry in entries:
             if entry.get("error") is None and entry.get("cache_dir"):
                 resolved = str(Path(entry["path"]).resolve())
-                if resolved in app_ctx.projects:
-                    del app_ctx.projects[resolved]
+                state = app_ctx.projects.get(resolved)
+                if state is not None:
+                    _retain_state(app_ctx, resolved, state)
+                    if state.watcher is not None and not await _run_blocking(
+                        ctx, "stop_watcher", resolved, _stop_watcher, state, resolved
+                    ):
+                        entry["error"] = (
+                            "Cache invalidated, but watcher did not stop; project remains loaded"
+                        )
+                        continue
+                    if app_ctx.projects.get(resolved) is state:
+                        del app_ctx.projects[resolved]
 
     return WorktreeInvalidationResult(
         paths_cleaned=paths_cleaned,

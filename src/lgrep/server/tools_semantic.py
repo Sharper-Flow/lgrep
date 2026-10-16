@@ -19,6 +19,7 @@ from lgrep.server.lifecycle import (
     _ensure_project_initialized,
     _ensure_search_project_state,
     _get_project_stats,
+    _retain_state,
     _schedule_background_reindex,
     _stop_watcher,
 )
@@ -399,6 +400,8 @@ async def status_semantic(
         # Single-project status
         project_path = str(Path(path).resolve())
         state = app_ctx.projects.get(project_path)
+        if state is not None:
+            _retain_state(app_ctx, project_path, state)
 
         # Fallback: read stats directly from disk cache (no API key needed)
         if not state:
