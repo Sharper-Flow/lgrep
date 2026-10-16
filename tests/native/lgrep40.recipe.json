@@ -5,37 +5,36 @@
   "root": ".",
   "harness_files": [
     "conftest.py",
-    "tests/test_discovery.py",
-    "tests/test_security.py"
+    "tests/native/test_lgrep40.py"
   ],
   "support_files": [],
   "cases": {
     "case:anchoring-ordered": [
-      "tests/test_discovery.py::TestIgnoreSemantics::test_anchored_nested_and_ordered_patterns[.gitignore]",
-      "tests/test_discovery.py::TestIgnoreSemantics::test_anchored_nested_and_ordered_patterns[.lgrepignore]"
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_anchored_nested_and_ordered_patterns[.gitignore]",
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_anchored_nested_and_ordered_patterns[.lgrepignore]"
     ],
     "case:directory-only": [
-      "tests/test_discovery.py::TestIgnoreSemantics::test_directory_only_pattern_distinguishes_files[.gitignore]",
-      "tests/test_discovery.py::TestIgnoreSemantics::test_directory_only_pattern_distinguishes_files[.lgrepignore]"
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_directory_only_pattern_distinguishes_files[.gitignore]",
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_directory_only_pattern_distinguishes_files[.lgrepignore]"
     ],
     "case:pruning": [
-      "tests/test_discovery.py::TestIgnoreSemantics::test_ignored_directory_is_pruned[.gitignore]",
-      "tests/test_discovery.py::TestIgnoreSemantics::test_ignored_directory_is_pruned[.lgrepignore]"
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_ignored_directory_is_pruned[.gitignore]",
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_ignored_directory_is_pruned[.lgrepignore]"
     ],
     "case:root-only": [
-      "tests/test_discovery.py::TestIgnoreSemantics::test_nested_ignore_files_are_not_loaded[.gitignore]",
-      "tests/test_discovery.py::TestIgnoreSemantics::test_nested_ignore_files_are_not_loaded[.lgrepignore]"
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_nested_ignore_files_are_not_loaded[.gitignore]",
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_nested_ignore_files_are_not_loaded[.lgrepignore]"
     ],
     "case:negated-parent": [
-      "tests/test_discovery.py::TestIgnoreSemantics::test_negation_does_not_reopen_pruned_parent[.gitignore]",
-      "tests/test_discovery.py::TestIgnoreSemantics::test_negation_does_not_reopen_pruned_parent[.lgrepignore]"
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_negation_does_not_reopen_pruned_parent[.gitignore]",
+      "tests/native/test_lgrep40.py::TestIgnoreSemantics::test_negation_does_not_reopen_pruned_parent[.lgrepignore]"
     ],
     "case:independent-ignore-files": [
-      "tests/test_discovery.py::test_ignore_files_combine_as_independent_exclusions"
+      "tests/native/test_lgrep40.py::test_ignore_files_combine_as_independent_exclusions"
     ],
     "case:security-first": [
-      "tests/test_security.py::test_negation_cannot_admit_secrets_or_outside_paths[.gitignore]",
-      "tests/test_security.py::test_negation_cannot_admit_secrets_or_outside_paths[.lgrepignore]"
+      "tests/native/test_lgrep40.py::test_negation_cannot_admit_secrets_or_outside_paths[.gitignore]",
+      "tests/native/test_lgrep40.py::test_negation_cannot_admit_secrets_or_outside_paths[.lgrepignore]"
     ]
   },
   "pin": {
