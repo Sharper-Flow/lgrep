@@ -1,3 +1,8 @@
+## 2026-10-16 (v3.6.14)
+
+- fix(server): evict idle semantic owners without restarting (#40)
+- docs: update changelog for v3.6.13
+
 ## 2026-10-15 (v3.6.13)
 
 - fix(symbols): bound parsed index retention and release deleted entries (#38)
