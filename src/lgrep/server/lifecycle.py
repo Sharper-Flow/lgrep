@@ -16,6 +16,8 @@ import structlog
 
 from lgrep.embeddings import VoyageEmbedder
 from lgrep.indexing import Indexer, OperationCancelled
+from lgrep.server.responses import OwnerStoreSnapshot
+from lgrep.server.retention import OwnerActivity, retain_for_call, scoped_activity
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import (
     BASE_CHECKOUT,
@@ -98,6 +100,7 @@ class ProjectState:
     latest_indexed_at: float | None = None
     pending_index_files: list[str] | None = None
     base_path: str | None = None
+    owner_key: str | None = None
 
 
 @dataclass
@@ -143,6 +146,99 @@ class LgrepContext:
     # project state, so work that was already running in a worker thread
     # cannot repopulate the context after teardown.
     _closed: bool = False
+    _activity: OwnerActivity = field(default_factory=OwnerActivity)
+    _store_retirements: dict[str, asyncio.Task] = field(default_factory=dict)
+    _evictions: int = 0
+
+    def __post_init__(self):
+        self.runtime.retain_project = self._activity.acquire
+
+
+def _retain_state(ctx: LgrepContext, path: str, state: ProjectState) -> None:
+    owner = state.owner_key or state.base_path or path
+    ctx._activity.alias(path, owner)
+    retain_for_call(ctx._activity, owner)
+
+
+def _protected_owners(ctx: LgrepContext) -> set[str]:
+    protected = set(ctx._store_assemblies) | set(ctx._store_retirements)
+    for path, state in ctx.projects.items():
+        if path in ctx._checkout_assemblies or _index_in_flight(ctx, path):
+            protected.add(state.owner_key or state.base_path or path)
+    return protected
+
+
+def _idle_owner(ctx: LgrepContext) -> str | None:
+    for key in ctx._stores:
+        if key not in ctx._store_retirements:
+            ctx._activity.register(key)
+    protected = _protected_owners(ctx)
+    return ctx._activity.oldest(key for key in ctx._stores if key not in protected)
+
+
+def owner_store_snapshot(ctx: LgrepContext | None) -> OwnerStoreSnapshot:
+    if ctx is None:
+        return OwnerStoreSnapshot(
+            cap=MAX_PROJECTS,
+            open=0,
+            assembling=0,
+            retiring=0,
+            busy=0,
+            idle=0,
+            evictions=0,
+        )
+    retiring = len(ctx._store_retirements)
+    protected = _protected_owners(ctx)
+    busy = sum(
+        ctx._activity.busy(key) or key in protected
+        for key in ctx._stores
+        if key not in ctx._store_retirements
+    )
+    return {
+        "cap": MAX_PROJECTS,
+        "open": len(ctx._stores) - retiring,
+        "assembling": len(ctx._store_assemblies),
+        "retiring": retiring,
+        "busy": busy,
+        "idle": len(ctx._stores) - retiring - busy,
+        "evictions": ctx._evictions,
+    }
+
+
+async def _retire_owner(ctx: LgrepContext, owner: str, states: list[ProjectState]) -> None:
+    try:
+        for state in states:
+            if state.watcher is not None:
+                await asyncio.to_thread(state.watcher.stop)
+                state.watching = False
+                state.watcher = None
+        # Drop checkout/indexer references before freeing the reserved owner slot.
+        states.clear()
+        async with ctx._lock:
+            ctx._stores.pop(owner)
+            ctx._store_retirements.pop(owner)
+            ctx._evictions += 1
+        log.info("owner_store_evicted", owner=owner)
+    except Exception:
+        # A watcher that cannot stop still owns resources. Keep its slot reserved.
+        log.exception("owner_store_retirement_failed", owner=owner)
+        raise
+
+
+def _begin_retirement(ctx: LgrepContext, owner: str) -> asyncio.Task:
+    states = []
+    for path, state in list(ctx.projects.items()):
+        if (state.owner_key or state.base_path or path) == owner:
+            if state.watcher is not None and state.watcher.handler is not None:
+                state.watcher.handler.close()
+            states.append(state)
+            del ctx.projects[path]
+    # Checkout publication and path-only worker aliases retire together, before
+    # observer shutdown yields. Semantic callers must join the retirement.
+    ctx._activity.forget(owner)
+    task = asyncio.create_task(_retire_owner(ctx, owner, states), name=f"retire_store:{owner}")
+    ctx._store_retirements[owner] = task
+    return task
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +312,9 @@ async def _shutdown(ctx: LgrepContext) -> None:
     for proj_path, state in ctx.projects.items():
         _stop_watcher(state, proj_path)
 
+    if ctx._store_retirements:
+        await asyncio.gather(*ctx._store_retirements.values(), return_exceptions=True)
+    ctx._store_retirements.clear()
     ctx.projects.clear()
     ctx._stores.clear()
     ctx.runtime.shutdown(cancel_futures=True)
@@ -282,17 +381,32 @@ def _stop_watcher(state: ProjectState, project_path: str) -> bool:
 
     Returns True if a watcher was actually stopped, False if nothing to stop.
     """
-    if not state.watcher or not state.watching:
+    if not state.watcher:
         return False
 
     try:
         state.watcher.stop()
     except Exception as e:
         log.error("watcher_stop_failed", project=project_path, error=str(e))
-    finally:
-        state.watching = False
-        state.watcher = None
+        return False
+    state.watching = False
+    state.watcher = None
 
+    return True
+
+
+async def _unload_project_state(ctx: LgrepContext, project_path: str) -> bool:
+    """Stop a checkout's watcher before removing its published state."""
+    state = ctx.projects.get(project_path)
+    if state is None:
+        return True
+    _retain_state(ctx, project_path, state)
+    if state.watcher is not None and not await ctx.runtime.run_blocking(
+        "stop_watcher", "_unload_project_state", project_path, _stop_watcher, state, project_path
+    ):
+        return False
+    if ctx.projects.get(project_path) is state:
+        del ctx.projects[project_path]
     return True
 
 
@@ -332,7 +446,7 @@ def _assemble_checkout_state(
         base_path = owner_str
         write_project_meta(owner_str, db_path=store.db_path, alias_paths=[checkout])
     indexer = Indexer(project_path=project_path, storage=db, embedder=embedder)
-    state = ProjectState(db=db, indexer=indexer, base_path=base_path)
+    state = ProjectState(db=db, indexer=indexer, base_path=base_path, owner_key=owner_str)
     _ = db.table
     return state
 
@@ -360,21 +474,22 @@ async def _assemble_owner_store_task(
             # receive the shutdown refusal.
             if not app_ctx._closed:
                 app_ctx._stores[owner_str] = store
+                app_ctx._store_assemblies.pop(owner_str, None)
         return store
     finally:
         async with app_ctx._lock:
             if app_ctx._store_assemblies.get(owner_str) is asyncio.current_task():
                 app_ctx._store_assemblies.pop(owner_str, None)
+                if owner_str not in app_ctx._stores:
+                    app_ctx._activity.discard(owner_str)
 
 
 async def _join_owner_assembly(task: asyncio.Task) -> None:
-    """Wait for an owner assembly without ever cancelling it.
+    """Join owner assembly or retirement without cancelling its task.
 
-    The await is shielded, so a cancelled waiter detaches promptly — the
-    caller's own timeout is never extended by the shared assembly — while
-    the assembly keeps running under its registry entry. A retry arriving
-    mid-assembly therefore always finds the registry entry or the
-    published store, never a half-open cache.
+    A cancelled waiter detaches promptly without extending its timeout.
+    Shared owner work keeps its registry entry and capacity reservation
+    until completion, so a retry joins it instead of opening another store.
     """
     await asyncio.shield(task)
 
@@ -382,39 +497,41 @@ async def _join_owner_assembly(task: asyncio.Task) -> None:
 async def _ensure_owner_store(
     app_ctx: LgrepContext, owner: Path, owner_str: str
 ) -> ChunkStore | dict:
-    """Return the owner cache's store, assembling it at most once.
-
-    Admission and registration are one atomic step under the app lock:
-    ``MAX_PROJECTS`` counts published stores plus in-flight assemblies, so
-    concurrent distinct owners cannot each pass admission while nothing is
-    published yet. Concurrent or retried ensures for the same owner join
-    the registered in-flight assembly task instead of constructing a second
-    ChunkStore against the same cache.
-    """
+    """Atomically admit an owner or retire the least recently used idle owner."""
     while True:
         async with app_ctx._lock:
             if app_ctx._closed:
                 return _error_response("lgrep is shutting down.")
-            store = app_ctx._stores.get(owner_str)
-            if store is not None:
-                return store
-            task = app_ctx._store_assemblies.get(owner_str)
-            if task is None:
-                # MAX_PROJECTS counts caches (owners), not worktree views,
-                # and counts an in-flight assembly as soon as it reserves.
-                count = len(app_ctx._stores) + len(app_ctx._store_assemblies)
-                if count >= MAX_PROJECTS:
-                    return _error_response(
-                        f"Maximum project limit ({MAX_PROJECTS}) reached. "
-                        "Restart the server or use the CLI to evict unused projects."
-                    )
-                if count >= int(MAX_PROJECTS * 0.8):
-                    log.warning("approaching_project_limit", current=count, max=MAX_PROJECTS)
-                task = asyncio.create_task(
-                    _assemble_owner_store_task(app_ctx, owner, owner_str),
-                    name=f"ensure_store:{owner_str}",
-                )
-                app_ctx._store_assemblies[owner_str] = task
+            retirement = app_ctx._store_retirements.get(owner_str)
+            if retirement is not None:
+                task = retirement
+            else:
+                store = app_ctx._stores.get(owner_str)
+                if store is not None:
+                    retain_for_call(app_ctx._activity, owner_str)
+                    return store
+                task = app_ctx._store_assemblies.get(owner_str)
+                if task is None:
+                    count = len(app_ctx._stores) + len(app_ctx._store_assemblies)
+                    if count >= MAX_PROJECTS:
+                        victim = _idle_owner(app_ctx)
+                        if victim is None:
+                            return {
+                                "error": f"Project capacity ({MAX_PROJECTS}) is busy. Retry after active work finishes.",
+                                "code": "project_capacity_busy",
+                                "retryable": True,
+                            }
+                        task = _begin_retirement(app_ctx, victim)
+                        retirement = task
+                    else:
+                        app_ctx._activity.register(owner_str)
+                        task = asyncio.create_task(
+                            _assemble_owner_store_task(app_ctx, owner, owner_str),
+                            name=f"ensure_store:{owner_str}",
+                        )
+                        app_ctx._store_assemblies[owner_str] = task
+                if retirement is None:
+                    retain_for_call(app_ctx._activity, owner_str)
         await _join_owner_assembly(task)
 
 
@@ -444,14 +561,18 @@ async def _ensure_project_initialized(
     Returns ProjectState on success, or a ToolError dict on failure.
     """
     path_key = str(project_path)
+    if app_ctx._closed:
+        return _error_response("lgrep is shutting down.")
 
     # Fast path: already initialized by this exact path (no lock needed)
     if path_key in app_ctx.projects:
+        _retain_state(app_ctx, path_key, app_ctx.projects[path_key])
         return app_ctx.projects[path_key]
 
     async with app_ctx._lock:
         # Double-check after acquiring lock
         if path_key in app_ctx.projects:
+            _retain_state(app_ctx, path_key, app_ctx.projects[path_key])
             return app_ctx.projects[path_key]
 
         if not app_ctx.voyage_api_key:
@@ -468,7 +589,14 @@ async def _ensure_project_initialized(
             app_ctx._checkout_assemblies[path_key] = task
 
     try:
-        return await asyncio.shield(task)
+        result = await asyncio.shield(task)
+        if isinstance(result, ProjectState):
+            # Publication can finish before this waiter resumes. Never hand out
+            # a state retired in that gap; reacquire the current view instead.
+            if app_ctx.projects.get(path_key) is not result:
+                return await _ensure_project_initialized(app_ctx, project_path)
+            _retain_state(app_ctx, path_key, result)
+        return result
     except asyncio.CancelledError:
         current = asyncio.current_task()
         if task.cancelled() and not (current is not None and current.cancelling()):
@@ -478,6 +606,7 @@ async def _ensure_project_initialized(
         raise
 
 
+@scoped_activity
 async def _assemble_project_state_task(
     app_ctx: LgrepContext, project_path: Path, path_key: str
 ) -> ProjectState | dict:
@@ -519,6 +648,7 @@ async def _assemble_project_state_task(
             if existing is not None:
                 return existing
             app_ctx.projects[path_key] = state
+            app_ctx._activity.alias(path_key, owner_str)
         log.info(
             "project_initialized",
             project=path_key,
@@ -896,6 +1026,7 @@ def _on_bg_reindex_done(app_ctx: LgrepContext, project_path: str, task: asyncio.
     app_ctx._bg_reindex_tasks.pop(project_path, None)
 
 
+@scoped_activity
 async def _auto_index_project_single_flight(
     app_ctx: LgrepContext,
     project_path: str,
@@ -1031,7 +1162,7 @@ async def _auto_index_project_single_flight(
                         await asyncio.sleep(delay_s)
                         continue
 
-                    app_ctx.projects.pop(project_path, None)
+                    await _unload_project_state(app_ctx, project_path)
                     log.exception(
                         "search_auto_index_failed",
                         project=project_path,
@@ -1084,7 +1215,7 @@ async def _auto_index_project_single_flight(
             # other work between bounded windows.
             await asyncio.sleep(0)
     except Exception as e:
-        app_ctx.projects.pop(project_path, None)
+        await _unload_project_state(app_ctx, project_path)
         log.exception("search_auto_index_failed", project=project_path, error=str(e))
         return _error_response(
             "Failed to auto-index project on first search. Check server logs for details."
@@ -1117,9 +1248,12 @@ def _retain_ownership_until_stopped(
 
 async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> ProjectState | dict:
     """Resolve project path and ensure a ready ProjectState for search."""
+    if app_ctx._closed:
+        return _error_response("lgrep is shutting down.")
     project_path = str(Path(path).resolve())
     state = app_ctx.projects.get(project_path)
     if state:
+        _retain_state(app_ctx, project_path, state)
         return state
 
     if has_disk_cache(project_path):
@@ -1131,7 +1265,12 @@ async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> Proj
     if not path_obj.exists() or not path_obj.is_dir():
         return _error_response(f"Path does not exist or is not a directory: {path}")
 
-    return await _auto_index_project_single_flight(app_ctx, project_path, path_obj)
+    result = await _auto_index_project_single_flight(app_ctx, project_path, path_obj)
+    if isinstance(result, ProjectState):
+        if app_ctx.projects.get(project_path) is not result:
+            return await _ensure_search_project_state(app_ctx, path)
+        _retain_state(app_ctx, project_path, result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1139,6 +1278,7 @@ async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> Proj
 # ---------------------------------------------------------------------------
 
 
+@scoped_activity
 async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
     """Warm a single project by loading its disk cache into memory.
 
@@ -1159,7 +1299,7 @@ async def _warm_project(app_ctx: LgrepContext, project_path: Path) -> dict:
         # Start watcher if auto-watch is enabled
         auto_watch = os.environ.get("LGREP_AUTO_WATCH", "").lower() in ("true", "1", "yes")
         if auto_watch and not result.watching:
-            result.watcher = FileWatcher(result.indexer)
+            result.watcher = FileWatcher(result.indexer, runtime=app_ctx.runtime)
             result.watcher.start()
             result.watching = True
             log.info("auto_watch_started", project=path_str)
@@ -1220,8 +1360,8 @@ async def _warm_projects(app_ctx: LgrepContext) -> None:
     if not paths:
         return
 
-    # Respect MAX_PROJECTS — existing projects count toward the cap
-    available = max(0, MAX_PROJECTS - len(app_ctx.projects))
+    # Startup warms only unused owner capacity; aliases do not consume slots.
+    available = max(0, MAX_PROJECTS - len(app_ctx._stores) - len(app_ctx._store_assemblies))
     if len(paths) > available:
         log.warning(
             "warm_paths_capped",

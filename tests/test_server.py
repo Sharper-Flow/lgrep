@@ -492,11 +492,15 @@ class TestAcceptanceToolChoiceAndOnboarding:
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
         app_ctx.embedder.embed_query_async = AsyncMock(return_value=[0.1] * 1024)
 
+        async def initialize(ctx, path):
+            ctx.projects[str(path)] = mock_state
+            return mock_state
+
         with (
             patch("lgrep.server.lifecycle.has_disk_cache", return_value=False),
             patch(
                 "lgrep.server.lifecycle._ensure_project_initialized",
-                return_value=mock_state,
+                side_effect=initialize,
             ) as mock_init,
         ):
             response = await lgrep_search(
@@ -1006,8 +1010,8 @@ class TestMaxProjectsLimit:
     """Tests for MAX_PROJECTS resource guard."""
 
     @pytest.mark.asyncio
-    async def test_max_projects_rejects_at_limit(self, tmp_path):
-        """Should reject new projects when MAX_PROJECTS limit is reached."""
+    async def test_max_projects_rejects_when_all_busy(self, tmp_path):
+        """Only active owners, rather than past project count, refuse admission."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
         # Pre-fill projects dict to MAX_PROJECTS.
@@ -1018,6 +1022,8 @@ class TestMaxProjectsLimit:
             path = f"/fake/project/{i}"
             app_ctx.projects[path] = state
             app_ctx._stores[path] = state.db
+            app_ctx._activity.register(path)
+            app_ctx._activity.acquire(path)
 
         assert len(app_ctx.projects) == MAX_PROJECTS
 
@@ -1030,8 +1036,9 @@ class TestMaxProjectsLimit:
         assert isinstance(result, dict)
         data = result
         assert "error" in data
-        assert "Maximum project limit" in data["error"]
-        assert "Restart the server" in data["error"]
+        assert data["code"] == "project_capacity_busy"
+        assert data["retryable"] is True
+        assert "Restart the server" not in data["error"]
 
     @pytest.mark.asyncio
     async def test_projects_below_limit_succeed(self, tmp_path):
@@ -1308,12 +1315,14 @@ class TestEagerWarmUp:
 
     @pytest.mark.asyncio
     async def test_warm_respects_max_projects(self, tmp_path):
-        """Warming should cap at MAX_PROJECTS minus already-loaded projects."""
+        """Warming should cap at MAX_PROJECTS minus already-loaded owners."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
 
         # Pre-fill to MAX_PROJECTS - 1
         for i in range(MAX_PROJECTS - 1):
-            app_ctx.projects[f"/fake/{i}"] = ProjectState(db=MagicMock(), indexer=MagicMock())
+            state = ProjectState(db=MagicMock(), indexer=MagicMock())
+            app_ctx.projects[f"/fake/{i}"] = state
+            app_ctx._stores[f"/fake/{i}"] = state.db
 
         # Try to warm 3 projects — only 1 slot available
         projects = []

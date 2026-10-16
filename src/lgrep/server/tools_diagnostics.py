@@ -15,6 +15,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from lgrep.server import mcp, time_tool
+from lgrep.server.lifecycle import owner_store_snapshot
 from lgrep.server.responses import (  # noqa: TC001
     DiagnosticsResult,
     LoadedProjectEntry,
@@ -110,6 +111,7 @@ async def lgrep_diagnostics(
         active_jobs=active_jobs,
         recent_jobs=recent_jobs,
         symbol_cache=IndexStore.cache_info(),
+        owner_stores=owner_store_snapshot(app_ctx),
         timeout_abandonment_summary=TimeoutAbandonmentSummary(
             abandoned_count=abandoned_count,
             finished_after_abandon_count=finished_after_abandon_count,
