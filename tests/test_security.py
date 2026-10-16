@@ -1,10 +1,4 @@
-"""Security tests for discovery.py (tk-ypctQFYt).
-
-RED phase: tests fail before security hardening is applied.
-GREEN phase: all pass after implementation.
-
-≥6 adversarial scenarios required.
-"""
+"""Security exclusions take precedence over project ignore rules."""
 
 
 class TestPathTraversalSecurity:
