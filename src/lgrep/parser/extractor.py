@@ -595,19 +595,22 @@ class SymbolExtractor:
         symbols = extractor.extract(Path("src/auth.py"))
     """
 
-    def extract(self, file_path: Path, repo_root: Path | None = None) -> list[Symbol]:
+    def extract(
+        self, file_path: Path, repo_root: Path | None = None, *, source: bytes | None = None
+    ) -> list[Symbol]:
         """Extract symbols from a source file.
 
         Args:
             file_path: Path to the source file
             repo_root: Optional repo root for computing relative paths in IDs.
                        If None, uses the absolute file path.
+            source: Optional immutable file snapshot to parse instead of reading disk.
 
         Returns:
             List of Symbol objects. Empty list if the language is unsupported
             or the file cannot be parsed.
         """
-        result = self._parse(file_path, repo_root)
+        result = self._parse(file_path, repo_root, source=source)
         if result is None:
             return []
         root_node, source, id_path, spec = result
@@ -635,7 +638,9 @@ class SymbolExtractor:
         root_node, source, id_path, spec = result
         return _extract_symbols_and_occurrences_from_tree(root_node, source, id_path, spec)
 
-    def _parse(self, file_path: Path, repo_root: Path | None = None) -> tuple | None:
+    def _parse(
+        self, file_path: Path, repo_root: Path | None = None, *, source: bytes | None = None
+    ) -> tuple | None:
         """Parse a source file and return tree-sitter metadata."""
         file_path = Path(file_path)
         extension = file_path.suffix.lower()
@@ -654,11 +659,12 @@ class SymbolExtractor:
         else:
             id_path = str(file_path)
 
-        try:
-            source = file_path.read_bytes()
-        except OSError as e:
-            log.warning("extractor_read_failed", file=str(file_path), error=str(e))
-            return None
+        if source is None:
+            try:
+                source = file_path.read_bytes()
+            except OSError as e:
+                log.warning("extractor_read_failed", file=str(file_path), error=str(e))
+                return None
 
         try:
             from tree_sitter_language_pack import get_parser

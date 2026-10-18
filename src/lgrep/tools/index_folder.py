@@ -69,7 +69,8 @@ def index_folder(
     Args:
         repo_path: Absolute path to the repository/folder root
         storage_dir: Optional override for the symbol index storage directory
-        max_files: Maximum number of files to index (default: 500)
+        max_files: Maximum changed/new files to parse (default: 500).
+                   Unchanged files are checked but do not consume this budget.
         incremental: If True (default), skip files whose SHA-256 hash matches
                      the stored index — only re-parse changed/new files.
                      Set to False to force a full re-index.
@@ -138,9 +139,6 @@ def index_folder(
         files_processed = 0
         files_skipped = 0
         for file_path in discovery.find_files():
-            if files_processed + files_skipped >= max_files:
-                walk_truncated = True
-                break
             if get_language_spec(file_path.suffix.lower()) is None:
                 continue
 
@@ -161,6 +159,10 @@ def index_folder(
             ):
                 files_skipped += 1
                 continue
+
+            if files_processed >= max_files:
+                walk_truncated = True
+                break
 
             files_dict[rel_path] = file_hash
 

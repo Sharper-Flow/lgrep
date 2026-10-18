@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 #   limit    - result cap
 #   query    - search text or symbol name
 #   path     - local repository root or file
-# max_files is a separate concept: it counts files scanned, not results.
+# max_files limits file work, not results. Incremental symbol indexing counts
+# changed/new parses; unchanged files do not consume that budget.
 SYNONYMS: dict[str, str] = {
     "max_results": "limit",
     "maxResults": "limit",

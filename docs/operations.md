@@ -64,7 +64,7 @@ Each concept carries one declared name in every tool schema:
 | Search text or symbol name | `query` |
 | Local repository root or file | `path` |
 | Result cap | `limit` |
-| Files scanned during indexing | `max_files` |
+| File input/parse budget (unchanged symbol-index files do not count) | `max_files` |
 
 Before validation, the server renames a fixed set of legacy spellings to the
 declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` →
@@ -259,6 +259,13 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   checkouts that no longer exist on disk are deleted when a new index is
   created. Run `index_symbols_folder(path=...)` explicitly for non-git
   folders, to raise `max_files`, or to force a rebuild.
+- Symbol indexing limits changed/new file parses per call with `max_files`.
+  Unchanged files are checked but do not consume that parse budget, so a
+  refresh can reach edited files after an unchanged prefix. Source retrieval
+  validates each stored symbol's name, kind, parent, and complete byte range
+  against one parsed file snapshot. A mismatched range returns an error
+  instead of another symbol's body; re-index before retrying. Batch retrieval
+  shares one snapshot per file and reports mismatches per symbol.
 
 ## Shared-daemon tuning (Vision / OpenCode)
 

@@ -1181,7 +1181,7 @@ class TestGetSymbol:
                         "kind": "function",
                         "file_path": "src/auth.py",
                         "start_byte": 0,
-                        "end_byte": 16,
+                        "end_byte": len(_FakeResponse.content.rstrip()),
                     }
                 },
             )
@@ -1189,7 +1189,7 @@ class TestGetSymbol:
 
         result = get_symbol("src/auth.py:function:authenticate", repo_key, storage_dir=tmp_store)
         assert "error" not in result
-        assert result["symbol"]["source"] == "def authenticate"
+        assert result["symbol"]["source"] == _FakeResponse.content.decode().rstrip()
 
 
 # ── get_symbols (batch) ───────────────────────────────────────────────────────
