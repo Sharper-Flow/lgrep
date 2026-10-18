@@ -14,6 +14,22 @@ from lgrep.tools._meta import error_response
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from lgrep.storage.index_store import CodeIndex
+
+
+def load_symbol_index(
+    repo_path: str, storage_dir: Path | str | None = None
+) -> tuple[CodeIndex | None, bool]:
+    """Acquire a checked snapshot, bootstrapping an unindexed local checkout."""
+    index, refreshed = load_fresh_index(repo_path, storage_dir=storage_dir)
+    bootstrapped = False
+    if index is None:
+        from lgrep.tools._index_bootstrap import ensure_symbol_index
+
+        bootstrapped = ensure_symbol_index(repo_path, storage_dir=storage_dir)
+        index = IndexStore(storage_dir=storage_dir).load(repo_path)
+    return index, refreshed or bootstrapped
+
 
 def search_symbols(
     query: str,
@@ -21,6 +37,8 @@ def search_symbols(
     storage_dir: Path | str | None = None,
     limit: int = 20,
     kind: str | None = None,
+    *,
+    index_snapshot: tuple[CodeIndex | None, bool] | None = None,
 ) -> dict:
     """Search for symbols by name in an indexed repository.
 
@@ -32,6 +50,8 @@ def search_symbols(
         storage_dir: Optional override for the symbol index storage directory
         limit: Maximum number of results to return (default: 20)
         kind: Optional filter by symbol kind (function, class, method, etc.)
+        index_snapshot: Checked snapshot supplied by the daemon's index owner.
+                        Omit to acquire it synchronously, as CLI callers do.
 
     Returns:
         Dict with results list and total_matches.
@@ -43,16 +63,9 @@ def search_symbols(
     if limit < 0:
         limit = 1
 
-    index, refreshed = load_fresh_index(repo_path, storage_dir=storage_dir)
-    # First use of an unindexed local git checkout builds that checkout's
-    # own index (seeded from an indexed sibling worktree when one exists)
-    # instead of refusing.
-    bootstrapped = False
-    if index is None:
-        from lgrep.tools._index_bootstrap import ensure_symbol_index
-
-        bootstrapped = ensure_symbol_index(repo_path, storage_dir=storage_dir)
-        index = IndexStore(storage_dir=storage_dir).load(repo_path)
+    index, refreshed = (
+        load_symbol_index(repo_path, storage_dir) if index_snapshot is None else index_snapshot
+    )
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
@@ -74,5 +87,5 @@ def search_symbols(
     return {
         "results": results,
         "total_matches": len(results),
-        "index_refreshed": refreshed or bootstrapped,
+        "index_refreshed": refreshed,
     }

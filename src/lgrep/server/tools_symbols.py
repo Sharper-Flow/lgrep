@@ -6,7 +6,7 @@ import asyncio
 import time
 from functools import partial
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
@@ -30,6 +30,7 @@ from lgrep.server.responses import (
     error_response,
 )
 from lgrep.server.tools_maintenance import _destructive_grant_present
+from lgrep.storage.index_store import normalize_repo_key
 from lgrep.tools._meta import make_meta
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
@@ -41,8 +42,45 @@ from lgrep.tools.index_repo import index_repo as _index_repo
 from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
 from lgrep.tools.search_references import search_references as _search_references
+from lgrep.tools.search_symbols import load_symbol_index
 from lgrep.tools.search_symbols import search_symbols as _search_symbols
 from lgrep.tools.search_text import search_text as _search_text
+
+if TYPE_CHECKING:
+    from lgrep.server.lifecycle import LgrepContext
+    from lgrep.storage.index_store import CodeIndex
+
+
+def _symbol_index_done(app_ctx: LgrepContext, path: str, task: asyncio.Task) -> None:
+    if app_ctx._symbol_index_tasks.get(path) is task:
+        del app_ctx._symbol_index_tasks[path]
+    # RuntimeSupervisor records failures; retrieve detached task exceptions too.
+    if not task.cancelled():
+        task.exception()
+
+
+async def _symbol_index_snapshot(
+    app_ctx: LgrepContext, path: str
+) -> tuple[CodeIndex | None, bool] | None:
+    from lgrep.server import TOOL_TIMEOUT_S
+
+    async with app_ctx._lock:
+        if app_ctx._closed:
+            raise RuntimeError("lgrep context is shutting down")
+        task = app_ctx._symbol_index_tasks.get(path)
+        if task is None:
+            task = asyncio.create_task(
+                app_ctx.runtime.run_blocking(
+                    "symbol_index", "search_symbols", path, load_symbol_index, path, lane="build"
+                ),
+                name=f"symbol_index:{path}",
+            )
+            app_ctx._symbol_index_tasks[path] = task
+            task.add_done_callback(partial(_symbol_index_done, app_ctx, path))
+    # Waiting/cancelling a query never cancels the registered physical writer.
+    done, _ = await asyncio.wait((task,), timeout=min(5.0, TOOL_TIMEOUT_S / 2))
+    return task.result() if done else None
+
 
 # ---------------------------------------------------------------------------
 # MCP Tools (12 symbol tools)
@@ -354,6 +392,7 @@ async def search_symbols(
         str | None,
         Field(description="Optional symbol kind filter (for example: function, class, method)."),
     ] = None,
+    ctx: Context | None = None,
 ) -> SearchSymbolsResult | ToolError:
     """Search for symbols by name in an indexed repository.
 
@@ -373,7 +412,31 @@ async def search_symbols(
         Results list, total matches, and meta envelope.
     """
     t0 = time.monotonic()
-    result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
+    if not query or not query.strip():
+        return error_response("query must not be empty")
+    if ctx is None:
+        result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
+    else:
+        app_ctx = ctx.request_context.lifespan_context
+        repo_key = normalize_repo_key(path)
+        snapshot = await _symbol_index_snapshot(app_ctx, repo_key)
+        if snapshot is None:
+            return ToolError(
+                error=(
+                    "Symbol index check or refresh is still running. "
+                    "See lgrep_diagnostics for its symbol_index job; query again after it finishes."
+                ),
+                code="indexing_in_progress",
+                retryable=True,
+            )
+        result = await app_ctx.runtime.run_blocking(
+            "search_symbols",
+            "search_symbols",
+            repo_key,
+            partial(
+                _search_symbols, query, repo_key, limit=limit, kind=kind, index_snapshot=snapshot
+            ),
+        )
     if "error" in result:
         return error_response(result["error"])
     return SearchSymbolsResult(
