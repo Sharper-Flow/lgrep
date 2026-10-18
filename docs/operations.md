@@ -132,6 +132,44 @@ lgrep prune-symbols --execute --storage-dir /path/to/storage
   symlink (TOCTOU) refusals and per-entry failures land in `failures[]` while
   the batch continues; re-run after addressing the error.
 
+### Symbol-storage upgrades and rollback
+
+Symbol indexes use one authoritative JSON file and an advisory metadata
+sidecar. `storage_version: 1` identifies interned occurrence rows and their
+`occurrence_strings` table. It is independent of the extraction `version`.
+Tools still receive ordinary occurrence dictionaries with snapshot line text.
+
+Migration is lazy. Reading a legacy index does not rewrite it. Its next
+explicit index job, edit-triggered refresh, or seeded bootstrap publishes
+the new encoding atomically. An unchanged legacy index remains uncached if
+it exceeds the 64 MiB global cache limit. Run explicit incremental jobs one
+at a time for active indexes; dormant indexes retain their bytes until a
+later job or the normal prune policy removes them. The cache limit measures
+serialized bytes, not resident Python memory.
+
+Stop every process using an older reader before any process writes the new
+format into their shared store. Older readers accept packed arrays without
+decoding them: reference queries fail, and refreshes fail on changed, added,
+or deleted files. An old seeded refresh can also discard the string table.
+
+For rollback, stop all new-release processes. Before the old release serves
+queries, use the old release to rebuild or delete every transcoded local
+index; a new-release rebuild writes the new format again. Rebuild with
+`incremental=false`, set `max_files` above the indexable file count, and
+confirm `walk_truncated=false`. The default `max_files=500` can leave gaps
+that queries will not fill automatically. `invalidate_cache` has no CLI
+route and needs `LGREP_ALLOW_DESTRUCTIVE_MCP=1` on its server; deletion makes
+the next query bootstrap under that same default cap. Identify transcoded
+indexes from the body discriminator, not the sidecar's extraction version.
+Remote `github:` indexes have no occurrence rows and remain readable.
+
+Malformed encodings and non-UTF-8 bodies are logged as load failures.
+`invalidate_cache` then reports `not_found`, because it first loads the body.
+A checkout-root query can bootstrap from a sibling or parse source and run
+the stale-index sweep, but it does not verify complete coverage. For a
+complete repair, use an explicit index job with a sufficient `max_files`
+budget and check `walk_truncated=false`. Do not delete indexes to migrate.
+
 ### Destructive MCP calls need an explicit grant
 
 The MCP tools `prune_orphans`, `prune_symbols`, `invalidate_cache`, and
