@@ -1,3 +1,8 @@
+## 2026-10-18 (v3.6.19)
+
+- fix(symbols): intern occurrence storage without changing results (#45)
+- docs: update changelog for v3.6.18
+
 ## 2026-10-18 (v3.6.18)
 
 - fix(symbols): supervise bounded explicit indexing jobs (#44)
