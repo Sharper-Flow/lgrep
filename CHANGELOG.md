@@ -1,3 +1,5 @@
+Releases after v3.6.19 are listed on GitHub Releases: https://github.com/Sharper-Flow/lgrep/releases
+
 ## 2026-10-18 (v3.6.19)
 
 - fix(symbols): intern occurrence storage without changing results (#45)
