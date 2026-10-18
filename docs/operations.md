@@ -153,7 +153,8 @@ decoding them: reference queries fail, and refreshes fail on changed, added,
 or deleted files. An old seeded refresh can also discard the string table.
 
 For rollback, stop all new-release processes. Before the old release serves
-queries, rebuild or delete every transcoded local index. Rebuild with
+queries, use the old release to rebuild or delete every transcoded local
+index; a new-release rebuild writes the new format again. Rebuild with
 `incremental=false`, set `max_files` above the indexable file count, and
 confirm `walk_truncated=false`. The default `max_files=500` can leave gaps
 that queries will not fill automatically. `invalidate_cache` has no CLI

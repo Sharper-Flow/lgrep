@@ -109,6 +109,7 @@ class _IndexCache:
             if size <= limit:
                 # Release cache-only custody before allocating a replacement.
                 # Active callers may still hold their own checked snapshots.
+                # A failed load still leaves this room free.
                 self._make_room(size, limit)
             return None, self._generation
 

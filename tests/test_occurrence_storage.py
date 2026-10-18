@@ -294,6 +294,18 @@ def test_bad_encoding_is_logged_as_unloadable(tmp_path, problem):
         assert log.warning.call_args.args == ("index_load_failed",)
 
 
+@pytest.mark.parametrize("body", [[], 42])
+def test_non_object_body_is_logged_as_unloadable(tmp_path, body):
+    store = IndexStore(tmp_path / "store")
+    repo = tmp_path / "repo"
+    write_body(store, repo, body)
+    with patch("lgrep.storage.index_store.log") as log:
+        assert store.load(str(repo)) is None
+        log.warning.assert_called_once_with(
+            "index_load_failed", repo=str(repo.resolve()), error="Invalid symbol index body"
+        )
+
+
 def test_failed_publication_keeps_previous_body_and_storage_metadata(tmp_path):
     store = IndexStore(tmp_path)
     repo = str(tmp_path / "repo")
@@ -310,7 +322,7 @@ def test_failed_publication_keeps_previous_body_and_storage_metadata(tmp_path):
     assert target.read_bytes() == before
     assert not list(tmp_path.glob("*.tmp"))
     assert store.load(repo) is original
-    assert getattr(replacement, "_storage_version", 0) == 0
+    assert replacement._storage_version == 0
 
 
 def test_seed_sidecar_counts_and_reference_key_order_survive_disk_decode(tmp_path):
