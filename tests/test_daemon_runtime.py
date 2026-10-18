@@ -16,6 +16,36 @@ def _job_events(logs: list[dict]) -> list[dict]:
     return [entry for entry in logs if entry["event"] == "runtime_job_finished"]
 
 
+@pytest.mark.parametrize("limit", [0, -1])
+def test_symbol_worker_limit_must_be_positive(limit):
+    with pytest.raises(ValueError, match="max_symbol_workers must be >= 1"):
+        RuntimeSupervisor(max_symbol_workers=limit)
+
+
+@pytest.mark.asyncio
+async def test_symbol_lane_owns_a_distinct_executor():
+    supervisor = RuntimeSupervisor(max_workers=1, max_build_workers=1, max_symbol_workers=1)
+    try:
+        symbol_thread = await supervisor.run_blocking(
+            "symbol_index", "test", None, threading.current_thread, lane="symbol"
+        )
+        query_thread = await supervisor.run_blocking(
+            "search_text", "test", None, threading.current_thread
+        )
+        build_thread = await supervisor.run_blocking(
+            "index_all", "test", None, threading.current_thread, lane="build"
+        )
+        assert symbol_thread.name.startswith("lgrep-symbol")
+        assert len({symbol_thread.ident, query_thread.ident, build_thread.ident}) == 3
+        assert [j["lane"] for j in supervisor.snapshot_recent_jobs()] == [
+            "symbol",
+            "query",
+            "build",
+        ]
+    finally:
+        supervisor.shutdown()
+
+
 @pytest.mark.asyncio
 async def test_timed_out_blocking_job_is_marked_abandoned_then_terminal():
     supervisor = RuntimeSupervisor(max_workers=1, history_limit=10)

@@ -37,10 +37,12 @@ call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 DEFAULT_WORKER_MAX_THREADS = 4
 DEFAULT_BUILD_MAX_THREADS = 1
+DEFAULT_SYMBOL_MAX_THREADS = 2
 DEFAULT_HISTORY_LIMIT = 100
 
 QUERY_LANE = "query"
 BUILD_LANE = "build"
+SYMBOL_LANE = "symbol"
 
 
 class JobStatus(StrEnum):
@@ -113,10 +115,12 @@ class RuntimeJob:
 class RuntimeSupervisor:
     """Owns bounded execution and lifecycle state for blocking work.
 
-    Two executors: the query lane (``lgrep-worker`` threads, sized by
+    The query lane (``lgrep-worker`` threads, sized by
     ``LGREP_WORKER_MAX_THREADS``) serves tool-call work, and the build lane
     (``lgrep-build`` threads, sized by ``LGREP_BUILD_MAX_THREADS``) serves
-    build/maintenance kinds so they cannot occupy query threads.
+    build/maintenance kinds so they cannot occupy query threads. Symbol
+    acquisition has its own bounded lane (``lgrep-symbol`` threads), so it
+    neither waits behind semantic builds nor occupies their query workers.
     """
 
     def __init__(
@@ -124,6 +128,7 @@ class RuntimeSupervisor:
         *,
         max_workers: int | None = None,
         max_build_workers: int | None = None,
+        max_symbol_workers: int = DEFAULT_SYMBOL_MAX_THREADS,
         history_limit: int = DEFAULT_HISTORY_LIMIT,
     ):
         if max_workers is None:
@@ -134,11 +139,14 @@ class RuntimeSupervisor:
             max_build_workers = _build_limit_from_env()
         if max_build_workers < 1:
             raise ValueError("max_build_workers must be >= 1")
+        if max_symbol_workers < 1:
+            raise ValueError("max_symbol_workers must be >= 1")
         if history_limit < 1:
             raise ValueError("history_limit must be >= 1")
 
         self.max_workers = max_workers
         self.max_build_workers = max_build_workers
+        self.max_symbol_workers = max_symbol_workers
         self.history_limit = history_limit
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
@@ -147,6 +155,9 @@ class RuntimeSupervisor:
         self._build_executor = ThreadPoolExecutor(
             max_workers=max_build_workers,
             thread_name_prefix="lgrep-build",
+        )
+        self._symbol_executor = ThreadPoolExecutor(
+            max_workers=max_symbol_workers, thread_name_prefix="lgrep-symbol"
         )
         self._counter = itertools.count(1)
         self._lock = threading.RLock()
@@ -179,15 +190,20 @@ class RuntimeSupervisor:
                 calls ``cancel_event.set()`` BEFORE propagating the
                 ``CancelledError``, so the blocking thread can observe
                 the signal at the next safe point and unwind.
-            lane: Executor lane for the job: "query" or "build". Query is
-                the default; build and maintenance call sites pass
-                ``lane="build"`` so they cannot occupy query threads.
+            lane: Executor lane: "query" (default), "build" for semantic
+                builds/maintenance, or "symbol" for symbol acquisition.
+                Neither long-running lane can occupy query threads.
             **kwargs: Keyword args forwarded to ``fn`` (not including
                 ``cancel_event`` or ``lane``).
         """
-        if lane not in (QUERY_LANE, BUILD_LANE):
+        if lane == QUERY_LANE:
+            executor = self._executor
+        elif lane == BUILD_LANE:
+            executor = self._build_executor
+        elif lane == SYMBOL_LANE:
+            executor = self._symbol_executor
+        else:
             raise ValueError(f"unknown lane: {lane!r}")
-        executor = self._executor if lane == QUERY_LANE else self._build_executor
         job = self._create_job(kind=kind, caller=caller, project=project, lane=lane)
 
         def invoke() -> T:
@@ -238,7 +254,7 @@ class RuntimeSupervisor:
             return [job.snapshot(now=now) for job in self._recent]
 
     def shutdown(self, *, cancel_futures: bool = True) -> None:
-        """Shut down both executors and mark queued/running jobs honestly."""
+        """Shut down all executors and mark queued/running jobs honestly."""
         with self._lock:
             active_jobs = list(self._active.values())
         for job in active_jobs:
@@ -251,6 +267,7 @@ class RuntimeSupervisor:
                         job.status = JobStatus.CANCEL_REQUESTED
         self._executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._build_executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._symbol_executor.shutdown(wait=False, cancel_futures=cancel_futures)
 
     def _create_job(
         self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE
