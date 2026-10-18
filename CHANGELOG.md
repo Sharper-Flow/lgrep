@@ -1,3 +1,8 @@
+## 2026-10-18 (v3.6.15)
+
+- fix(symbols): validate source ranges after refresh (#41)
+- docs: update changelog for v3.6.14
+
 ## 2026-10-16 (v3.6.14)
 
 - fix(server): evict idle semantic owners without restarting (#40)
