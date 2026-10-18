@@ -67,6 +67,52 @@ def _info() -> dict[str, int]:
     return info
 
 
+def test_lru_room_is_released_before_decode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = IndexStore(tmp_path / "symbols")
+    repos = [tmp_path / f"checkout-{name}" for name in "abc"]
+    for repo in repos:
+        store.save(_index(repo))
+    sizes = [store._index_path(str(repo)).stat().st_size for repo in repos]
+    assert sizes[0] == sizes[1] == sizes[2]
+    IndexStore._cache.clear()
+    monkeypatch.setattr(IndexStore, "CACHE_LIMIT_BYTES", sizes[0] * 2)
+    first = store.load(str(repos[0]))
+    second = store.load(str(repos[1]))
+    first_ref, second_ref = weakref.ref(first), weakref.ref(second)
+    del first, second
+    target = store._index_path(str(repos[2]))
+    read_text = Path.read_text
+    checked = []
+
+    def inspect_before_decode(path, *args, **kwargs):
+        if path == target:
+            assert first_ref() is None, "release LRU custody before constructing its replacement"
+            assert second_ref() is not None, "keep entries that still fit beside the new body"
+            checked.append(True)
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", inspect_before_decode)
+    loaded = store.load(str(repos[2]))
+    assert loaded is not None and checked == [True]
+    assert _info()["tracked_bytes"] == sizes[1] + sizes[2]
+
+
+def test_oversized_miss_preserves_other_cached_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    store = IndexStore(tmp_path / "symbols")
+    small, large = tmp_path / "small", tmp_path / "large"
+    store.save(_index(small))
+    store.save(_index(large, padding=10000))
+    IndexStore._cache.clear()
+    small_size = store._index_path(str(small)).stat().st_size
+    monkeypatch.setattr(IndexStore, "CACHE_LIMIT_BYTES", small_size)
+    retained = store.load(str(small))
+    assert store.load(str(large)) is not None
+    assert store.load(str(small)) is retained
+    assert _info()["tracked_bytes"] == small_size
+
+
 def test_prune_releases_cached_deleted_index(tmp_path: Path) -> None:
     store = IndexStore(storage_dir=tmp_path / "symbols")
     repo = tmp_path / "deleted-checkout"

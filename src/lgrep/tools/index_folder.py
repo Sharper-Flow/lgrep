@@ -16,6 +16,7 @@ import structlog
 from lgrep.exceptions import OperationCancelled
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.parser.languages import get_language_spec
+from lgrep.storage._occurrences import STORAGE_VERSION
 from lgrep.storage.index_store import CodeIndex, IndexStore, _version_tuple
 from lgrep.tools._meta import error_response
 
@@ -285,6 +286,7 @@ def _index_folder_with_snapshot(
             or files_deleted
             or existing_index.repo_path != resolved_root
             or existing_index.version != _INDEX_VERSION
+            or existing_index._storage_version != STORAGE_VERSION
             or existing_index.walk_truncated != walk_truncated
         ):
             store.save(index)
