@@ -42,6 +42,9 @@ log = structlog.get_logger()
 # (tools/prune_symbols.py) do not duplicate this default and drift.
 DEFAULT_SYMBOLS_DIR = Path.home() / ".cache" / "lgrep" / "symbols"
 
+# Allow coarse kernel timestamp lag or whole-second source mtime quantization.
+_NOOP_CHECK_MARGIN_NS = 2_000_000_000
+
 
 @dataclass
 class CodeIndex:
@@ -456,12 +459,35 @@ class IndexStore:
                 tmp.unlink(missing_ok=True)
             raise
 
+    def mark_checked(self, index: CodeIndex, checked_at_ns: int) -> None:
+        """Advance a no-op check without rewriting its body, under repo_lock.
+
+        Stamp two seconds before walk start for coarse kernel timestamp lag
+        or whole-second source mtime quantization, not a FAT timing guarantee.
+        Recent files may trigger another no-op refresh.
+        A concurrently removed index leaves the caller's snapshot usable and
+        is not recreated or retained in the global cache.
+        """
+        target = self._index_path(normalize_repo_key(index.repo_path))
+        generation = self._cache.generation()
+        checked_at_ns -= _NOOP_CHECK_MARGIN_NS
+        try:
+            os.utime(target, ns=(checked_at_ns, checked_at_ns))
+            stat = target.stat()
+        except FileNotFoundError:
+            self.release_cached_file(target)
+            log.warning("index_disappeared_during_noop_check", repo=index.repo_path)
+            return
+        self._cache.admit(
+            target, stat.st_mtime_ns, stat.st_size, index, self.CACHE_LIMIT_BYTES, generation
+        )
+
     def last_indexed_at(self, repo_path: str) -> float | None:
         """Return the persisted index file's mtime, or None when unindexed.
 
-        The mtime of the atomically-saved index file is the moment the last
-        index window completed, so freshness gates compare working-tree file
-        mtimes against it.
+        The index file's mtime records its last publication, or two seconds
+        before the start of its last no-op check. Freshness gates compare
+        source mtimes to it.
         """
         try:
             return self._index_path(normalize_repo_key(repo_path)).stat().st_mtime

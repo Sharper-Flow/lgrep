@@ -7,6 +7,7 @@ persists to IndexStore.
 from __future__ import annotations
 
 import hashlib
+import time
 from pathlib import Path
 
 import structlog
@@ -79,37 +80,44 @@ def index_folder(
         Dict with files_indexed, symbols_indexed, occurrences_indexed,
         files_skipped, and repo_path.
     """
+    result, _ = _index_folder_with_snapshot(repo_path, storage_dir, max_files, incremental)
+    return result
+
+
+def _index_folder_with_snapshot(
+    repo_path: str,
+    storage_dir: Path | str | None = None,
+    max_files: int = 500,
+    incremental: bool = True,
+) -> tuple[dict, CodeIndex | None]:
+    """Return the published snapshot with its counts, without reloading JSON."""
     # Input validation
     if not repo_path or not repo_path.strip():
-        return error_response("repo_path must not be empty")
+        return error_response("repo_path must not be empty"), None
 
     root = Path(repo_path)
 
     if not root.exists() or not root.is_dir():
-        return error_response(
-            f"Path does not exist or is not a directory: {repo_path}",
-        )
+        return error_response(f"Path does not exist or is not a directory: {repo_path}"), None
 
     store = IndexStore(storage_dir=storage_dir)
     resolved_root = str(root.resolve())
 
-    # Serialize the whole load -> walk -> merge -> save window per repo
-    # (AC10). Incremental indexing is a read-modify-write ACROSS the
-    # IndexStore API: load() above, a second load() inside detect_changes()
-    # below, then save(). Without this lock two concurrent runs interleave
+    # Serialize the whole load -> walk -> merge -> publish/check window per
+    # repo (AC10). Without this lock two concurrent runs interleave
     # A-load, B-load, A-save, B-save and the second save, computed from a
     # stale snapshot, silently discards the first run's symbols. The lock
-    # deliberately covers the (slow) walk as well: detect_changes() and
+    # deliberately covers the (slow) walk as well: deletion detection and
     # the merge consume the walk's output, so the snapshot must stay
     # coherent for the entire window. Per-key — unrelated repos never
     # serialize. index_repo is NOT locked: it performs no load() and
     # writes github: keys, a namespace disjoint from local paths.
     with store.repo_lock(resolved_root):
+        checked_at_ns = time.time_ns()
         # Load existing index for incremental comparison
         existing_index = store.load(resolved_root) if incremental else None
         existing_files = existing_index.files if existing_index else {}
         existing_symbols = dict(existing_index.symbols) if existing_index else {}
-        existing_occurrences = dict(existing_index.occurrences) if existing_index else {}
 
         # Safe refresh migration: old indexes without occurrence data must be
         # fully re-parsed before callers can trust occurrence results. This is
@@ -125,9 +133,9 @@ def index_folder(
         discovery = FileDiscovery(root)
         files_dict: dict[str, str] = dict(existing_files)  # start from existing
         symbols_dict: dict[str, dict] = dict(existing_symbols)
-        occurrences_dict: dict[str, list[dict]] = {
-            name: list(occs) for name, occs in (existing_occurrences or {}).items()
-        }
+        # Before appending, each changed file replaces the buckets below.
+        # An unchanged walk need not copy every occurrence list.
+        occurrences_dict = dict(existing_index.occurrences) if existing_index else {}
 
         # Track every code file we observed on disk in this walk so we can detect
         # deletions after the loop. Distinct from `files_dict` (the post-state)
@@ -219,8 +227,7 @@ def index_folder(
                     if not (root / path).exists()
                 }
             else:
-                changes = store.detect_changes(resolved_root, walked_files)
-                deleted_set = set(changes.get("deleted", []))
+                deleted_set = existing_files.keys() - walked_files.keys()
             if deleted_set:
                 for path in deleted_set:
                     files_dict.pop(path, None)
@@ -244,7 +251,18 @@ def index_folder(
             version=_INDEX_VERSION,
             walk_truncated=walk_truncated,
         )
-        store.save(index)
+        if (
+            existing_index is None
+            or files_processed
+            or files_deleted
+            or existing_index.repo_path != resolved_root
+            or existing_index.version != _INDEX_VERSION
+            or existing_index.walk_truncated != walk_truncated
+        ):
+            store.save(index)
+        else:
+            index = existing_index
+            store.mark_checked(index, checked_at_ns)
 
     occurrence_count = sum(len(occs) for occs in occurrences_dict.values())
     log.info(
@@ -267,4 +285,4 @@ def index_folder(
         "files_deleted": files_deleted,
         "symbols_indexed": len(symbols_dict),
         "occurrences_indexed": occurrence_count,
-    }
+    }, index
