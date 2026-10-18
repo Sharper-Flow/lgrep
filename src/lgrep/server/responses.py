@@ -14,7 +14,7 @@ Response convention:
 
 from __future__ import annotations
 
-from typing import Any, NotRequired
+from typing import Any, Literal, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -168,7 +168,7 @@ class WatchStopAllResult(TypedDict):
 
 
 class IndexSymbolsFolderResult(TypedDict):
-    """Response for index_symbols_folder."""
+    """Final local counters returned by get_symbol_index_job."""
 
     files_indexed: int
     files_skipped: int
@@ -176,17 +176,40 @@ class IndexSymbolsFolderResult(TypedDict):
     symbols_indexed: int
     occurrences_indexed: int
     repo_path: str
-    _meta: _Meta
+    walk_truncated: bool
+    truncation_reason: str | None
 
 
 class IndexSymbolsRepoResult(TypedDict):
-    """Response for index_symbols_repo."""
+    """Final remote counters returned by get_symbol_index_job."""
 
     files_indexed: int
     symbols_indexed: int
     repo: str
+    ref: str
     truncated: bool
     truncation_reason: str | None
+
+
+SymbolIndexJobState = Literal["queued", "running", "completed", "failed", "cancelled"]
+
+
+class SymbolIndexSubmissionResult(TypedDict):
+    """Acknowledgement only; final counters belong to status."""
+
+    job_id: str
+    state: SymbolIndexJobState
+    duplicate: bool
+    _meta: _Meta
+
+
+class SymbolIndexJobResult(TypedDict):
+    """Status in the current stdio daemon's bounded explicit-job history."""
+
+    job_id: str
+    state: SymbolIndexJobState
+    result: IndexSymbolsFolderResult | IndexSymbolsRepoResult | None
+    error: str | None
     _meta: _Meta
 
 

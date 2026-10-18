@@ -35,7 +35,7 @@ def _call_log_fields(kwargs: dict) -> dict:
     fields: dict = {"call_id": call_id_var.get()}
     path = kwargs.get("path")
     if path is not None:
-        fields["path"] = path
+        fields["path"] = redact_credentials(str(path))
     return fields
 
 
@@ -128,6 +128,7 @@ def time_tool(func):
 
 from lgrep.server import lifecycle as _lifecycle  # noqa: E402
 from lgrep.server.runtime import call_id_var  # noqa: E402
+from lgrep.tools.index_repo import redact_credentials  # noqa: E402
 
 _lifecycle.MAX_PROJECTS = MAX_PROJECTS
 _lifecycle.AUTO_INDEX_MAX_ATTEMPTS = AUTO_INDEX_MAX_ATTEMPTS
@@ -181,6 +182,7 @@ from lgrep.server.tools_symbols import (  # noqa: E402
     get_file_tree,
     get_repo_outline,
     get_symbol,
+    get_symbol_index_job,
     get_symbols,
     index_symbols_folder,
     index_symbols_repo,
@@ -270,6 +272,7 @@ __all__ = [
     "watch_stop_semantic",
     "index_symbols_folder",
     "index_symbols_repo",
+    "get_symbol_index_job",
     "list_repos",
     "get_file_tree",
     "get_file_outline",

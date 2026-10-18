@@ -109,8 +109,9 @@ The server registers these bare names, and every MCP client sees them as registe
 
 | Tool | Purpose |
 |---|---|
-| `index_symbols_folder(path, max_files=500, incremental=true)` | Index symbols in a local folder |
-| `index_symbols_repo(repo, ref="HEAD", max_files=500, github_token=None)` | Index symbols from a GitHub repo via API, no clone |
+| `index_symbols_folder(path, max_files=500, incremental=true)` | Submit a local symbol-index job (stdio only) |
+| `index_symbols_repo(repo, ref="HEAD", max_files=500, github_token=None)` | Submit a GitHub API symbol-index job (stdio only), no clone |
+| `get_symbol_index_job(job_id)` | Read job state and final counters/truncation in the current daemon |
 | `list_repos()` | List indexed symbol repos |
 | `get_file_tree(path, max_files=500)` | Repo file tree with ignore rules applied |
 | `get_file_outline(path, repo_root=None)` | Symbol outline for one file |
@@ -166,6 +167,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_AUTO_WARM_DISK` | `true` | Auto-load discoverable disk caches at startup when no warm paths are set; set `false` on large shared machines |
 | `LGREP_AUTO_WATCH` | `false` | Auto-start file watchers for warmed projects |
 | `LGREP_TOOL_TIMEOUT_S` | `45` | Per-tool server-side timeout (seconds) |
+| `LGREP_EXPLICIT_INDEX_BUDGET_S` | `150` | Cooperative budget for explicit symbol-index jobs, independent of the tool timeout; positive finite overrides only |
 | `LGREP_STALENESS_DEADLINE_S` | `4.0` | Bound on the per-search staleness check |
 | `LGREP_ENSURE_BUDGET_S` | `8.0` | Budget for a worktree search to make its trunk base index current; `0` always defers to the background |
 | `LGREP_INDEX_MAX_WALL_S` | `60.0` | Wall-clock budget per indexing window |
@@ -173,7 +175,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_GITHUB_TOKEN` | unset | Token for `index_symbols_repo` when the call passes none |
 | `GITHUB_TOKEN` | unset | Fallback when `LGREP_GITHUB_TOKEN` is unset; an explicit argument wins over both |
 | `LGREP_WORKER_MAX_THREADS` | `4` | Query-lane worker threads for supervised blocking jobs |
-| `LGREP_BUILD_MAX_THREADS` | `1` | Build-lane threads: index windows, re-indexes, prune sweeps, remote indexing |
+| `LGREP_BUILD_MAX_THREADS` | `1` | Shared build-lane threads: semantic index windows, re-indexes, prune sweeps; explicit symbol jobs have a separate one-worker lane |
 | `LGREP_PRUNE_MIN_AGE_S` | `3600` | Grace window (seconds) before pruning; `0` disables grace |
 | `LGREP_WORKTREE_DEDUP` | unset | Any non-empty value makes git worktrees of one repo share one semantic cache |
 | `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lets MCP prune/invalidate tools delete; keep unset on any shared server |
@@ -181,6 +183,13 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 ## Transport and security
 
 `lgrep` supports `stdio` and `streamable-http`. Use stdio for the local single-session default; use the shared HTTP transport only when you intentionally want one shared local daemon.
+
+Explicit symbol-index jobs require stdio. Both submissions return a `job_id`, not
+final counters; read `get_symbol_index_job` before using their results. `max_files`
+is a file cap; the separate default 150-second cooperative job budget can also
+stop a run. Status reports `truncation_reason="max_files"`, `"deadline"`, or null;
+a truncated completion is not full repository coverage. See
+[job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
 
 - The HTTP server binds `127.0.0.1` by default; there is no built-in authentication layer.
 - lgrep sets no CORS headers, and browser-based clients should not connect directly to the streamable-HTTP endpoint.

@@ -10,22 +10,18 @@ import hashlib
 import os
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
+from lgrep.exceptions import OperationCancelled
 from lgrep.storage.index_store import CodeIndex, IndexStore
 from lgrep.tools._meta import error_response
 
-log = structlog.get_logger()
+if TYPE_CHECKING:
+    import threading
 
-# The fetch loop must finish strictly inside the tool wrapper's
-# asyncio.wait_for(TOOL_TIMEOUT_S) and inside the MCP proxy's provider
-# deadline, which starts earlier. Both clocks are lost races for an
-# unbounded loop: the wrapper's structured timeout error never reaches the
-# caller because the proxy tears the stdio session down first, and a stdio
-# server exits on stdin EOF. The budget keeps a margin below both.
-_DEADLINE_FRACTION = 0.8
-_DEADLINE_FLOOR_S = 5.0
+log = structlog.get_logger()
 
 # File contents are fetched in concurrent waves of this size. The wave
 # boundary is where the budget check counts unattempted files, so the
@@ -33,10 +29,26 @@ _DEADLINE_FLOOR_S = 5.0
 _FETCH_CONCURRENCY = 8
 
 
-def _deadline_budget_s() -> float:
-    """Total-operation budget as a fraction of the configured tool timeout."""
-    timeout_s = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
-    return max(_DEADLINE_FLOOR_S, _DEADLINE_FRACTION * timeout_s)
+def credential_values(extra: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Snapshot known credentials before admission or remote requests."""
+    return tuple(
+        sorted(
+            {
+                value
+                for value in (*extra, os.getenv("LGREP_GITHUB_TOKEN"), os.getenv("GITHUB_TOKEN"))
+                if value
+            },
+            key=len,
+            reverse=True,
+        )
+    )
+
+
+def redact_credentials(value: str, credentials: tuple[str, ...] = ()) -> str:
+    """Redact before truncation so a boundary cannot expose part of a token."""
+    for credential in credential_values(credentials):
+        value = value.replace(credential, "[redacted]")
+    return value
 
 
 def _resolve_github_token(github_token: str | None) -> str | None:
@@ -46,8 +58,8 @@ def _resolve_github_token(github_token: str | None) -> str | None:
     host) is the binding constraint for large indexes, so a deployment-level
     token lifts the ceiling without any per-call plumbing.
     """
-    if github_token:
-        return github_token
+    if github_token is not None:
+        return github_token or None
     return os.environ.get("LGREP_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN") or None
 
 
@@ -68,6 +80,9 @@ async def index_repo(
     max_files: int = 500,
     github_token: str | None = None,
     run_sync=None,
+    *,
+    deadline: float | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """Index symbols from a GitHub repository via the REST API.
 
@@ -81,7 +96,21 @@ async def index_repo(
     Returns:
         Dict with files_indexed, symbols_indexed, and repo
     """
-    t0 = time.monotonic()
+    credentials = credential_values((github_token,) if github_token else ())
+
+    def check_stop():
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("Symbol indexing stopped during shutdown")
+
+    def remaining_timeout():
+        return 30.0 if deadline is None else min(30.0, max(0.001, deadline - time.monotonic()))
+
+    def expired():
+        return deadline is not None and time.monotonic() >= deadline
+
+    check_stop()
+    if any(redact_credentials(value, credentials) != value for value in (repo, ref)):
+        return error_response("Index targets must not contain credentials.")
     if "/" not in repo or repo.count("/") != 1:
         message = f"Invalid repo format. Expected 'owner/name', got: {repo!r}"
         if _looks_like_local_path(repo):
@@ -89,7 +118,7 @@ async def index_repo(
                 " This looks like a local path;"
                 " for a local repository use lgrep_index_symbols_folder."
             )
-        return error_response(message)
+        return error_response(redact_credentials(message, credentials))
 
     try:
         import httpx
@@ -125,27 +154,36 @@ async def index_repo(
     truncated = False
     truncation_reason: str | None = None
 
-    budget_s = _deadline_budget_s()
-    deadline = t0 + budget_s
-
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         # Get the file tree from GitHub
         tree_url = f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1"
-        try:
-            resp = await client.get(tree_url, timeout=min(30.0, budget_s))
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            return error_response(
-                f"GitHub API error: {e.response.status_code} for {repo}",
-            )
-        except httpx.RequestError as e:
-            return error_response(
-                f"Network error fetching {repo}: {e}",
-            )
-
-        tree_data = resp.json()
+        if expired():
+            truncated = True
+            truncation_reason = "deadline"
+            tree_data = {}
+        else:
+            try:
+                resp = await client.get(tree_url, timeout=remaining_timeout())
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return error_response(
+                    redact_credentials(
+                        f"GitHub API error: {e.response.status_code} for {repo}", credentials
+                    )
+                )
+            except httpx.RequestError as e:
+                if not expired():
+                    return error_response(
+                        redact_credentials(f"Network error fetching {repo}: {e}", credentials)
+                    )
+                truncated = True
+                truncation_reason = "deadline"
+                tree_data = {}
+            else:
+                tree_data = resp.json()
+        check_stop()
         if tree_data.get("truncated"):
-            log.warning("github_tree_truncated", repo=repo)
+            log.warning("github_tree_truncated", repo=redact_credentials(repo, credentials))
 
         blob_items = [item for item in tree_data.get("tree", []) if item.get("type") == "blob"]
 
@@ -179,20 +217,19 @@ async def index_repo(
         for wave_start in range(0, len(eligible), _FETCH_CONCURRENCY):
             wave = eligible[wave_start : wave_start + _FETCH_CONCURRENCY]
 
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            check_stop()
+            if expired():
                 truncated = True
                 truncation_reason = "deadline"
                 log.info(
                     "index_repo_deadline_reached",
-                    repo=repo,
-                    budget_s=round(budget_s, 2),
+                    repo=redact_credentials(repo, credentials),
                     files_fetched=len(fetched),
                     files_unattempted=len(eligible) - wave_start,
                 )
                 break
 
-            wave_timeout = min(30.0, remaining)
+            wave_timeout = remaining_timeout()
             results = await asyncio.gather(
                 *(_fetch(file_path, wave_timeout) for file_path, _spec in wave),
                 return_exceptions=True,
@@ -200,26 +237,37 @@ async def index_repo(
 
             for (file_path, spec), result in zip(wave, results, strict=True):
                 if isinstance(result, BaseException):
+                    if isinstance(result, httpx.TimeoutException) and expired():
+                        truncated = True
+                        truncation_reason = "deadline"
                     if isinstance(result, (httpx.HTTPStatusError, httpx.RequestError)):
-                        log.warning("github_file_fetch_failed", file=file_path, error=str(result))
+                        log.warning(
+                            "github_file_fetch_failed",
+                            file=redact_credentials(file_path, credentials),
+                            error=redact_credentials(str(result), credentials)[:500],
+                        )
                     else:
                         log.warning(
-                            "github_file_fetch_unexpected", file=file_path, error=str(result)
+                            "github_file_fetch_unexpected",
+                            file=redact_credentials(file_path, credentials),
+                            error=redact_credentials(str(result), credentials)[:500],
                         )
                     continue
 
                 _file_path, content = result
                 fetched.append((file_path, spec, content))
 
-    # Parsing and persistence are synchronous tree-sitter and disk work;
-    # they run through the caller's runner so a supervised server puts
-    # them on the build lane and a bare coroutine still leaves the loop.
-    files_processed = len(fetched)
-
     def _parse_and_persist():
+        nonlocal truncated, truncation_reason
+        files_processed = 0
         files_dict: dict[str, str] = {}
         symbols_dict: dict[str, dict] = {}
         for file_path, spec, content in fetched:
+            check_stop()
+            if expired():
+                truncated = True
+                truncation_reason = "deadline"
+                break
             file_hash = hashlib.sha256(content).hexdigest()
             files_dict[file_path] = file_hash
             try:
@@ -243,23 +291,29 @@ async def index_repo(
                         "parent": sym.parent,
                     }
             except Exception as e:
-                log.warning("github_parse_failed", file=file_path, error=str(e))
+                log.warning(
+                    "github_parse_failed",
+                    file=redact_credentials(file_path, credentials),
+                    error=redact_credentials(str(e), credentials)[:500],
+                )
+            files_processed += 1
 
         index = CodeIndex(
             repo_path=repo_key,
             files=files_dict,
             symbols=symbols_dict,
         )
+        check_stop()
         store.save(index)
-        return symbols_dict
+        return files_processed, len(symbols_dict)
 
-    symbols_dict = await run_sync(_parse_and_persist)
+    files_processed, symbols_count = await run_sync(_parse_and_persist)
 
     return {
-        "repo": repo,
-        "ref": ref,
+        "repo": redact_credentials(repo, credentials),
+        "ref": redact_credentials(ref, credentials),
         "files_indexed": files_processed,
-        "symbols_indexed": len(symbols_dict),
+        "symbols_indexed": symbols_count,
         "truncated": truncated,
         "truncation_reason": truncation_reason,
     }

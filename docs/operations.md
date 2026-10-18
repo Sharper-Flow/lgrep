@@ -294,6 +294,57 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   searches still acquire their snapshot synchronously. No automatic retry is
   performed; check diagnostics and query after the job finishes.
 
+## Explicit symbol-index jobs
+
+`index_symbols_folder` and `index_symbols_repo` acknowledge background jobs with
+`job_id`, `state`, `duplicate`, and `_meta`, not final indexing counters. Read
+`get_symbol_index_job(job_id)` for `queued`, `running`, `completed`, `failed`, or
+`cancelled` (shutdown only). Completed status contains `result` with final counters,
+target metadata, and truncation; failed status contains a bounded `error`.
+
+Only a recorded `stdio` startup transport admits these three tools. HTTP has no
+process-lifetime job context; HTTP, missing context, and unknown transport return
+`symbol_index_jobs_unavailable`, retryable=false, without a job ID or work. This
+does not change HTTP lifespan behavior or the query-triggered symbol refresh lane.
+
+Each daemon admits one nonterminal explicit job on a dedicated one-worker lane,
+independent of query, symbol-refresh, and shared semantic-build workers. An identical
+nonterminal submission returns its ID with `duplicate=true`. A different request
+returns `symbol_index_busy`, retryable=true, and queues no additional job. Local
+writers still share the per-repository storage lock; query-triggered refreshes
+have no new busy policy. Disconnecting the submitting client does not stop a job.
+
+`max_files` is the file cap (changed/new parses for incremental folder jobs).
+`LGREP_EXPLICIT_INDEX_BUDGET_S` separately defaults to 150 seconds, independent of
+`LGREP_TOOL_TIMEOUT_S`. It is read once per supervisor. Unset or empty selects 150
+silently. Non-numeric, zero, negative, NaN, or infinite values select 150 and warn
+once per supervisor without logging the supplied value. Overrides must be positive
+and finite. One admission-time deadline covers resolution, lock wait, load,
+discovery, fetch, parse, and publication; no stage receives a fresh budget.
+
+Deadline stops publish a partial result with `truncation_reason="deadline"` and
+`walk_truncated=true` (folder) or `truncated=true` (remote). A file-cap stop reports
+`"max_files"`; an unstopped run reports null. Folder runs preserve out-of-window
+entries under the existing incremental deletion rules. Remote partial publications
+still replace the older remote baseline; they do not preserve a last-good index.
+A truncated completion is not full repository coverage. For incremental local
+work, resubmit to advance another window and inspect status again.
+
+Stopping is cooperative: lock waits, one file, blocking I/O, and an already-started
+save can overrun the budget. Shutdown closes admission and signals the stop event.
+A queued cancelled job never enters its helper. Running jobs retain ownership
+until their worker stops. A stop observed before publication starts no save; an
+already-started save finishes or fails normally. There is no preemption, rollback,
+public cancellation tool, or hard shutdown-duration guarantee.
+
+Status retains the latest 100 terminal explicit jobs independently of query-job
+diagnostics. Later explicit completions evict old records. Random per-supervisor
+ID generations prevent an old ID from naming a new job. Unknown, evicted,
+wrong-kind, and earlier-daemon IDs return `unknown_symbol_index_job`,
+retryable=false, and create no work. Jobs and history do not survive restart;
+an unknown ID does not prove the old job completed. Inspect the index and resubmit
+as needed. Credentials and private request fingerprints are never status fields.
+
 ## Shared-daemon tuning (Vision / OpenCode)
 
 For agent-heavy local setups that route lgrep through a Vision-managed MCP

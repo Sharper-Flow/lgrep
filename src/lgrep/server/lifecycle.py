@@ -115,7 +115,8 @@ class LgrepContext:
     ``"streamable-http"``, ``"sse"``, ...) when the server is started via
     ``run_server``. It is stored on the application context from an internal
     bootstrap attribute rather than from an environment variable, and is used
-    only for diagnostics. ``None`` means "unknown".
+    for diagnostics and explicit-job admission. Only ``stdio`` has the required
+    process lifetime; ``None`` means "unknown" and refuses explicit jobs.
     """
 
     projects: dict[str, ProjectState] = field(default_factory=dict)
@@ -277,6 +278,7 @@ async def _shutdown(ctx: LgrepContext) -> None:
     log.info("lgrep_shutdown", project_count=len(ctx.projects))
     async with ctx._lock:
         ctx._closed = True
+        ctx.runtime.stop_symbol_indexes()
 
     # Cancel outstanding background reindexes and in-flight checkout and
     # owner-store assemblies; await terminal state so cooperative

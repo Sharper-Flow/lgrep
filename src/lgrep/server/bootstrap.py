@@ -13,9 +13,8 @@ from logging.handlers import RotatingFileHandler
 import structlog
 
 # Transport kind recorded by ``run_server`` and read lazily by the lifespan.
-# Kept as a module attribute rather than an environment variable so diagnostics
-# can report the actual startup transport without creating a side channel that
-# other code could mistake for configuration.
+# This actual startup value drives diagnostics and explicit-job admission.
+# It is not environment configuration: only stdio has a process-lifetime context.
 _startup_transport: str | None = None
 
 
@@ -187,7 +186,7 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
 
-    # Preserve the startup transport for diagnostics without exposing it as an
+    # Preserve the transport for diagnostics and job admission without exposing it as an
     # environment variable that other code could read or mutate.
     _startup_transport = transport
 
