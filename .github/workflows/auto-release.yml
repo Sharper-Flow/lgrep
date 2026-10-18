@@ -84,7 +84,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # Tag the exact source SHA before building so Hatch VCS derives the
-          # artifact version from the release tag, not from a CHANGELOG push-back.
+          # artifact version from the release tag.
           git tag -a "$NEW_TAG" -m "Release ${NEW_TAG}"
 
       - name: Build package
@@ -97,8 +97,7 @@ jobs:
         if: steps.bump.outputs.skip != 'true'
         run: |
           NEW_TAG="${{ steps.bump.outputs.new_tag }}"
-          # Push only the tag; the source SHA is already on main and must not be
-          # altered by a CHANGELOG commit after the tag is created.
+          # Push only the tag; the source SHA is already on main.
           git push origin "$NEW_TAG"
 
       - name: Create Release
@@ -123,33 +122,3 @@ jobs:
       - name: Skip summary
         if: steps.bump.outputs.skip == 'true'
         run: echo "## No Release Needed" >> "$GITHUB_STEP_SUMMARY"
-
-      # The release tag, assets, and GitHub Release are complete before this
-      # best-effort documentation update. Switching to main prevents this commit
-      # from altering the tagged source from the detached SHA checkout.
-      - name: Update CHANGELOG
-        if: steps.bump.outputs.skip != 'true'
-        continue-on-error: true
-        run: |
-          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
-          NEW_TAG="${{ steps.bump.outputs.new_tag }}"
-          git fetch origin main
-          git switch --create changelog-update --track origin/main
-
-          TODAY=$(date +%Y-%m-%d)
-          {
-            printf '## %s (%s)\n\n' "$TODAY" "$NEW_TAG"
-            git log "${LAST_TAG}..${NEW_TAG}" --pretty=format:'- %s'
-            printf '\n\n'
-            [ ! -f CHANGELOG.md ] || cat CHANGELOG.md
-          } > CHANGELOG.md.tmp
-          mv CHANGELOG.md.tmp CHANGELOG.md
-
-          git add CHANGELOG.md
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: update changelog for ${NEW_TAG}"
-          git push origin HEAD:main
