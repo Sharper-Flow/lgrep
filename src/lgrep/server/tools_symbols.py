@@ -71,7 +71,7 @@ async def _symbol_index_snapshot(
         if task is None:
             task = asyncio.create_task(
                 app_ctx.runtime.run_blocking(
-                    "symbol_index", "search_symbols", path, load_symbol_index, path
+                    "symbol_index", "search_symbols", path, load_symbol_index, path, lane="symbol"
                 ),
                 name=f"symbol_index:{path}",
             )

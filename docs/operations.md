@@ -280,15 +280,17 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   checkout identity. Refreshes that publish a changed body retain their
   publication-time stamp.
 - MCP symbol searches share one supervised index check/refresh per repository.
-  It uses the query lane, independent of semantic builds, and appears as a
-  `symbol_index` job in `lgrep_diagnostics`. A query waits at most five seconds, or half
+  It uses a separate `symbol` lane with two workers, independent of query and
+  semantic-build workers, and appears as a `symbol_index` job in
+  `lgrep_diagnostics`. A query waits at most five seconds, or half
   `LGREP_TOOL_TIMEOUT_S` if smaller, for that snapshot. If the check, queued
   job, bootstrap, or refresh takes longer, the query returns
   `code="indexing_in_progress"`, `retryable=true`, and no symbol results.
   The job continues; another query joins it rather than starting another
   writer. Query cancellation does not cancel that shared job. Completed
-  snapshots are not retained as another cache. A full query lane can also
-  produce this response for an unchanged repository. Python/CLI symbol
+  snapshots are not retained as another cache. A full symbol lane can also
+  produce this response for an unchanged repository, without taking workers
+  from text/semantic queries or semantic builds. Python/CLI symbol
   searches still acquire their snapshot synchronously. No automatic retry is
   performed; check diagnostics and query after the job finishes.
 

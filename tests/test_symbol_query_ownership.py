@@ -112,7 +112,7 @@ async def test_two_queries_return_pending_while_one_observable_refresh_finishes(
         jobs = diagnostics["active_jobs"]
         assert len(jobs) == 1
         assert jobs[0]["kind"] == "symbol_index"
-        assert jobs[0]["lane"] == "query"
+        assert jobs[0]["lane"] == "symbol"
         assert jobs[0]["project"] == str(state.root)
         old_id = "m35.ts:function:before_35"
         assert old_id in IndexStore().load(str(state.root)).symbols
@@ -198,16 +198,16 @@ async def test_queued_acquisition_is_bounded_and_shutdown_cancels_it(slow_refres
     from mcp.server.fastmcp.exceptions import ToolError
 
     state = slow_refresh
-    app = LgrepContext(runtime=RuntimeSupervisor(max_workers=1))
+    app = LgrepContext(runtime=RuntimeSupervisor(max_workers=1, max_symbol_workers=1))
     occupied = threading.Event()
-    release_query = threading.Event()
+    release_symbol = threading.Event()
 
-    def hold_query():
+    def hold_symbol():
         occupied.set()
-        assert release_query.wait(30)
+        assert release_symbol.wait(30)
 
     worker = asyncio.create_task(
-        app.runtime.run_blocking("fixture_query", "fixture", None, hold_query)
+        app.runtime.run_blocking("fixture_symbol", "fixture", None, hold_symbol, lane="symbol")
     )
     try:
         assert await asyncio.to_thread(occupied.wait, 2)
@@ -234,7 +234,7 @@ async def test_queued_acquisition_is_bounded_and_shutdown_cancels_it(slow_refres
         with pytest.raises(ToolError, match="shutting down"):
             await search(app, state.root, "after_35")
     finally:
-        release_query.set()
+        release_symbol.set()
         state.release.set()
         await worker
         await _shutdown(app)
@@ -245,7 +245,7 @@ async def test_fresh_symbols_are_available_while_semantic_build_lane_is_busy(slo
     state = slow_refresh
     state.release.set()
     index_folder(str(state.root))
-    app = LgrepContext()
+    app = LgrepContext(runtime=RuntimeSupervisor(max_build_workers=1))
     occupied = threading.Event()
     release_build = threading.Event()
 
@@ -308,5 +308,55 @@ async def test_concurrent_queries_match_their_own_request_after_shared_refresh(s
         assert state.calls == 1
     finally:
         await drain(state)
+        await asyncio.gather(*callers, return_exceptions=True)
+        await _shutdown(app)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query_workers", [1, 2])
+async def test_slow_symbol_acquisitions_do_not_starve_other_query_tools(
+    slow_refresh, monkeypatch, query_workers
+):
+    state = slow_refresh
+    app = LgrepContext(runtime=RuntimeSupervisor(max_workers=query_workers, max_build_workers=1))
+    roots = [state.root.parent / f"repository_{n}" for n in range(query_workers)]
+    for root in roots:
+        root.mkdir()
+    entered = {str(root): threading.Event() for root in roots}
+    release = threading.Event()
+
+    def hold_acquisition(path):
+        entered[path].set()
+        assert release.wait(30)
+        return None, False
+
+    monkeypatch.setattr(tools_symbols, "load_symbol_index", hold_acquisition)
+    callers = [asyncio.create_task(search(app, root, "anything")) for root in roots]
+    try:
+        for started in entered.values():
+            assert await asyncio.to_thread(started.wait, 2)
+        text = await mcp._tool_manager.call_tool(
+            "search_text", {"query": "after_35", "path": str(state.root)}, context=context(app)
+        )
+        assert text["error"] == "", text
+        assert any("after_35" in hit["line"] for hit in text["results"])
+        assert not release.is_set()
+        assert (
+            await asyncio.wait_for(
+                app.runtime.run_blocking("search_vector", "fixture", None, lambda: "query"), 2
+            )
+            == "query"
+        )
+        assert (
+            await asyncio.wait_for(
+                app.runtime.run_blocking(
+                    "index_window", "fixture", None, lambda: "build", lane="build"
+                ),
+                2,
+            )
+            == "build"
+        )
+    finally:
+        release.set()
         await asyncio.gather(*callers, return_exceptions=True)
         await _shutdown(app)
