@@ -677,7 +677,7 @@ class IndexStore:
         self,
         file_path: Path | str,
         start_byte: int,
-        end_byte: int,
+        end_byte: int | None,
     ) -> bytes | None:
         """Retrieve the source bytes for a symbol by byte offset.
 
@@ -687,7 +687,7 @@ class IndexStore:
         Args:
             file_path: Path to the source file
             start_byte: Start byte offset of the symbol
-            end_byte: End byte offset of the symbol
+            end_byte: End byte offset, or None for the complete remaining snapshot
 
         Returns:
             Source bytes for the symbol, or None if the file cannot be read

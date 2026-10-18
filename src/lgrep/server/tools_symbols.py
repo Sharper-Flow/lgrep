@@ -76,7 +76,8 @@ async def index_symbols_folder(
 
     Args:
         path: Absolute path to the repository/folder root
-        max_files: Maximum number of files to index (default: 500)
+        max_files: Maximum changed/new files to parse (default: 500).
+                   Unchanged files are checked but do not consume this budget.
         incremental: Skip files whose content hash matches the stored index
                      (default: True). Set to False to force a full re-index.
 
