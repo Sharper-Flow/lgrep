@@ -266,6 +266,19 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   against one parsed file snapshot. A mismatched range returns an error
   instead of another symbol's body; re-index before retrying. Batch retrieval
   shares one snapshot per file and reports mismatches per symbol.
+- Symbol search holds its checked index for that query rather than reloading
+  it after each step. An unchanged search loads the body once; a refresh loads
+  again under the writer lock and returns its resulting snapshot directly.
+  This also applies to indexes too large for the global retention budget.
+  An unchanged-content refresh advances only the index file's check timestamp,
+  without rewriting symbols or occurrences. It stamps two seconds before walk
+  start. This covers coarse kernel timestamp lag or whole-second quantization,
+  not FAT's two-second filesystem granularity combined with clock lag. lgrep
+  makes no FAT timing guarantee. Recent files may cause another no-op refresh
+  within that margin. A concurrently removed index does not prevent serving
+  the already-loaded snapshot. New worktree seeds still publish their own
+  checkout identity. Refreshes that publish a changed body retain their
+  publication-time stamp.
 
 ## Shared-daemon tuning (Vision / OpenCode)
 

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from lgrep.storage.index_store import IndexStore, normalize_repo_key
-from lgrep.tools._index_freshness import refresh_stale_index
+from lgrep.storage.index_store import IndexStore
+from lgrep.tools._index_freshness import load_fresh_index
 from lgrep.tools._meta import error_response
 
 if TYPE_CHECKING:
@@ -43,25 +43,16 @@ def search_symbols(
     if limit < 0:
         limit = 1
 
-    store = IndexStore(storage_dir=storage_dir)
-
-    repo_key = normalize_repo_key(repo_path)
+    index, refreshed = load_fresh_index(repo_path, storage_dir=storage_dir)
     # First use of an unindexed local git checkout builds that checkout's
     # own index (seeded from an indexed sibling worktree when one exists)
     # instead of refusing.
     bootstrapped = False
-    if store.load(repo_key) is None:
+    if index is None:
         from lgrep.tools._index_bootstrap import ensure_symbol_index
 
         bootstrapped = ensure_symbol_index(repo_path, storage_dir=storage_dir)
-    # Serve no answer from an index known to be behind the working tree:
-    # refresh first when the gate fires, then load the post-refresh index.
-    # The bootstrap call saved this index moments ago, so the gate cannot
-    # learn anything new; on repos past max_files its file-set branch
-    # always fires and the refetch would re-save the whole body for no
-    # change. Skip the gate on the bootstrap call only.
-    refresh = None if bootstrapped else refresh_stale_index(repo_path, storage_dir=storage_dir)
-    index = store.load(repo_key)
+        index = IndexStore(storage_dir=storage_dir).load(repo_path)
     if index is None:
         return error_response(
             f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
@@ -83,5 +74,5 @@ def search_symbols(
     return {
         "results": results,
         "total_matches": len(results),
-        "index_refreshed": refresh is not None or bootstrapped,
+        "index_refreshed": refreshed or bootstrapped,
     }

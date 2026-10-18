@@ -1220,6 +1220,7 @@ class TestIndexFolderRmwGuard:
 
         real_load = IndexStore.load
         real_save = IndexStore.save
+        real_mark_checked = IndexStore.mark_checked
 
         def logged_load(self, repo_path):
             result = real_load(self, repo_path)
@@ -1231,8 +1232,13 @@ class TestIndexFolderRmwGuard:
             events.append((threading.current_thread().name, "save", time.monotonic()))
             return real_save(self, index)
 
+        def logged_mark_checked(self, index, checked_at_ns):
+            events.append((threading.current_thread().name, "checked", time.monotonic()))
+            return real_mark_checked(self, index, checked_at_ns)
+
         monkeypatch.setattr(IndexStore, "load", logged_load)
         monkeypatch.setattr(IndexStore, "save", logged_save)
+        monkeypatch.setattr(IndexStore, "mark_checked", logged_mark_checked)
 
         storage = tmp_path / "store"
         results: list[dict] = []
@@ -1254,10 +1260,13 @@ class TestIndexFolderRmwGuard:
         t_b.join(timeout=120)
 
         assert not errors, f"index_folder raised: {errors}"
+        assert len(results) == 2
+        assert sum(op == "save" for _, op, _ in events) == 1
+        assert sum(op == "checked" for _, op, _ in events) == 1
 
         def window(name: str) -> tuple[float, float]:
             loads = [t for n, op, t in events if n == name and op == "load"]
-            saves = [t for n, op, t in events if n == name and op == "save"]
+            saves = [t for n, op, t in events if n == name and op in ("save", "checked")]
             assert loads and saves, f"no window recorded for {name}: {events}"
             return min(loads), max(saves)
 
