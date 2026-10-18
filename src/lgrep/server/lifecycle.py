@@ -138,8 +138,8 @@ class LgrepContext:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _indexing_events: dict[str, asyncio.Event] = field(default_factory=dict)
     _bg_reindex_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
-    # Shared symbol snapshot acquisitions, retained until their physical work
-    # finishes even when an individual query stops waiting.
+    # Shared symbol acquisitions survive individual query cancellation;
+    # shutdown owns their cancellation.
     _symbol_index_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     # Release tasks of cancelled index leaders: each holds the project's
     # single-flight event until the leader's physical window has stopped.
@@ -309,7 +309,6 @@ async def _shutdown(ctx: LgrepContext) -> None:
             t.cancel()
         await asyncio.gather(*still_running, return_exceptions=True)
     ctx._bg_reindex_tasks.clear()
-    ctx._symbol_index_tasks.clear()
     ctx._store_assemblies.clear()
     ctx._checkout_assemblies.clear()
     ctx._index_owner_releases.clear()

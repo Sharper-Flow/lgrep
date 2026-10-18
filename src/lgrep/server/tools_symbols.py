@@ -71,7 +71,7 @@ async def _symbol_index_snapshot(
         if task is None:
             task = asyncio.create_task(
                 app_ctx.runtime.run_blocking(
-                    "symbol_index", "search_symbols", path, load_symbol_index, path, lane="build"
+                    "symbol_index", "search_symbols", path, load_symbol_index, path
                 ),
                 name=f"symbol_index:{path}",
             )
@@ -79,6 +79,8 @@ async def _symbol_index_snapshot(
             task.add_done_callback(partial(_symbol_index_done, app_ctx, path))
     # Waiting/cancelling a query never cancels the registered physical writer.
     done, _ = await asyncio.wait((task,), timeout=min(5.0, TOOL_TIMEOUT_S / 2))
+    if app_ctx._closed:
+        raise RuntimeError("lgrep context is shutting down")
     return task.result() if done else None
 
 
