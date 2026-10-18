@@ -1,3 +1,8 @@
+## 2026-10-18 (v3.6.18)
+
+- fix(symbols): supervise bounded explicit indexing jobs (#44)
+- docs: update changelog for v3.6.17
+
 ## 2026-10-18 (v3.6.17)
 
 - fix(symbols): supervise shared refreshes outside query waits (#43)
