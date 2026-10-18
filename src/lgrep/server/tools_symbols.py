@@ -140,7 +140,7 @@ def _submit_explicit(app, caller, target, identity, work, t0, credentials=()):
 
 
 _EXPLICIT_BUDGET_DESCRIPTION = (
-    "File cap. Jobs also have a default 150-second cooperative budget, configurable with "
+    "max_files is the file cap. Jobs also have a default 150-second cooperative budget, configurable with "
     "LGREP_EXPLICIT_INDEX_BUDGET_S. Deadline stops appear in get_symbol_index_job status as "
     "truncation_reason='deadline'; capped results are not full repository coverage."
 )
@@ -248,7 +248,7 @@ async def index_symbols_repo(
         return error_response(message)
     if not ref.strip() or "\x00" in repo + ref or max_files < 1:
         return error_response("ref must be nonempty and max_files must be positive.")
-    token = resolve_github_token(github_token)
+    token = resolve_github_token(github_token or None)
     credentials = credential_values((token,) if token else ())
     if any(redact_credentials(value, credentials) != value for value in (repo, ref)):
         return error_response("Index targets must not contain credentials.")

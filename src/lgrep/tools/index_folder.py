@@ -239,10 +239,6 @@ def _index_folder_with_snapshot(
 
             files_processed += 1
 
-        check_stop()
-        if deadline is not None and time.monotonic() >= deadline:
-            walk_truncated = True
-            truncation_reason = "deadline"
         # Detect files that disappeared from disk since the last index and prune
         # them. On a complete walk the set difference against the previous index
         # is exact. A truncated walk must not use that difference — unscanned

@@ -109,6 +109,110 @@ def test_folder_shutdown_before_save_does_not_publish(tmp_path, monkeypatch):
     assert not saved
 
 
+@pytest.mark.parametrize("capped", [False, True])
+def test_folder_deadline_after_finished_work_does_not_replace_stop_reason(
+    tmp_path, monkeypatch, capped
+):
+    from lgrep.discovery import FileDiscovery
+
+    root, store = tmp_path / "repo", tmp_path / "symbols"
+    root.mkdir()
+    paths = [root / "a.py", root / "b.py"] if capped else [root / "a.py"]
+    for path in paths:
+        path.write_text(f"def {path.stem}(): pass\n")
+    clock = [0.0]
+    monkeypatch.setattr(
+        folder, "time", SimpleNamespace(monotonic=lambda: clock[0], time_ns=time.time_ns)
+    )
+    monkeypatch.setattr(FileDiscovery, "find_files", lambda self: iter(paths))
+    extract = type(folder._extractor).extract_full
+    read_bytes = type(root).read_bytes
+
+    def parse(*args, **kwargs):
+        result = extract(*args, **kwargs)
+        if not capped:
+            clock[0] = 2.0
+        return result
+
+    def read(self):
+        result = read_bytes(self)
+        if self == paths[-1] and capped:
+            clock[0] = 2.0
+        return result
+
+    monkeypatch.setattr(type(folder._extractor), "extract_full", parse)
+    monkeypatch.setattr(type(root), "read_bytes", read)
+    result = folder.index_folder(str(root), storage_dir=store, max_files=1, deadline=1.0)
+    assert result["files_indexed"] == 1
+    assert result["walk_truncated"] is capped
+    assert result["truncation_reason"] == ("max_files" if capped else None)
+    assert IndexStore(store).load(str(root)).walk_truncated is capped
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capped", [False, True])
+async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
+    tmp_path, monkeypatch, capped
+):
+    import tree_sitter_language_pack
+
+    clock = [0.0]
+    monkeypatch.setattr(remote, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    real_client = httpx.AsyncClient
+
+    def response(request):
+        if "git/trees" in request.url.path:
+            paths = ["a.py", "b.py"] if capped else ["a.py"]
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": path} for path in paths]}
+            )
+        return httpx.Response(200, content=b"def first(): pass\n")
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real_client(**kw, transport=httpx.MockTransport(response)),
+    )
+    parser = tree_sitter_language_pack.get_parser("python")
+
+    def parse(content):
+        result = parser.parse(content)
+        clock[0] = 2.0
+        return result
+
+    monkeypatch.setattr(
+        tree_sitter_language_pack, "get_parser", lambda _: SimpleNamespace(parse=parse)
+    )
+    result = await remote.index_repo(
+        "owner/repo", storage_dir=tmp_path / "symbols", max_files=1, deadline=1.0
+    )
+    assert result["files_indexed"] == 1
+    assert result["truncated"] is capped
+    assert result["truncation_reason"] == ("max_files" if capped else None)
+
+
+@pytest.mark.asyncio
+async def test_remote_last_wave_deadline_timeouts_still_report_deadline(tmp_path, monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(remote, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    real_client = httpx.AsyncClient
+
+    def response(request):
+        if "git/trees" in request.url.path:
+            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+        clock[0] = 2.0
+        raise httpx.ReadTimeout("remaining job budget expired", request=request)
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real_client(**kw, transport=httpx.MockTransport(response)),
+    )
+    result = await remote.index_repo("owner/repo", storage_dir=tmp_path / "symbols", deadline=1.0)
+    assert result["files_indexed"] == 0
+    assert result["truncated"] and result["truncation_reason"] == "deadline"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("expire", ["wave", "parse"])
 async def test_remote_shared_deadline_stops_fetch_or_parse(tmp_path, monkeypatch, expire):

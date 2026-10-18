@@ -157,7 +157,6 @@ async def index_repo(
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         # Get the file tree from GitHub
         tree_url = f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1"
-        check_stop()
         if expired():
             truncated = True
             truncation_reason = "deadline"
@@ -238,6 +237,9 @@ async def index_repo(
 
             for (file_path, spec), result in zip(wave, results, strict=True):
                 if isinstance(result, BaseException):
+                    if isinstance(result, httpx.TimeoutException) and expired():
+                        truncated = True
+                        truncation_reason = "deadline"
                     if isinstance(result, (httpx.HTTPStatusError, httpx.RequestError)):
                         log.warning(
                             "github_file_fetch_failed",
@@ -296,10 +298,6 @@ async def index_repo(
                 )
             files_processed += 1
 
-        check_stop()
-        if expired():
-            truncated = True
-            truncation_reason = "deadline"
         index = CodeIndex(
             repo_path=repo_key,
             files=files_dict,

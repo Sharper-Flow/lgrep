@@ -128,7 +128,7 @@ def test_invalid_budget_warns_once_per_supervisor(raw, monkeypatch):
             assert runtime.explicit_budget_s == 150
             runtime.snapshot_recent_jobs()
             assert len([event for event in logs if event["log_level"] == "warning"]) == 1
-            assert "value" not in logs[0]
+            assert raw not in {str(value) for value in logs[0].values()}
         finally:
             runtime.shutdown()
 
@@ -502,5 +502,33 @@ async def test_credentials_do_not_cross_result_error_diagnostics_or_logs(monkeyp
             diagnostics = await lgrep_diagnostics(ctx=context(app))
         assert token not in json.dumps([result, job, diagnostics, logs])
         assert token[:12] not in job["error"]
+    finally:
+        await _shutdown(app)
+
+
+@pytest.mark.asyncio
+async def test_empty_token_argument_uses_deployment_token(monkeypatch):
+    monkeypatch.setenv("LGREP_GITHUB_TOKEN", "deployment-token")
+    app = LgrepContext(transport="stdio")
+    captured = []
+
+    async def remote(*_args, **kwargs):
+        captured.append(kwargs["github_token"])
+        return {
+            "repo": "owner/repo",
+            "ref": "HEAD",
+            "files_indexed": 0,
+            "symbols_indexed": 0,
+            "truncated": False,
+            "truncation_reason": None,
+        }
+
+    monkeypatch.setattr(tools_symbols, "_index_repo", remote)
+    try:
+        result = await tools_symbols.index_symbols_repo(
+            "owner/repo", github_token="", ctx=context(app)
+        )
+        assert (await settled(app.runtime, result["job_id"]))["state"] == "completed"
+        assert captured == ["deployment-token"]
     finally:
         await _shutdown(app)
