@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import os
 import time
 from functools import partial
 from pathlib import Path
@@ -19,13 +22,13 @@ from lgrep.server.responses import (
     GetRepoOutlineResult,
     GetSymbolResult,
     GetSymbolsResult,
-    IndexSymbolsFolderResult,
-    IndexSymbolsRepoResult,
     InvalidateCacheResult,
     ListReposResult,
     SearchReferencesResult,
     SearchSymbolsResult,
     SearchTextResult,
+    SymbolIndexJobResult,
+    SymbolIndexSubmissionResult,
     ToolError,
     error_response,
 )
@@ -38,6 +41,8 @@ from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
 from lgrep.tools.get_symbol import get_symbol as _get_symbol
 from lgrep.tools.get_symbol import get_symbols as _get_symbols
 from lgrep.tools.index_folder import index_folder as _index_folder
+from lgrep.tools.index_repo import _resolve_github_token as resolve_github_token
+from lgrep.tools.index_repo import credential_values, redact_credentials
 from lgrep.tools.index_repo import index_repo as _index_repo
 from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
@@ -85,14 +90,68 @@ async def _symbol_index_snapshot(
 
 
 # ---------------------------------------------------------------------------
-# MCP Tools (12 symbol tools)
+# Explicit symbol jobs require a process-lifetime stdio context.
 # ---------------------------------------------------------------------------
+
+
+def _explicit_context(ctx: Context | None):
+    if ctx is None:
+        return None
+    try:
+        app = ctx.request_context.lifespan_context
+    except (AttributeError, LookupError, RuntimeError, ValueError):
+        return None
+    return app if getattr(app, "transport", None) == "stdio" and not app._closed else None
+
+
+def _jobs_unavailable() -> ToolError:
+    return ToolError(
+        error="Symbol index jobs require a running stdio daemon context.",
+        code="symbol_index_jobs_unavailable",
+        retryable=False,
+    )
+
+
+def _submit_explicit(app, caller, target, identity, work, t0, credentials=()):
+    from lgrep.storage import index_store
+
+    # The private hash includes the lexical store identity and credential snapshot.
+    # Do not resolve paths, create stores, or probe the filesystem on the MCP loop.
+    key = hashlib.sha256(
+        json.dumps([caller, target, str(index_store.DEFAULT_SYMBOLS_DIR), *identity]).encode()
+    ).hexdigest()
+    outcome, job = app.runtime.submit_symbol_index(
+        caller=caller, project=target, request_key=key, work=work, credentials=credentials
+    )
+    if outcome == "unavailable":
+        return _jobs_unavailable()
+    if outcome == "busy":
+        return ToolError(
+            error="Another explicit symbol index job is still running. Retry later.",
+            code="symbol_index_busy",
+            retryable=True,
+        )
+    return SymbolIndexSubmissionResult(
+        job_id=job["job_id"],
+        state=job["state"],
+        duplicate=outcome == "duplicate",
+        _meta=make_meta(t0, caller),
+    )
+
+
+_EXPLICIT_BUDGET_DESCRIPTION = (
+    "File cap. Jobs also have a default 150-second cooperative budget, configurable with "
+    "LGREP_EXPLICIT_INDEX_BUDGET_S. Deadline stops appear in get_symbol_index_job status as "
+    "truncation_reason='deadline'; capped results are not full repository coverage."
+)
 
 
 @mcp.tool(
     description=(
-        "Index symbols from a local repository for exact symbol lookup tools. "
-        "Run before symbol search/get operations, then refresh after major code changes. "
+        "Submit a background local symbol-index job (stdio only). Returns job_id, not counters. "
+        "Read get_symbol_index_job for final results before symbol lookups. "
+        + _EXPLICIT_BUDGET_DESCRIPTION
+        + " "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False),
@@ -105,46 +164,46 @@ async def index_symbols_folder(
     ],
     max_files: Annotated[
         int,
-        Field(description="Maximum files to parse during this indexing run."),
+        Field(description="Maximum changed/new files to parse. " + _EXPLICIT_BUDGET_DESCRIPTION),
     ] = 500,
     incremental: Annotated[
         bool,
         Field(description="Skip unchanged files when true; set false to force full rebuild."),
     ] = True,
-) -> IndexSymbolsFolderResult | ToolError:
-    """Index all symbols in a local folder for exact symbol lookup.
-
-    Args:
-        path: Absolute path to the repository/folder root
-        max_files: Maximum changed/new files to parse (default: 500).
-                   Unchanged files are checked but do not consume this budget.
-        incremental: Skip files whose content hash matches the stored index
-                     (default: True). Set to False to force a full re-index.
-
-    Returns:
-        Files indexed, skipped, symbols count, and repo path.
-    """
+    ctx: Context | None = None,
+) -> SymbolIndexSubmissionResult | ToolError:
+    """Acknowledge a detached local job; all filesystem work stays on its worker."""
     t0 = time.monotonic()
-    result = await asyncio.to_thread(
-        _index_folder, path, max_files=max_files, incremental=incremental
-    )
-    if "error" in result:
-        return error_response(result["error"])
-    return IndexSymbolsFolderResult(
-        files_indexed=result["files_indexed"],
-        files_skipped=result["files_skipped"],
-        files_deleted=result["files_deleted"],
-        symbols_indexed=result["symbols_indexed"],
-        occurrences_indexed=result["occurrences_indexed"],
-        repo_path=result["repo_path"],
-        _meta=make_meta(t0, "index_symbols_folder"),
+    app = _explicit_context(ctx)
+    if app is None:
+        return _jobs_unavailable()
+    if not path.strip() or "\x00" in path or max_files < 1:
+        return error_response("path must be nonempty and max_files must be positive.")
+    target = os.path.abspath(path)
+    credentials = credential_values()
+    if redact_credentials(target, credentials) != target:
+        return error_response("Index targets must not contain credentials.")
+
+    def work(deadline, stop_event):
+        return _index_folder(
+            target,
+            max_files=max_files,
+            incremental=incremental,
+            deadline=deadline,
+            cancel_event=stop_event,
+        )
+
+    return _submit_explicit(
+        app, "index_symbols_folder", target, [max_files, incremental], work, t0, credentials
     )
 
 
 @mcp.tool(
     description=(
-        "Index symbols directly from a GitHub repository via API without cloning locally. "
-        "Use for remote code exploration when a local checkout is unavailable. "
+        "Submit a background GitHub symbol-index job (stdio only), without cloning. "
+        "Returns job_id, not counters. Read get_symbol_index_job for final results. "
+        + _EXPLICIT_BUDGET_DESCRIPTION
+        + " "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True),
@@ -162,12 +221,7 @@ async def index_symbols_repo(
     max_files: Annotated[
         int,
         Field(
-            description=(
-                "Maximum files to fetch and parse from the remote repository. "
-                "The operation also stops at an internal time budget derived from "
-                "LGREP_TOOL_TIMEOUT_S; either stop returns the partial index with "
-                "truncated=true."
-            ),
+            description="Maximum remote files to fetch and parse. " + _EXPLICIT_BUDGET_DESCRIPTION,
         ),
     ] = 500,
     github_token: Annotated[
@@ -181,47 +235,71 @@ async def index_symbols_repo(
         ),
     ] = None,
     ctx: Context | None = None,
-) -> IndexSymbolsRepoResult | ToolError:
-    """Index symbols from a GitHub repository via the REST API (no git clone).
-
-    Args:
-        repo: GitHub repo in "owner/name" format (e.g. "anomalyco/lgrep")
-        ref: Branch, tag, or commit SHA to index (default: "HEAD")
-        max_files: Maximum number of files to index (default: 500)
-        github_token: Optional GitHub personal access token for private repos
-
-    Returns:
-        Files indexed, symbols count, repo, and meta envelope.
-    """
+) -> SymbolIndexSubmissionResult | ToolError:
+    """Acknowledge remote work owned by the dedicated explicit worker."""
     t0 = time.monotonic()
-    app_ctx = None
-    if ctx is not None:
-        app_ctx = ctx.request_context.lifespan_context
+    app = _explicit_context(ctx)
+    if app is None:
+        return _jobs_unavailable()
+    if repo.count("/") != 1 or not all(repo.split("/")) or repo.startswith((".", "~")):
+        message = "Invalid repo format. Expected GitHub 'owner/name'."
+        if repo.startswith(("/", "./", "../", "~/")) or "\\" in repo:
+            message += " Use index_symbols_folder for local paths."
+        return error_response(message)
+    if not ref.strip() or "\x00" in repo + ref or max_files < 1:
+        return error_response("ref must be nonempty and max_files must be positive.")
+    token = resolve_github_token(github_token)
+    credentials = credential_values((token,) if token else ())
+    if any(redact_credentials(value, credentials) != value for value in (repo, ref)):
+        return error_response("Index targets must not contain credentials.")
 
-    if app_ctx is not None:
-        # Parsing and persistence are synchronous tree-sitter and disk work:
-        # route them through the build lane so they cannot block the loop or
-        # occupy query threads.
-        async def _run_sync(fn, _repo=repo):
-            return await app_ctx.runtime.run_blocking(
-                "index_repo", "index_symbols_repo", _repo, fn, lane="build"
+    def work(deadline, stop_event):
+        async def inline(fn):
+            return fn()
+
+        return asyncio.run(
+            _index_repo(
+                repo,
+                ref=ref,
+                max_files=max_files,
+                github_token=token or "",
+                run_sync=inline,
+                deadline=deadline,
+                cancel_event=stop_event,
             )
-
-        result = await _index_repo(
-            repo, ref=ref, max_files=max_files, github_token=github_token, run_sync=_run_sync
         )
-    else:
-        result = await _index_repo(repo, ref=ref, max_files=max_files, github_token=github_token)
-    if "error" in result:
-        return error_response(result["error"])
-    return IndexSymbolsRepoResult(
-        files_indexed=result["files_indexed"],
-        symbols_indexed=result["symbols_indexed"],
-        repo=result["repo"],
-        truncated=result.get("truncated", False),
-        truncation_reason=result.get("truncation_reason"),
-        _meta=make_meta(t0, "index_symbols_repo"),
+
+    return _submit_explicit(
+        app, "index_symbols_repo", repo, [ref, max_files, token], work, t0, credentials
     )
+
+
+@mcp.tool(
+    description=(
+        "Read an explicit symbol-index job in this stdio daemon. States: queued, running, "
+        "completed, failed, cancelled (shutdown only). Final counters and truncation appear here. "
+        "The last 100 terminal explicit jobs survive unrelated queries, but not daemon restart. "
+        "Unknown or evicted IDs create no work. No public cancellation tool exists."
+    ),
+    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+)
+@time_tool
+async def get_symbol_index_job(
+    job_id: str, ctx: Context | None = None
+) -> SymbolIndexJobResult | ToolError:
+    """Read detached work without waiting for or cancelling its worker."""
+    t0 = time.monotonic()
+    app = _explicit_context(ctx)
+    if app is None:
+        return _jobs_unavailable()
+    job = app.runtime.get_symbol_index_job(job_id)
+    if job is None:
+        return ToolError(
+            error="Unknown symbol index job in this daemon.",
+            code="unknown_symbol_index_job",
+            retryable=False,
+        )
+    return SymbolIndexJobResult(**job, _meta=make_meta(t0, "get_symbol_index_job"))
 
 
 @mcp.tool(

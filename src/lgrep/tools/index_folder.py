@@ -9,13 +9,18 @@ from __future__ import annotations
 import hashlib
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
+from lgrep.exceptions import OperationCancelled
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.parser.languages import get_language_spec
 from lgrep.storage.index_store import CodeIndex, IndexStore, _version_tuple
 from lgrep.tools._meta import error_response
+
+if TYPE_CHECKING:
+    import threading
 
 log = structlog.get_logger()
 
@@ -64,6 +69,9 @@ def index_folder(
     storage_dir: Path | str | None = None,
     max_files: int = 500,
     incremental: bool = True,
+    *,
+    deadline: float | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """Index all symbols in a local folder.
 
@@ -80,7 +88,9 @@ def index_folder(
         Dict with files_indexed, symbols_indexed, occurrences_indexed,
         files_skipped, and repo_path.
     """
-    result, _ = _index_folder_with_snapshot(repo_path, storage_dir, max_files, incremental)
+    result, _ = _index_folder_with_snapshot(
+        repo_path, storage_dir, max_files, incremental, deadline=deadline, cancel_event=cancel_event
+    )
     return result
 
 
@@ -89,8 +99,17 @@ def _index_folder_with_snapshot(
     storage_dir: Path | str | None = None,
     max_files: int = 500,
     incremental: bool = True,
+    *,
+    deadline: float | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> tuple[dict, CodeIndex | None]:
     """Return the published snapshot with its counts, without reloading JSON."""
+
+    def check_stop():
+        if cancel_event is not None and cancel_event.is_set():
+            raise OperationCancelled("Symbol indexing stopped during shutdown")
+
+    check_stop()
     # Input validation
     if not repo_path or not repo_path.strip():
         return error_response("repo_path must not be empty"), None
@@ -113,6 +132,7 @@ def _index_folder_with_snapshot(
     # serialize. index_repo is NOT locked: it performs no load() and
     # writes github: keys, a namespace disjoint from local paths.
     with store.repo_lock(resolved_root):
+        check_stop()
         checked_at_ns = time.time_ns()
         # Load existing index for incremental comparison
         existing_index = store.load(resolved_root) if incremental else None
@@ -143,10 +163,16 @@ def _index_folder_with_snapshot(
         # longer exist on disk.
         walked_files: dict[str, str] = {}
         walk_truncated = False
+        truncation_reason = None
 
         files_processed = 0
         files_skipped = 0
         for file_path in discovery.find_files():
+            check_stop()
+            if deadline is not None and time.monotonic() >= deadline:
+                walk_truncated = True
+                truncation_reason = "deadline"
+                break
             if get_language_spec(file_path.suffix.lower()) is None:
                 continue
 
@@ -170,6 +196,7 @@ def _index_folder_with_snapshot(
 
             if files_processed >= max_files:
                 walk_truncated = True
+                truncation_reason = "max_files"
                 break
 
             files_dict[rel_path] = file_hash
@@ -212,6 +239,10 @@ def _index_folder_with_snapshot(
 
             files_processed += 1
 
+        check_stop()
+        if deadline is not None and time.monotonic() >= deadline:
+            walk_truncated = True
+            truncation_reason = "deadline"
         # Detect files that disappeared from disk since the last index and prune
         # them. On a complete walk the set difference against the previous index
         # is exact. A truncated walk must not use that difference — unscanned
@@ -251,6 +282,7 @@ def _index_folder_with_snapshot(
             version=_INDEX_VERSION,
             walk_truncated=walk_truncated,
         )
+        check_stop()
         if (
             existing_index is None
             or files_processed
@@ -276,6 +308,7 @@ def _index_folder_with_snapshot(
         incremental=incremental,
         refreshed_occurrences=needs_occurrence_refresh,
         walk_truncated=walk_truncated,
+        truncation_reason=truncation_reason,
     )
 
     return {
@@ -285,4 +318,6 @@ def _index_folder_with_snapshot(
         "files_deleted": files_deleted,
         "symbols_indexed": len(symbols_dict),
         "occurrences_indexed": occurrence_count,
+        "walk_truncated": walk_truncated,
+        "truncation_reason": truncation_reason,
     }, index

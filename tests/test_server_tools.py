@@ -1,7 +1,7 @@
-"""MCP contract tests for all 21 registered tools.
+"""MCP contract tests for all 22 registered tools.
 
 Verifies:
-- All 21 tools are registered in the MCP server (5 semantic + 15 symbol/admin + 1 diagnostics)
+- All tools are registered (5 semantic + 16 symbol/admin + 1 diagnostics)
 - Renamed semantic tools preserve response shape
 - New symbol/admin tools return valid JSON with _meta envelope
 - Unknown tool returns structured error (via tool dispatch)
@@ -16,8 +16,19 @@ from types import SimpleNamespace
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
-from lgrep.server import mcp, tools_symbols
+from lgrep.server import LgrepContext, mcp, tools_symbols
 from lgrep.server.arguments import SYNONYMS, TOOL_SYNONYMS
+from tests.test_explicit_symbol_jobs import context, settled
+
+
+@pytest.fixture
+def explicit_ctx():
+    app = LgrepContext(transport="stdio")
+    try:
+        yield context(app)
+    finally:
+        app.runtime.shutdown()
+
 
 # ── Tool registration ─────────────────────────────────────────────────────────
 
@@ -32,6 +43,7 @@ EXPECTED_SEMANTIC_TOOLS = {
 EXPECTED_SYMBOL_TOOLS = {
     "index_symbols_folder",
     "index_symbols_repo",
+    "get_symbol_index_job",
     "list_repos",
     "get_file_tree",
     "get_file_outline",
@@ -60,7 +72,7 @@ def _get_registered_tool_names() -> set[str]:
 
 
 class TestToolRegistration:
-    def test_all_21_tools_registered(self):
+    def test_all_22_tools_registered(self):
         registered = _get_registered_tool_names()
         assert registered == ALL_EXPECTED_TOOLS, (
             f"Missing: {ALL_EXPECTED_TOOLS - registered}\nExtra: {registered - ALL_EXPECTED_TOOLS}"
@@ -98,16 +110,24 @@ class TestSymbolToolResponses:
         raise KeyError(f"Tool not found: {name}")
 
     @pytest.mark.asyncio
-    async def test_index_symbols_folder_returns_json_with_meta(self, tmp_path):
+    async def test_index_symbols_folder_returns_json_with_meta(
+        self, tmp_path, monkeypatch, explicit_ctx
+    ):
+        from lgrep.storage import index_store
+
+        monkeypatch.setattr(index_store, "DEFAULT_SYMBOLS_DIR", tmp_path / "symbols")
         fn = self._get_tool_fn("index_symbols_folder")
         # Create a minimal Python file
         (tmp_path / "hello.py").write_text("def greet(): pass\n")
-        result = await fn(path=str(tmp_path))
+        result = await fn(path=str(tmp_path), ctx=explicit_ctx)
         data = result
         assert "_meta" in data
         assert "timing_ms" in data["_meta"]
-        assert data["files_deleted"] == 0
-        assert data["occurrences_indexed"] == 0
+        assert "files_indexed" not in data
+        final = await settled(explicit_ctx.request_context.lifespan_context.runtime, data["job_id"])
+        assert final["state"] == "completed"
+        assert final["result"]["files_deleted"] == 0
+        assert final["result"]["occurrences_indexed"] == 0
 
     @pytest.mark.asyncio
     async def test_list_repos_returns_json_with_meta(self, tmp_path, monkeypatch):
@@ -509,9 +529,20 @@ class TestWrapperBadInputPerTool:
             ("get_repo_outline", {"path": MISSING_DIR}),
         ],
     )
-    async def test_bad_input_returns_tool_error_not_keyerror(self, tool_name, arguments):
+    async def test_bad_input_returns_tool_error_not_keyerror(
+        self, tool_name, arguments, explicit_ctx
+    ):
         fn = self._get_tool_fn(tool_name)
-        result = await fn(**arguments)
+        if tool_name in {"index_symbols_folder", "index_symbols_repo"}:
+            result = await fn(**arguments, ctx=explicit_ctx)
+            if "job_id" in result:
+                result = await settled(
+                    explicit_ctx.request_context.lifespan_context.runtime, result["job_id"]
+                )
+                assert result["state"] == "failed" and result["result"] is None
+                result = {"error": result["error"]}
+        else:
+            result = await fn(**arguments)
         assert isinstance(result, dict), (
             f"{tool_name} returned {type(result).__name__}, expected a ToolError dict"
         )
@@ -532,13 +563,13 @@ class TestWrapperBadInputPerTool:
         assert directory_result["error"] != missing_result["error"]
 
     @pytest.mark.asyncio
-    async def test_index_symbols_repo_local_path_names_folder_tool(self):
+    async def test_index_symbols_repo_local_path_names_folder_tool(self, explicit_ctx):
         """An owner/name format error for a local path points at index_symbols_folder."""
         fn = self._get_tool_fn("index_symbols_repo")
-        local_path_result = await fn(repo=LOCAL_PATH_FOR_REPO_TOOL)
+        local_path_result = await fn(repo=LOCAL_PATH_FOR_REPO_TOOL, ctx=explicit_ctx)
         assert "error" in local_path_result
         assert "index_symbols_folder" in local_path_result["error"]
-        malformed_result = await fn(repo="notowner/name/extra")
+        malformed_result = await fn(repo="notowner/name/extra", ctx=explicit_ctx)
         assert "error" in malformed_result
         assert "index_symbols_folder" not in malformed_result["error"]
 
@@ -555,7 +586,7 @@ class TestEverySymbolToolPassesHelperError:
     STUB_ERROR = "stub helper error"
 
     # Helpers of these tools have no error branch, so there is no error to pass on.
-    NO_HELPER_ERROR = {"list_repos", "invalidate_cache"}
+    NO_HELPER_ERROR = {"list_repos", "invalidate_cache", "get_symbol_index_job"}
 
     @staticmethod
     def _symbol_tools():
@@ -608,14 +639,21 @@ class TestEverySymbolToolPassesHelperError:
         assert {"get_file_tree", "get_file_outline", "search_symbols"} <= names
 
     @pytest.mark.asyncio
-    async def test_every_symbol_tool_returns_helper_error(self, monkeypatch):
+    async def test_every_symbol_tool_returns_helper_error(self, monkeypatch, explicit_ctx):
         self._stub_helpers(monkeypatch)
         failures = []
         for tool in self._symbol_tools():
             if tool.name in self.NO_HELPER_ERROR:
                 continue
             try:
-                result = await tool.fn(**self._arguments(tool))
+                if tool.name in {"index_symbols_folder", "index_symbols_repo"}:
+                    submitted = await tool.fn(**self._arguments(tool), ctx=explicit_ctx)
+                    result = await settled(
+                        explicit_ctx.request_context.lifespan_context.runtime, submitted["job_id"]
+                    )
+                    assert result["state"] == "failed"
+                else:
+                    result = await tool.fn(**self._arguments(tool))
             except Exception as exc:  # noqa: BLE001 - each failure is reported below
                 failures.append(f"{tool.name}: raised {type(exc).__name__}: {exc}")
                 continue

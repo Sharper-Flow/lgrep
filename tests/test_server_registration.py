@@ -1,11 +1,11 @@
-"""Test that all 20 MCP tools are registered after the server split."""
+"""Pin the complete MCP registry, including the one explicit-job status tool."""
 
 
-def test_server_has_21_tools():
+def test_server_has_22_tools():
     from lgrep.server import mcp
 
     tool_count = len(mcp._tool_manager._tools)
-    assert tool_count == 21, f"Expected 21 tools, got {tool_count}"
+    assert tool_count == 22, f"Expected 22 tools, got {tool_count}"
 
 
 def test_all_expected_tools_present():
@@ -19,6 +19,7 @@ def test_all_expected_tools_present():
         "watch_stop_semantic",
         "index_symbols_folder",
         "index_symbols_repo",
+        "get_symbol_index_job",
         "list_repos",
         "get_file_tree",
         "get_file_outline",

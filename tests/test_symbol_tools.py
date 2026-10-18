@@ -311,7 +311,6 @@ class TestIndexRepo:
         deadline kills the session."""
         import asyncio
 
-        import lgrep.tools.index_repo as index_repo_mod
         from lgrep.tools.index_repo import index_repo
 
         class _FakeResponse:
@@ -368,17 +367,17 @@ class TestIndexRepo:
                 return _FakeResponse(content=b"def f():\n    return 1\n")
 
         monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
-        monkeypatch.setattr(index_repo_mod, "_DEADLINE_FLOOR_S", 0.05)
-        monkeypatch.setattr(index_repo_mod, "_DEADLINE_FRACTION", 1.0)
-        monkeypatch.setenv("LGREP_TOOL_TIMEOUT_S", "0.05")
+        import time
 
-        result = await index_repo("owner/repo", ref="main", storage_dir=tmp_store)
+        result = await index_repo(
+            "owner/repo", ref="main", storage_dir=tmp_store, deadline=time.monotonic() + 0.05
+        )
 
         assert "error" not in result
         assert result["truncated"] is True
         assert result["truncation_reason"] == "deadline"
         # The per-request timeout never exceeds the remaining budget.
-        assert all(t is None or t <= 0.05 + 1e-9 or t <= 30.0 for t in observed_timeouts), (
+        assert observed_timeouts and all(0 < t <= 0.05 for t in observed_timeouts), (
             observed_timeouts
         )
 

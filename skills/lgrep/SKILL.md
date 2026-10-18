@@ -229,18 +229,38 @@ src/auth.py:method:login
 
 ### lgrep_index_symbols_folder
 
-Index all symbols in a local folder. Run once before using `lgrep_search_symbols` or `lgrep_get_symbol`.
+Submit a local background job on stdio. The acknowledgement contains `job_id`,
+`state`, and `duplicate`, not final counters. Read `lgrep_get_symbol_index_job`
+before using `lgrep_search_symbols` or `lgrep_get_symbol`.
 
 - `path` (string, **required**): Absolute path to the repository/folder root.
-- `max_files` (int): Maximum files to index (default: 500).
+- `max_files` (int): Changed/new file parse cap (default: 500); unchanged files do not consume it. A separate default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`, also bounds the job. Deadline stops report `truncation_reason="deadline"` in status.
 - `incremental` (bool): Skip files whose SHA-256 hash matches the stored index (default: `true`). Set to `false` to force a full re-index.
 
 ### lgrep_index_symbols_repo
 
-Index symbols from a GitHub repository via the REST API (no git clone).
+Submit a background GitHub API job on stdio (no git clone). Read final counters
+from `lgrep_get_symbol_index_job`, not the submission acknowledgement.
 
 - `repo` (string, **required**): GitHub repo in `owner/name` format.
 - `ref` (string): Branch, tag, or commit SHA (default: `HEAD`).
+- `max_files` (int): File fetch/parse cap (default: 500). Jobs also use the default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`; deadline stops report `truncation_reason="deadline"` in status.
+- `github_token` (string, optional): Explicit credential; otherwise `LGREP_GITHUB_TOKEN`, then `GITHUB_TOKEN`.
+
+### lgrep_get_symbol_index_job
+
+- `job_id` (string, **required**): ID returned by a submission in this daemon.
+- States: `queued`, `running`, `completed`, `failed`, `cancelled` (shutdown only).
+- A completed job returns final counters in `result`. Check `walk_truncated`
+  (folder) or `truncated` (remote), and `truncation_reason`: `"max_files"`,
+  `"deadline"`, or null. Completion with truncation is not full repository coverage.
+- Identical nonterminal submissions join one job. Different ones return
+  `symbol_index_busy`, retryable=true. Retry later, rather than submitting in parallel.
+- Only the latest 100 terminal explicit jobs are retained; unrelated queries do
+  not evict them. Restart loses jobs. Unknown/evicted IDs return
+  `unknown_symbol_index_job`, retryable=false. There is no public cancel tool.
+- These three tools refuse HTTP or missing/unknown transport context with
+  `symbol_index_jobs_unavailable`, retryable=false. Use a stdio daemon instead.
 
 ### lgrep_list_repos
 

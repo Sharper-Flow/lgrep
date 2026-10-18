@@ -40,6 +40,12 @@ def _runtime_ctx():
         def snapshot_recent_jobs(self):
             return []
 
+        def submit_symbol_index(self, **kwargs):
+            return "accepted", {"job_id": "schema-fixture", "state": "queued"}
+
+        def get_symbol_index_job(self, job_id):
+            return None
+
     return SimpleNamespace(
         request_context=SimpleNamespace(
             lifespan_context=LgrepContext(
@@ -183,6 +189,8 @@ async def test_all_registered_tools_validate_on_trivial_invocation(tmp_path, mon
         elif tool.name == "index_symbols_repo":
             # Remote indexing requires network; skip in this smoke test.
             continue
+        elif tool.name == "get_symbol_index_job":
+            args = {"job_id": "unknown"}
         elif tool.name in {"status_semantic", "watch_stop_semantic"}:
             args = {}
 
