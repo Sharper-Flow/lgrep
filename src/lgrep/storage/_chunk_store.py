@@ -351,39 +351,29 @@ def prune_overlays(
     return sorted(targets), rows
 
 
-def _vector_index_undertrained(table: Table) -> bool:
-    """Return whether most rows lie outside the vector index.
-
-    ``prepare_hybrid_indexes`` trains the index once, on the rows present
-    then. ``optimize`` adds later rows to those partitions without
-    retraining, so an index trained on a small first batch ranks poorly.
-    """
-    try:
-        stats = table.index_stats(_VECTOR_INDEX_NAME)
-    except Exception:
-        return False
-    return stats is not None and stats.num_unindexed_rows > stats.num_indexed_rows
-
-
 def optimize_table(
     db_path: str | Path,
     retention: timedelta = MAINTENANCE_VERSION_RETENTION,
     dry_run: bool = False,
 ) -> dict:
-    """Compact one cache's chunks table and delete its superseded versions.
+    """Compact one cache's chunks table and delete its old versions.
 
     Every write leaves a table version behind, and nothing else removes
-    them. Retrains the vector index first when most rows lie outside it,
-    then runs LanceDB ``optimize``: compaction, deletion of versions older
-    than ``retention``, and index updates. Opens the table without the
-    migrations ``ChunkStore.table`` applies. A write that commits during
-    the run wins and this run raises; the next run retries.
+    them. Retrains an existing vector index first: ``optimize`` adds new
+    rows to the partitions trained on the rows present when the index was
+    built, as one more index segment each run, so an index trained on a
+    small first batch keeps ranking poorly. Then runs LanceDB
+    ``optimize``: compaction, deletion of every version but the latest
+    written more than ``retention`` ago, and index updates. Opens the
+    table without the migrations ``ChunkStore.table`` applies. A write
+    that commits during the run wins and this run raises; the next run
+    retries.
 
     Returns the version count and whether the index was (or, with
     ``dry_run``, would be) retrained. ``dry_run`` only reads.
     """
     table = connect_lance(Path(db_path)).open_table(CHUNKS_TABLE)
-    retrain = _vector_index_undertrained(table)
+    retrain = table.index_stats(_VECTOR_INDEX_NAME) is not None
     report = {
         "versions_before": len(table.list_versions()),
         "vector_index_retrained": retrain,

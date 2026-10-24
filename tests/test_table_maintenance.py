@@ -70,27 +70,30 @@ class TestOptimizeTable:
         assert report == {"versions_before": before, "vector_index_retrained": False}
         assert _versions(db) == before
 
-    def test_retrains_index_that_most_rows_lie_outside(self, tmp_path):
+    def test_retrains_existing_vector_index(self, tmp_path):
         db = tmp_path / "db"
         store = ChunkStore(db)
         _fill(store, batches=1, per_batch=300)
         store.table.create_index(metric="cosine", vector_column_name="vector")
-        _fill(store, batches=1, per_batch=400, start=1)
 
-        report = _optimize(db)
+        for batch in range(3):
+            _fill(store, batches=1, per_batch=50, start=1 + batch)
+            assert _optimize(db)["vector_index_retrained"] is True
 
-        assert report["vector_index_retrained"] is True
         stats = ChunkStore(db).table.index_stats("vector_idx")
-        assert (stats.num_indexed_rows, stats.num_unindexed_rows) == (700, 0)
+        # Without retraining, each optimize appends its new rows as one more index segment.
+        assert (stats.num_indexed_rows, stats.num_unindexed_rows, stats.num_indices) == (
+            450,
+            0,
+            1,
+        )
 
-    def test_keeps_index_that_covers_most_rows(self, tmp_path):
+    def test_table_without_vector_index_gets_none(self, tmp_path):
         db = tmp_path / "db"
-        store = ChunkStore(db)
-        _fill(store, batches=1, per_batch=300)
-        store.table.create_index(metric="cosine", vector_column_name="vector")
-        _fill(store, batches=1, per_batch=10, start=1)
+        _fill(ChunkStore(db), batches=3)
 
         assert _optimize(db)["vector_index_retrained"] is False
+        assert ChunkStore(db).table.index_stats("vector_idx") is None
 
 
 class TestReadsAcrossMaintenance:
@@ -111,10 +114,12 @@ class TestReadsAcrossMaintenance:
 
 
 class TestVectorSearchRanking:
-    def test_exact_match_ranks_first_through_compressed_index(self, tmp_path):
+    @pytest.mark.parametrize("mode", ["vector", "hybrid"])
+    def test_exact_match_ranks_first_through_compressed_index(self, tmp_path, mode):
         """Near-duplicate rows have near-equal PQ distances; re-ranking by
         exact distance must still return the queried row first. Without
-        re-ranking about half of these 40 queries miss."""
+        re-ranking about half of these 40 queries miss. The hybrid text
+        matches no row, so only its vector side ranks."""
         rng = random.Random(7)
         store = ChunkStore(tmp_path / "db")
         rows = []
@@ -127,11 +132,16 @@ class TestVectorSearchRanking:
                 )
         store.add_chunks(rows)
         store.table.create_index(metric="cosine", vector_column_name="vector")
+        store.ensure_fts_index()
+
+        def search(vector):
+            if mode == "hybrid":
+                return store.search_hybrid(vector, "absent", limit=1)
+            return store.search_vector(vector, limit=1)
 
         queried = rows[::100]
         hits = sum(
-            store.search_vector(chunk.vector, limit=1).results[0].file_path == chunk.file_path
-            for chunk in queried
+            search(chunk.vector).results[0].file_path == chunk.file_path for chunk in queried
         )
         assert hits == len(queried)
 

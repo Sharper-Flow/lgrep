@@ -205,11 +205,12 @@ Runs four passes over both on-disk stores:
    is missing, unreadable, or absent from the JSON, plus their sidecars and
    stale temp files.
 4. `optimize_caches` — runs LanceDB `optimize` on every cache's chunks table:
-   compacts it, deletes table versions superseded more than an hour ago, and
-   adds new rows to its indexes. Every write leaves a version behind, and
-   nothing else removes them; a busy cache grows by gigabytes a month. When
-   most rows lie outside the vector index, the pass retrains the index first.
-   The dry run reports each cache's version count and size.
+   compacts it, deletes every version but the latest that was written more
+   than an hour ago, and adds new rows to its indexes. Every write leaves a
+   version behind, and nothing else removes them; a busy cache grows by
+   gigabytes a month. The pass first retrains the vector index, if the table
+   has one, so it stays trained on the current rows rather than the first
+   rows indexed. The dry run reports each cache's version count and size.
 
 The `prune_orphans` pass respects the 1-hour grace window
 (`LGREP_PRUNE_MIN_AGE_S`), and the `prune_symbols` pass respects the same
