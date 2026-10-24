@@ -147,7 +147,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `lgrep init-ignore [path]` | Create a recommended `.lgrepignore`; `--force` |
 | `lgrep prune-orphans` | Inspect or delete orphan semantic caches; `--execute`, `--dry-run`, `--cache-dir DIR` |
 | `lgrep prune-symbols` | Inspect or delete stale symbol indexes; `--execute`, `--dry-run`, `--storage-dir DIR` |
-| `lgrep gc` | Combined GC: orphans + worktree aliases + symbol indexes; `--execute`, `--dry-run`, `--cache-dir DIR`, `--symbols-dir DIR` |
+| `lgrep gc` | Combined GC: orphans + worktree aliases + symbol indexes + chunk-table optimize; `--execute`, `--dry-run`, `--cache-dir DIR`, `--symbols-dir DIR` |
 | `lgrep remove <path>` | Show on-disk index info for a project |
 | `lgrep install-opencode` | Install into OpenCode (MCP entry + instruction + skill) |
 | `lgrep uninstall-opencode` | Remove lgrep from OpenCode |
