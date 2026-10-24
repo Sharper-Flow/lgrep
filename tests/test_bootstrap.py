@@ -95,6 +95,24 @@ class TestBootstrapTransportPlumbing:
         assert bootstrap_module.get_startup_transport() == "stdio"
         assert "LGREP_TRANSPORT" not in os.environ
 
+    def test_run_server_writes_nothing_to_stdout_before_serving(
+        self, monkeypatch: pytest.MonkeyPatch, capsys, clean_logging_state
+    ):
+        """stdout is the stdio MCP channel; startup events must not reach it."""
+        monkeypatch.delenv("LGREP_TRANSPORT", raising=False)
+        # A fresh process starts with structlog's stdout-printing defaults.
+        structlog.reset_defaults()
+
+        libc = MagicMock()
+        libc.mallopt.return_value = 1
+        with (
+            patch("lgrep.server.memory._glibc", return_value=libc),
+            patch("lgrep.server.mcp.run"),
+        ):
+            bootstrap_module.run_server()
+
+        assert capsys.readouterr().out == ""
+
 
 class TestConfigureLogging:
     def test_stderr_is_always_a_sink_and_stdout_never_is(self, clean_logging_state):

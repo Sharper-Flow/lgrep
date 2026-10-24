@@ -1179,6 +1179,38 @@ class TestLifecycle:
         assert len(ctx.projects) == 0
         assert ctx.embedder is None
 
+    @pytest.mark.asyncio
+    async def test_lifespan_yields_before_warm_and_cancels_it_at_shutdown(self):
+        """The lifespan must serve before warm-up ends and cancel an unfinished warm."""
+        from lgrep.server.lifecycle import app_lifespan
+
+        ctx = LgrepContext()
+        warm_started = asyncio.Event()
+        warm_cancelled = asyncio.Event()
+
+        async def endless_warm(_ctx):
+            warm_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                warm_cancelled.set()
+                raise
+
+        with (
+            patch("lgrep.server.lifecycle._startup", AsyncMock(return_value=ctx)),
+            patch("lgrep.server.lifecycle._warm_projects", endless_warm),
+            patch("lgrep.server.lifecycle._schedule_startup_sweep", AsyncMock()),
+            patch("lgrep.server.lifecycle._shutdown", AsyncMock()) as shutdown,
+        ):
+            async with asyncio.timeout(2):
+                async with app_lifespan(MagicMock()) as yielded:
+                    assert yielded is ctx
+                    await warm_started.wait()
+                    assert not warm_cancelled.is_set()
+
+        assert warm_cancelled.is_set()
+        shutdown.assert_awaited_once_with(ctx)
+
 
 class TestEagerWarmUp:
     """Tests for LGREP_WARM_PATHS eager index warming at startup."""

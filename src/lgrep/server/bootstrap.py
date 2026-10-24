@@ -178,6 +178,9 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     """
     global _startup_transport
 
+    # First, so no startup event reaches stdout, the stdio MCP channel.
+    configure_logging()
+
     # Before any worker or LanceDB thread exists, so the cap binds every arena.
     from lgrep.server.memory import cap_malloc_arenas
 
@@ -185,8 +188,6 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
 
     # Import here to avoid circular imports at module load time
     from lgrep.server import mcp
-
-    configure_logging()
 
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
