@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +50,25 @@ CHUNKS_TABLE = "chunks"
 LANCE_INDEX_CACHE_BYTES = 256 * 1024 * 1024
 LANCE_METADATA_CACHE_BYTES = 256 * 1024 * 1024
 
+# How often a connection rechecks which table version is latest. Maintenance
+# in another process (`lgrep gc`) deletes the version a long-lived handle
+# holds; a handle that never rechecks then fails every later search and write
+# until the process restarts. With this interval it fails for at most this long.
+LANCE_READ_CONSISTENCY_INTERVAL = timedelta(seconds=5)
+
+# Age past which maintenance deletes superseded table versions. lgrep never
+# reads an older version on purpose; the only reader of one is a handle that
+# has not rechecked yet (see LANCE_READ_CONSISTENCY_INTERVAL).
+MAINTENANCE_VERSION_RETENTION = timedelta(hours=1)
+
+# Name LanceDB gives the default index on the ``vector`` column.
+_VECTOR_INDEX_NAME = "vector_idx"
+
+# IVF_PQ ranks on compressed vectors. Re-ranking ``limit * factor`` candidates
+# by exact distance raised top-10 agreement with exact search from 0.60 to
+# 0.98 on a 170k-row cache, at about 22 ms per query.
+_VECTOR_REFINE_FACTOR = 10
+
 _lance_session: lancedb.Session | None = None
 _lance_session_lock = threading.Lock()
 
@@ -67,7 +87,11 @@ def lance_session() -> lancedb.Session:
 
 def connect_lance(db_path: Path) -> DBConnection:
     """Connect to a local LanceDB directory through the shared session."""
-    return lancedb.connect(str(db_path), session=lance_session())
+    return lancedb.connect(
+        str(db_path),
+        session=lance_session(),
+        read_consistency_interval=LANCE_READ_CONSISTENCY_INTERVAL,
+    )
 
 
 # File storing paths known to produce zero chunks, so staleness checks do not
@@ -325,6 +349,43 @@ def prune_overlays(
                 state_files[checkout].unlink(missing_ok=True)
         log.info("overlays_pruned", db_path=str(db_path), checkouts=len(targets), rows=rows)
     return sorted(targets), rows
+
+
+def optimize_table(
+    db_path: str | Path,
+    retention: timedelta = MAINTENANCE_VERSION_RETENTION,
+    dry_run: bool = False,
+) -> dict:
+    """Compact one cache's chunks table and delete its old versions.
+
+    Every write leaves a table version behind, and nothing else removes
+    them. Retrains an existing vector index first: ``optimize`` adds new
+    rows to the partitions trained on the rows present when the index was
+    built, as one more index segment each run, so an index trained on a
+    small first batch keeps ranking poorly. Then runs LanceDB
+    ``optimize``: compaction, deletion of every version but the latest
+    written more than ``retention`` ago, and index updates. Opens the
+    table without the migrations ``ChunkStore.table`` applies. A write
+    that commits during the run wins and this run raises; the next run
+    retries.
+
+    Returns the version count and whether the index was (or, with
+    ``dry_run``, would be) retrained. ``dry_run`` only reads.
+    """
+    table = connect_lance(Path(db_path)).open_table(CHUNKS_TABLE)
+    retrain = table.index_stats(_VECTOR_INDEX_NAME) is not None
+    report = {
+        "versions_before": len(table.list_versions()),
+        "vector_index_retrained": retrain,
+    }
+    if dry_run:
+        return report
+    if retrain:
+        table.create_index(metric="cosine", vector_column_name="vector", replace=True)
+    table.optimize(cleanup_older_than=retention)
+    report["versions_after"] = len(table.list_versions())
+    log.info("chunk_table_optimized", db_path=str(db_path), **report)
+    return report
 
 
 def has_disk_cache(project_path: str | Path) -> bool:
@@ -852,6 +913,7 @@ class ChunkStore:
             self.table.search(query_type="hybrid")
             .vector(query_vector)
             .text(query_text)
+            .refine_factor(_VECTOR_REFINE_FACTOR)
             .where(self._visible_where(), prefilter=True)
             .rerank(reranker)
             .limit(limit)
@@ -896,6 +958,7 @@ class ChunkStore:
 
         raw_results = (
             self.table.search(query_vector)
+            .refine_factor(_VECTOR_REFINE_FACTOR)
             .where(self._visible_where(), prefilter=True)
             .limit(limit)
             .to_list()

@@ -194,7 +194,7 @@ MCP pruner calls also skip projects currently loaded in the running server.
 lgrep gc --execute        # or --dry-run (default)
 ```
 
-Runs three passes over both on-disk stores:
+Runs four passes over both on-disk stores:
 
 1. `prune_orphans` — deletes whole cache directories whose project root no
    longer exists on disk.
@@ -204,6 +204,13 @@ Runs three passes over both on-disk stores:
 3. `prune_symbols` — deletes stale symbol-store index files whose `repo_path`
    is missing, unreadable, or absent from the JSON, plus their sidecars and
    stale temp files.
+4. `optimize_caches` — runs LanceDB `optimize` on every cache's chunks table:
+   compacts it, deletes every version but the latest that was written more
+   than an hour ago, and adds new rows to its indexes. Every write leaves a
+   version behind, and nothing else removes them; a busy cache grows by
+   gigabytes a month. The pass first retrains the vector index, if the table
+   has one, so it stays trained on the current rows rather than the first
+   rows indexed. The dry run reports each cache's version count and size.
 
 The `prune_orphans` pass respects the 1-hour grace window
 (`LGREP_PRUNE_MIN_AGE_S`), and the `prune_symbols` pass respects the same
@@ -214,6 +221,12 @@ so no pass skips projects that a running server holds in memory; only the MCP
 `prune_orphans` and `prune_symbols` tools apply that skip. `--cache-dir` and
 `--symbols-dir` override the store locations for one run. Run
 `lgrep gc --execute` periodically (or from a systemd timer).
+
+`optimize_caches` can take minutes and gigabytes of memory on a large cache
+(a 170k-row, 16k-version cache took 275 s and peaked at 2.3 GiB). A write that
+commits during the run wins; that cache fails for this run and the next run
+retries it. A running server holds a table version the pass deletes, so its
+reads of that cache fail until it rechecks the latest version, within 5 s.
 
 ## Git worktree deduplication
 
