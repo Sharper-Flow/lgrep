@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import structlog
 
 from lgrep.exceptions import OperationCancelled
+from lgrep.server.memory import IdleTrimmer
 from lgrep.tools.index_repo import credential_values, redact_credentials
 
 if TYPE_CHECKING:
@@ -184,6 +185,13 @@ class RuntimeSupervisor:
         self._recent: deque[RuntimeJob] = deque(maxlen=history_limit)
         self.started_at = time.time()
         self.retain_project = None
+        # Freed native scan memory stays in malloc arenas until trimmed.
+        self._idle_trimmer = IdleTrimmer(self.is_idle)
+
+    def is_idle(self) -> bool:
+        """Return whether no job of any lane is queued or running."""
+        with self._lock:
+            return not self._active
 
     def submit_symbol_index(
         self,
@@ -409,6 +417,7 @@ class RuntimeSupervisor:
         self._build_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._symbol_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._explicit_executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._idle_trimmer.close()
 
     def _create_job(
         self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE
@@ -479,6 +488,7 @@ class RuntimeSupervisor:
             job = self._active.pop(job_id, None)
             if job is None:
                 return
+            idle = not self._active
             job.status = status
             job.finished_at = time.time()
             if error is not None:
@@ -520,6 +530,8 @@ class RuntimeSupervisor:
                 "error": job.error,
             }
         log.info("runtime_job_finished", **fields)
+        if idle:
+            self._idle_trimmer.notify_idle()
 
 
 def _explicit_budget_from_env() -> float:

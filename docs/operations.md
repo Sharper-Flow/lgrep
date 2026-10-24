@@ -444,6 +444,21 @@ lgrep:
   serialized index bytes, not parsed heap or RSS. In-flight callers can keep
   evicted objects alive. Indexes larger than the limit remain readable from disk
   but bypass retention, so repeated queries on those indexes parse them again.
+- Its `process_memory` snapshot is the process-level view and is separate from
+  `symbol_cache`. `rss_bytes` and `swap_bytes` come from `/proc` (null where
+  unreadable). `lance_cache_bytes` is the current size of the one LanceDB
+  session that every semantic store shares; `lance_cache_limit_bytes` is its
+  fixed bound (256 MiB index plus 256 MiB metadata cache), whatever the number
+  of open owners. RSS above that cache is mostly native heap from LanceDB
+  scans, not Python objects.
+- On glibc the server caps malloc arenas at startup (`malloc_arena_max`, 4)
+  and returns free heap to the OS after the runtime goes idle, at most once
+  every 30 seconds (`heap_trims` counts trims). Without both, memory freed
+  after scans stays in fragmented per-thread arenas and RSS climbs over days.
+  Other C libraries report `malloc_arena_max: null` and no trims. Neither
+  bound shrinks a process that already grew; that takes a restart on the
+  new release. Uncompacted tables with many fragments make each scan
+  allocate more.
 - `status_semantic(path="")` is intentionally cheap and memory-only. Pass a
   specific `path` when you need deep file/chunk counts.
 - Destructive cache cleanup over MCP requires the explicit server-side

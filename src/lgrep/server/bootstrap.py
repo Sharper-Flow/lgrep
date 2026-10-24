@@ -178,6 +178,11 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     """
     global _startup_transport
 
+    # Before any worker or LanceDB thread exists, so the cap binds every arena.
+    from lgrep.server.memory import cap_malloc_arenas
+
+    cap_malloc_arenas()
+
     # Import here to avoid circular imports at module load time
     from lgrep.server import mcp
 
