@@ -330,14 +330,23 @@ async def _shutdown(ctx: LgrepContext) -> None:
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
-    """Manage application lifecycle with optional eager warming."""
+    """Manage application lifecycle with optional eager warming.
+
+    Warm-up runs in the background so the server answers ``initialize`` at
+    once; hosts such as Vision abandon a server that is slow to handshake.
+    Tool calls that arrive mid-warm share the same per-owner initialization.
+    """
     ctx = await _startup(server)
-    await _warm_projects(ctx)
-    sweep_task = asyncio.create_task(_schedule_startup_sweep(ctx))
+    background = [
+        asyncio.create_task(_warm_projects(ctx)),
+        asyncio.create_task(_schedule_startup_sweep(ctx)),
+    ]
     try:
         yield ctx
     finally:
-        sweep_task.cancel()
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         await _shutdown(ctx)
 
 
