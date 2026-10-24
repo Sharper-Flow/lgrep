@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +40,35 @@ EMBEDDING_DIM = 1024
 
 # Table name
 CHUNKS_TABLE = "chunks"
+
+# Bounds of the one LanceDB session every chunk-store connection shares. A
+# connection without a session gets its own default 6 GiB index and 1 GiB
+# metadata cache, so the daemon's bound would grow with its open owners. A
+# bounded probe over three live caches held RSS flat with these bounds at
+# about 7% more scan time than the default.
+LANCE_INDEX_CACHE_BYTES = 256 * 1024 * 1024
+LANCE_METADATA_CACHE_BYTES = 256 * 1024 * 1024
+
+_lance_session: lancedb.Session | None = None
+_lance_session_lock = threading.Lock()
+
+
+def lance_session() -> lancedb.Session:
+    """Return the process-wide LanceDB session with fixed cache bounds."""
+    global _lance_session
+    with _lance_session_lock:
+        if _lance_session is None:
+            _lance_session = lancedb.Session(
+                index_cache_size_bytes=LANCE_INDEX_CACHE_BYTES,
+                metadata_cache_size_bytes=LANCE_METADATA_CACHE_BYTES,
+            )
+        return _lance_session
+
+
+def connect_lance(db_path: Path) -> DBConnection:
+    """Connect to a local LanceDB directory through the shared session."""
+    return lancedb.connect(str(db_path), session=lance_session())
+
 
 # File storing paths known to produce zero chunks, so staleness checks do not
 # keep re-attempting them after a complete index window.
@@ -257,7 +287,7 @@ def prune_overlays(
     known = set(state_files)
     if (db_path / (CHUNKS_TABLE + ".lance")).is_dir():
         try:
-            table = lancedb.connect(str(db_path)).open_table(CHUNKS_TABLE)
+            table = connect_lance(db_path).open_table(CHUNKS_TABLE)
         except Exception as e:
             log.warning("prune_overlays_open_failed", db_path=str(db_path), error=str(e))
         if table is not None and "checkout" in table.schema.names:
@@ -501,7 +531,7 @@ class ChunkStore:
         self._line_repair_done = False
         self.db_path.mkdir(parents=True, exist_ok=True)
 
-        self.db: DBConnection = lancedb.connect(str(self.db_path))
+        self.db: DBConnection = connect_lance(self.db_path)
 
         self._table: Table | None = None
         self._fts_indexed = False

@@ -471,6 +471,25 @@ class OwnerStoreSnapshot(TypedDict):
     evictions: int
 
 
+class ProcessMemoryInfo(TypedDict):
+    """Process-level memory, separate from symbol-cache serialized bytes.
+
+    ``rss_bytes``/``swap_bytes`` come from /proc and are None where it is
+    unreadable. ``lance_cache_*`` describe the one LanceDB session every
+    semantic store shares. ``malloc_arena_max`` is None when no cap applies
+    (non-glibc or not set at startup); ``heap_trims`` counts idle trims.
+    """
+
+    rss_bytes: int | None
+    swap_bytes: int | None
+    lance_cache_bytes: int
+    lance_cache_limit_bytes: int
+    lance_index_cache_limit_bytes: int
+    lance_metadata_cache_limit_bytes: int
+    malloc_arena_max: int | None
+    heap_trims: int
+
+
 class DiagnosticsResult(TypedDict):
     """Response for lgrep_diagnostics.
 
@@ -491,6 +510,7 @@ class DiagnosticsResult(TypedDict):
     timeout_abandonment_summary: TimeoutAbandonmentSummary
     symbol_cache: SymbolCacheInfo
     owner_stores: OwnerStoreSnapshot
+    process_memory: ProcessMemoryInfo
 
 
 # --------------------------------------------------------------------------- #
