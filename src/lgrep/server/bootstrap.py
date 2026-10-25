@@ -168,6 +168,30 @@ def shutdown_logging() -> None:
     _release_log_lock()
 
 
+# Tools that refuse every call without LGREP_ALLOW_DESTRUCTIVE_MCP.
+GRANT_ONLY_TOOLS = ("invalidate_cache", "invalidate_worktree_cache")
+# Explicit symbol-index job tools; they need a process-lifetime stdio context.
+STDIO_ONLY_TOOLS = ("index_symbols_folder", "index_symbols_repo", "get_symbol_index_job")
+
+
+def apply_tool_profile(server, transport: str) -> list[str]:
+    """Unregister tools this server could only refuse, and return their names.
+
+    A tool listed to an agent should be able to succeed. The handlers keep
+    their own grant and stdio checks, so in-process callers stay refused.
+    """
+    from lgrep.server.tools_maintenance import _destructive_grant_present
+
+    hidden: list[str] = []
+    if not _destructive_grant_present():
+        hidden.extend(GRANT_ONLY_TOOLS)
+    if transport != "stdio":
+        hidden.extend(STDIO_ONLY_TOOLS)
+    for name in hidden:
+        server.remove_tool(name)
+    return hidden
+
+
 def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 6285) -> int:
     """Start the MCP server.
 
@@ -195,6 +219,9 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     # Preserve the transport for diagnostics and job admission without exposing it as an
     # environment variable that other code could read or mutate.
     _startup_transport = transport
+
+    hidden = apply_tool_profile(mcp, transport)
+    log.info("lgrep_tool_profile", transport=transport, hidden_tools=hidden)
 
     if transport == "streamable-http":
         mcp.settings.host = host

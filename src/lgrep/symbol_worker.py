@@ -58,7 +58,6 @@ WORKER_THREADS = 16
 
 # Plain operations: name -> (module, function). Modules load on first use.
 _QUERIES = {
-    "get_symbol": ("lgrep.tools.get_symbol", "get_symbol"),
     "get_symbols": ("lgrep.tools.get_symbol", "get_symbols"),
     "search_references": ("lgrep.tools.search_references", "search_references"),
     "get_file_outline": ("lgrep.tools.get_file_outline", "get_file_outline"),

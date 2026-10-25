@@ -18,7 +18,7 @@ from lgrep.storage import SearchResult, SearchResults
 
 
 class TestSemanticToolRenames:
-    """Verify the 5 semantic tools are renamed with _semantic suffix."""
+    """Verify the semantic tools carry the _semantic suffix and old names are gone."""
 
     def test_search_semantic_importable(self):
         """lgrep_search_semantic must be importable from server module."""
@@ -31,14 +31,6 @@ class TestSemanticToolRenames:
     def test_status_semantic_importable(self):
         """lgrep_status_semantic must be importable from server module."""
         from lgrep.server import status_semantic  # noqa: F401
-
-    def test_watch_start_semantic_importable(self):
-        """lgrep_watch_start_semantic must be importable from server module."""
-        from lgrep.server import watch_start_semantic  # noqa: F401
-
-    def test_watch_stop_semantic_importable(self):
-        """lgrep_watch_stop_semantic must be importable from server module."""
-        from lgrep.server import watch_stop_semantic  # noqa: F401
 
     def test_old_search_name_gone(self):
         """Old 'search' function name must NOT exist in server module."""
@@ -163,21 +155,6 @@ class TestSemanticToolResponseShapes:
         assert data["chunks"] == 500
         assert data["watching"] is True
         assert data["project"] == "/path"
-
-    @pytest.mark.asyncio
-    async def test_watch_stop_semantic_response_shape(self):
-        """lgrep_watch_stop_semantic must return same JSON shape as old lgrep_watch_stop."""
-        from lgrep.server import LgrepContext, watch_stop_semantic
-
-        mock_ctx = MagicMock(spec=Context)
-        app_ctx = LgrepContext()
-        mock_ctx.request_context.lifespan_context = app_ctx
-
-        response = await watch_stop_semantic(ctx=mock_ctx)
-        data = response
-
-        assert data["stopped"] is True
-        assert data["projects_stopped"] == []
 
     @pytest.mark.asyncio
     async def test_index_semantic_error_shape(self):

@@ -55,6 +55,23 @@ you upgrade from `2.x`, remove any `json.loads(response)` wrappers on tool
 output. See [Upgrade from 2.x](../CHANGELOG.md#upgrade-from-2x) in the
 changelog for the full migration path.
 
+## Tool profile
+
+The server lists only tools it can run in its configuration. With no
+destructive grant, a stdio server lists 17 tools and a server started with
+`--transport streamable-http` lists 14:
+
+| Group | Tools | Listed when |
+|---|---|---|
+| Semantic search | `search_semantic`, `index_semantic`, `status_semantic` | always |
+| Symbol and text queries | `search_symbols`, `search_text`, `search_references`, `get_symbols`, `get_file_outline`, `get_repo_outline`, `get_file_tree`, `list_repos` | always |
+| Maintenance and diagnostics | `prune_orphans`, `prune_symbols`, `lgrep_diagnostics` | always |
+| Explicit symbol-index jobs | `index_symbols_folder`, `index_symbols_repo`, `get_symbol_index_job` | stdio transport |
+| Cache invalidation | `invalidate_cache`, `invalidate_worktree_cache` | `LGREP_ALLOW_DESTRUCTIVE_MCP` set |
+
+A Vision-proxied server runs on stdio, so it lists the job tools. Startup logs
+`lgrep_tool_profile` with the hidden tool names.
+
 ## Argument names and normalization
 
 Each concept carries one declared name in every tool schema:
@@ -73,7 +90,7 @@ declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` �
 declares the canonical name and the caller did not send both spellings. Any
 other undeclared argument is refused with the tool's valid argument names;
 `symbol_id` on `search_references` and `path` on `index_symbols_repo` are
-refused with the tool that declares them (`get_symbol` and
+refused with the tool that declares them (`get_symbols` and
 `index_symbols_folder`).
 
 ## Cache maintenance
@@ -182,7 +199,9 @@ any shared deployment — including a Vision-proxied server, where the
 subprocess transport still reports `stdio` — and run the CLI
 (`lgrep prune-orphans --execute` / `lgrep prune-symbols --execute`) so the
 operator is explicit. The `invalidate_cache` and `invalidate_worktree_cache`
-tools have no CLI equivalent.
+tools have no CLI equivalent. Because they can only refuse without the grant,
+the server does not list them at all unless the grant is set at startup; the
+pruners stay listed because their dry-run preview is useful.
 
 MCP pruner calls also skip projects currently loaded in the running server.
 `prune_orphans` additionally skips the `symbols/` cache;
@@ -287,7 +306,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   search still returns stale results while the refresh runs, or if it fails.
   Results become fresh once a refresh completes, with no operator
   configuration.
-- `watch_start_semantic` (`LGREP_AUTO_WATCH`) is an incremental-freshness
+- File watching (`LGREP_AUTO_WATCH`) is an incremental-freshness
   **optimization** (per-file background re-index on edit), not a correctness
   dependency. `index_semantic` is only needed for first-time setup or to
   force a guaranteed-fresh refresh before a specific query.
@@ -299,7 +318,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   window. `LGREP_AUTO_REFRESH=0` opts out of the symbol-index refresh gate;
   every other value keeps it on.
 - **`Repository not indexed` from symbol tools:** local git checkouts build
-  their own index on the first symbol query (`search_symbols`, `get_symbol`,
+  their own index on the first symbol query (`search_symbols`,
   `get_symbols`, `search_references`). Seeding is root-to-root: when the
   queried path is a checkout root and a linked worktree of the same
   repository already has an index, the new index is seeded from it and an
@@ -355,9 +374,11 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
 target metadata, and truncation; failed status contains a bounded `error`.
 
 Only a recorded `stdio` startup transport admits these three tools. HTTP has no
-process-lifetime job context; HTTP, missing context, and unknown transport return
-`symbol_index_jobs_unavailable`, retryable=false, without a job ID or work. This
-does not change HTTP lifespan behavior or the query-triggered symbol refresh lane.
+process-lifetime job context, so a server started with
+`--transport streamable-http` does not list them. In-process callers without a
+stdio context still get `symbol_index_jobs_unavailable`, retryable=false, without
+a job ID or work. This does not change HTTP lifespan behavior or the
+query-triggered symbol refresh lane.
 
 Each daemon admits one nonterminal explicit job on a dedicated one-worker lane,
 independent of query, symbol-refresh, and shared semantic-build workers. An identical
@@ -439,8 +460,7 @@ lgrep:
   callers timed out, keep their owners active. Eviction preserves disk data;
   the next query reopens an unchanged index without indexing or embedding.
 - Eviction stops an idle owner's watchers and cancels pending watcher events.
-  Reopening does not restart those watchers. Use `watch_start_semantic` if
-  incremental file watching is still wanted. Search staleness checks remain
+  Reopening does not restart those watchers. Search staleness checks remain
   available independently of watching.
 - If every owner slot is active or retiring, admission returns
   `code: "project_capacity_busy"` and `retryable: true`. Retry after active work

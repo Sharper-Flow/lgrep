@@ -1,4 +1,4 @@
-"""lgrep_get_symbol and lgrep_get_symbols tool implementations.
+"""lgrep_get_symbols tool implementation.
 
 Retrieves full symbol metadata and source code by symbol ID.
 """
@@ -87,61 +87,6 @@ def _get_file_bytes(store: IndexStore, repo_key: str, file_path: str) -> bytes |
         log.warning("github_source_fetch_failed", url=url, error=str(e))
         return None
     return resp.content
-
-
-def get_symbol(
-    symbol_id: str,
-    repo_path: str,
-    storage_dir: Path | str | None = None,
-) -> dict:
-    """Get full metadata and source code for a single symbol.
-
-    Args:
-        symbol_id: Stable symbol ID in format "file_path:kind:name"
-        repo_path: Absolute path to the indexed repository
-        storage_dir: Optional override for the symbol index storage directory
-
-    Returns:
-        Dict with symbol dict including the source field.
-        Returns error dict if the repo is not indexed, the symbol is not found,
-        or the stored source range no longer matches the symbol.
-    """
-    # Input validation
-    if not symbol_id or not symbol_id.strip():
-        return error_response("symbol_id must not be empty")
-
-    store = IndexStore(storage_dir=storage_dir)
-
-    repo_key = normalize_repo_key(repo_path)
-    # First use of an unindexed local git checkout builds that checkout's
-    # own index instead of refusing.
-    if store.load(repo_key) is None:
-        from lgrep.tools._index_bootstrap import ensure_symbol_index
-
-        ensure_symbol_index(repo_path, storage_dir=storage_dir)
-    index = store.load(repo_key)
-    if index is None:
-        return error_response(
-            f"Repository not indexed: {repo_path}. Run lgrep_index_symbols_folder first.",
-        )
-
-    sym_data = index.symbols.get(symbol_id)
-    if sym_data is None:
-        return error_response(
-            f"Symbol not found: {symbol_id}",
-        )
-
-    # Retrieve source bytes
-    sym_data = dict(sym_data)  # copy to avoid mutating the index
-    try:
-        source_bytes = _get_source_bytes(store, repo_key, sym_data, {})
-    except ValueError as e:
-        return error_response(str(e))
-    sym_data["source"] = source_bytes.decode("utf-8", errors="replace") if source_bytes else None
-
-    return {
-        "symbol": sym_data,
-    }
 
 
 def get_symbols(

@@ -46,7 +46,7 @@ TOOL_SYNONYMS: dict[tuple[str, str], str] = {
 # owning tool so the caller reroutes instead of retrying the wrong tool with
 # renamed arguments.
 WRONG_TOOL_HINTS: dict[tuple[str, str], str] = {
-    ("search_references", "symbol_id"): "get_symbol",
+    ("search_references", "symbol_id"): "get_symbols",
     ("index_symbols_repo", "path"): "index_symbols_folder",
 }
 

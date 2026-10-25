@@ -39,8 +39,6 @@ EXPECTED_SEMANTIC_TOOLS = {
     "search_semantic",
     "index_semantic",
     "status_semantic",
-    "watch_start_semantic",
-    "watch_stop_semantic",
 }
 
 EXPECTED_SYMBOL_TOOLS = {
@@ -54,7 +52,6 @@ EXPECTED_SYMBOL_TOOLS = {
     "search_symbols",
     "search_text",
     "search_references",
-    "get_symbol",
     "get_symbols",
     "invalidate_cache",
     "prune_orphans",
@@ -362,13 +359,6 @@ class TestSymbolToolResponses:
                 "lane": "symbol",
             }
         ]
-
-    @pytest.mark.asyncio
-    async def test_get_symbol_missing_index_returns_error(self, tmp_path):
-        fn = self._get_tool_fn("get_symbol")
-        result = await fn(symbol_id="hello.py:function:greet", path=str(tmp_path))
-        data = result
-        assert "error" in data
 
     @pytest.mark.asyncio
     async def test_get_symbols_missing_index_returns_error(self, tmp_path):
@@ -746,13 +736,13 @@ class TestUnknownArgumentRefused:
             assert argument in str(excinfo.value)
 
     @pytest.mark.asyncio
-    async def test_search_references_symbol_id_names_get_symbol(self):
+    async def test_search_references_symbol_id_names_get_symbols(self):
         with pytest.raises(ToolError) as excinfo:
             await mcp.call_tool(
                 "search_references",
                 {"query": "absent", "path": "/tmp", "symbol_id": "a.py:function:absent"},
             )
-        assert "get_symbol" in str(excinfo.value)
+        assert "'get_symbols'" in str(excinfo.value)
 
     @pytest.mark.asyncio
     async def test_index_symbols_repo_path_names_index_symbols_folder(self):
@@ -881,9 +871,9 @@ class TestRegistryOneNamePerConcept:
         assert "repo" in declared
         assert "path" not in declared
 
-    def test_get_symbol_keeps_path_required(self):
-        tool = self._tools()["get_symbol"]
-        assert "path" in tool.parameters.get("required", [])
+    def test_get_symbols_keeps_path_required(self):
+        tool = self._tools()["get_symbols"]
+        assert {"symbol_ids", "path"} <= set(tool.parameters.get("required", []))
 
     def test_search_tools_require_query_and_path(self):
         tools = self._tools()

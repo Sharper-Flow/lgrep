@@ -39,12 +39,6 @@ from lgrep.server import (
 from lgrep.server import (
     status_semantic as lgrep_status,
 )
-from lgrep.server import (
-    watch_start_semantic as lgrep_watch_start,
-)
-from lgrep.server import (
-    watch_stop_semantic as lgrep_watch_stop,
-)
 from lgrep.storage import SearchResult, SearchResults
 
 
@@ -976,34 +970,6 @@ class TestServerErrorPaths:
         assert ("status_indexed_files", "_get_project_stats", "/proj/scoped") in calls
 
     @pytest.mark.asyncio
-    async def test_lgrep_watch_stop_when_not_watching(self):
-        """Should return graceful response when not watching."""
-        mock_ctx = MagicMock(spec=Context)
-        app_ctx = LgrepContext()
-        mock_ctx.request_context.lifespan_context = app_ctx
-
-        response = await lgrep_watch_stop(ctx=mock_ctx)
-        data = response
-        assert data["stopped"] is True
-        assert data["projects_stopped"] == []
-
-    @pytest.mark.asyncio
-    async def test_lgrep_watch_start_invalid_path(self):
-        """Should return error for nonexistent path."""
-        mock_ctx = MagicMock(spec=Context)
-        app_ctx = LgrepContext()
-        mock_ctx.request_context.lifespan_context = app_ctx
-
-        response = await lgrep_watch_start(path="/nonexistent/path", ctx=mock_ctx)
-        data = response
-        assert "error" in data
-        assert "does not exist" in data["error"]
-
-
-class TestMaxProjectsLimit:
-    """Tests for MAX_PROJECTS resource guard."""
-
-    @pytest.mark.asyncio
     async def test_max_projects_rejects_when_all_busy(self, tmp_path):
         """Only active owners, rather than past project count, refuse admission."""
         app_ctx = LgrepContext(voyage_api_key="mock-key")
@@ -1056,30 +1022,7 @@ class TestMaxProjectsLimit:
 
 
 class TestWatcherBehavior:
-    """Tests for watcher start/stop edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_watch_start_already_watching(self, tmp_path):
-        """Should return 'Already watching' when watcher is already active."""
-        mock_ctx = MagicMock(spec=Context)
-        app_ctx = LgrepContext(voyage_api_key="mock-key")
-
-        # Set up a ProjectState that is already watching
-        state = ProjectState(
-            db=MagicMock(),
-            indexer=MagicMock(),
-            watcher=MagicMock(),
-            watching=True,
-        )
-        path_key = str(tmp_path.resolve())
-        app_ctx.projects[path_key] = state
-        mock_ctx.request_context.lifespan_context = app_ctx
-
-        response = await lgrep_watch_start(path=str(tmp_path), ctx=mock_ctx)
-        data = response
-
-        assert data["watching"] is True
-        assert data["message"] == "Already watching"
+    """Tests for watcher teardown edge cases."""
 
     @pytest.mark.asyncio
     async def test_stop_watcher_resets_state(self):

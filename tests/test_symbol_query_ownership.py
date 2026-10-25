@@ -18,7 +18,7 @@ from lgrep.server.lifecycle import _shutdown
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage.index_store import IndexStore
 from lgrep.tools import search_symbols
-from lgrep.tools.get_symbol import get_symbol
+from lgrep.tools.get_symbol import get_symbols
 from lgrep.tools.index_folder import index_folder
 
 
@@ -117,8 +117,8 @@ async def test_two_queries_return_pending_while_one_observable_refresh_finishes(
         assert jobs[0]["project"] == str(state.root)
         old_id = "m35.ts:function:before_35"
         assert old_id in IndexStore().load(str(state.root)).symbols
-        stale = get_symbol(old_id, str(state.root))
-        assert "error" in stale and "symbol" not in stale
+        (stale,) = get_symbols([old_id], str(state.root))["symbols"]
+        assert "error" in stale and "source" not in stale
         monkeypatch.setattr(server, "TOOL_TIMEOUT_S", 10.0)
         await drain(state)
         found = await search(app, state.root, "after_35")

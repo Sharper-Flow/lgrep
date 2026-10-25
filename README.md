@@ -23,7 +23,7 @@ Without it, an agent explores a repository with `glob`, `grep`, and random file 
 |---|---|
 | **What** | MCP server with two engines: semantic search and exact symbol lookup |
 | **Stack** | Python 3.11–3.13, [Voyage Code 4](https://docs.voyageai.com/) embeddings, [LanceDB](https://lancedb.com), [tree-sitter](https://tree-sitter.github.io/) |
-| **Surface** | 22 MCP tools, a CLI, and a one-command OpenCode installer |
+| **Surface** | 14–19 MCP tools depending on transport and grants, a CLI, and a one-command OpenCode installer |
 | **Languages** | 30+ for semantic chunking, 165+ for symbol parsing |
 | **Size** | ~16k lines of source, ~25k lines of tests (1,100+ test functions) |
 | **Delivery** | CI on Python 3.11, 3.12, and 3.13; automatic release on every merge to `main` |
@@ -179,7 +179,7 @@ The active agent profile must also allow the lgrep tools. A profile that allows 
 
 1. Ask an intent question: `search_semantic(query="authentication flow", path="/path/to/project")`. A project with no index is indexed on its first search.
 2. Inspect structure: `get_file_outline(path=...)` or `get_repo_outline(path=...)`.
-3. Retrieve exact symbols: `search_symbols(...)`, then `get_symbol(symbol_id="src/auth.py:function:authenticate", path=...)`.
+3. Retrieve exact symbols: `search_symbols(...)`, then `get_symbols(symbol_ids=["src/auth.py:function:authenticate"], path=...)`.
 4. List candidate usages, bounded and not exhaustive: `search_references(query="authenticate", path=...)`.
 
 Symbol IDs are deterministic `file_path:kind:name` strings, for example `src/auth.py:class:AuthManager` or `src/auth.py:method:login`.
@@ -188,8 +188,10 @@ Symbol IDs are deterministic `file_path:kind:name` strings, for example `src/aut
 
 The server registers the names below, and MCP clients receive them unchanged. OpenCode displays each one with the server key as a prefix: with an MCP entry named `lgrep`, `search_semantic` appears as `lgrep_search_semantic`. Only `lgrep_diagnostics` has the prefix in its registered name. Response shapes and argument rules are in [docs/operations.md](docs/operations.md#mcp-response-format).
 
+The server lists only the tools it can run in its configuration. A stdio server lists 17 tools. A server started with `--transport streamable-http` lists 14, because the three explicit symbol-index job tools need a stdio process. The two cache-invalidation tools appear only when the server starts with `LGREP_ALLOW_DESTRUCTIVE_MCP`. Symbol queries index a missing local checkout on first use, so most agents never need the job tools.
+
 <details>
-<summary><strong>MCP tools</strong> (22)</summary>
+<summary><strong>MCP tools</strong> (19 at most)</summary>
 
 ### Semantic tools
 
@@ -198,8 +200,6 @@ The server registers the names below, and MCP clients receive them unchanged. Op
 | `search_semantic(query, path, limit=10, hybrid=true, include_content=false)` | Search code by natural-language meaning |
 | `index_semantic(path)` | Build or refresh the semantic index |
 | `status_semantic(path="")` | Index/watcher status; omit `path` for all loaded projects |
-| `watch_start_semantic(path)` | Start background re-indexing on file changes |
-| `watch_stop_semantic(path="")` | Stop one watcher or all |
 
 ### Symbol tools
 
@@ -215,9 +215,8 @@ The server registers the names below, and MCP clients receive them unchanged. Op
 | `search_symbols(query, path, limit=20, kind=None)` | Search symbols by name (case-insensitive substring) |
 | `search_text(query, path, limit=50, case_sensitive=false)` | Search literal text |
 | `search_references(query, path, limit=20, usage_filter="production_first", kind=None)` | Bounded candidate usages; not compiler-exhaustive |
-| `get_symbol(symbol_id, path)` | One symbol's metadata and source |
-| `get_symbols(symbol_ids, path)` | Batch symbol retrieval |
-| `invalidate_cache(path)` | Drop one repo's symbol index; needs the destructive-MCP grant |
+| `get_symbols(symbol_ids, path)` | Metadata and source for one or more symbols; an unknown ID or stale range errors in its own entry |
+| `invalidate_cache(path)` | Drop one repo's symbol index (listed only with the destructive-MCP grant) |
 
 ### Maintenance and diagnostics
 
@@ -225,10 +224,10 @@ The server registers the names below, and MCP clients receive them unchanged. Op
 |---|---|
 | `prune_orphans(dry_run=true)` | Preview (or delete) orphan semantic cache dirs |
 | `prune_symbols(dry_run=true)` | Preview (or delete) stale symbol-store indexes |
-| `invalidate_worktree_cache(paths)` | Remove a worktree's cache alias and overlay rows |
+| `invalidate_worktree_cache(paths)` | Remove a worktree's cache alias and overlay rows (listed only with the destructive-MCP grant) |
 | `lgrep_diagnostics()` | Read-only daemon snapshot: PID, uptime, projects, jobs |
 
-Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; the pruners also skip projects loaded in the running server.
+Without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, the pruners return a preview instead of deleting; they also skip projects loaded in the running server. Background file watching is configured with `LGREP_AUTO_WATCH`, not a tool.
 
 </details>
 
