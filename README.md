@@ -7,22 +7,108 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Sharper-Flow/lgrep/actions/workflows/ci.yml"><img src="https://github.com/Sharper-Flow/lgrep/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Sharper-Flow/lgrep/releases"><img src="https://img.shields.io/github/v/release/Sharper-Flow/lgrep" alt="Latest release" /></a>
   <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11+-3776ab?logo=python&logoColor=white" alt="Python 3.11+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
 </p>
 
-`lgrep` is a local-first code-intelligence MCP server for AI coding agents such as [OpenCode](https://github.com/opencode-ai/opencode). Agents search by meaning when they do not know the symbol yet, search by symbol when they do, and inspect file and repo structure before opening code — reusing one warm local server across sessions instead of repeating `glob`/`grep`/random-file-read cycles. Working trees stay on disk; only short semantic queries and indexing payloads reach the Voyage API, and symbol lookup is fully local with no API key.
+`lgrep` is a code-intelligence server for AI coding agents. It speaks the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), so an agent such as [OpenCode](https://github.com/opencode-ai/opencode) can search a codebase by meaning when it does not know the name of what it wants, and by symbol when it does.
 
-## How it works
+Without it, an agent explores a repository with `glob`, `grep`, and random file reads, and repeats that work in every session. `lgrep` keeps both indexes warm in one long-running local server and answers from them instead. Indexes stay on the machine. The semantic engine sends only queries and the chunks it embeds to the Voyage API; symbol lookup is fully local and needs no API key.
 
-Two engines behind one MCP server:
+## At a glance
 
-- **Semantic engine** — natural-language code search: Voyage Code 4 embeddings, AST-aware chunking, local LanceDB storage, hybrid retrieval with reranking. 30+ languages, text fallback where needed.
-- **Symbol engine** — exact structure via tree-sitter parsing into a local JSON index: symbol search, file/repo outlines, candidate references, and source retrieval with no API call. 165+ languages via tree-sitter-language-pack.
+| | |
+|---|---|
+| **What** | MCP server with two engines: semantic search and exact symbol lookup |
+| **Stack** | Python 3.11–3.13, [Voyage Code 4](https://docs.voyageai.com/) embeddings, [LanceDB](https://lancedb.com), [tree-sitter](https://tree-sitter.github.io/) |
+| **Surface** | 22 MCP tools, a CLI, and a one-command OpenCode installer |
+| **Languages** | 30+ for semantic chunking, 165+ for symbol parsing |
+| **Size** | ~16k lines of source, ~25k lines of tests (1,100+ test functions) |
+| **Delivery** | CI on Python 3.11, 3.12, and 3.13; automatic release on every merge to `main` (64 releases) |
 
-Staleness is handled automatically: each semantic search runs a staleness pre-flight and refreshes in the background when the index has drifted. Details in [docs/operations.md](docs/operations.md).
+## Architecture
 
-## Installation
+```mermaid
+flowchart LR
+    agent["AI agent<br/>(OpenCode)"] -- "MCP: stdio or<br/>streamable HTTP" --> server
+
+    subgraph daemon["lgrep server process"]
+        server["Tool layer<br/>typed arguments and responses"] --> supervisor["Runtime supervisor"]
+        supervisor --> qlane["Query lane"]
+        supervisor --> blane["Build lane"]
+        supervisor --> slane["Symbol lane"]
+        qlane --> semantic["Semantic engine"]
+        blane --> indexer["Indexer + file watcher"]
+        indexer --> semantic
+    end
+
+    semantic --> lance[("LanceDB<br/>vectors + full-text index")]
+    semantic -- "embed query" --> voyage["Voyage API"]
+    indexer -- "embed new or<br/>changed chunks" --> voyage
+    slane -- "pipe" --> worker
+
+    subgraph worker["Symbol worker process (spawned)"]
+        ts["tree-sitter parsing"] --> symidx[("Symbol index<br/>JSON on disk")]
+    end
+```
+
+**Semantic engine.** Files are split into AST-aware chunks, embedded with Voyage Code 4, and stored in a local LanceDB table. A query runs vector search and full-text search and fuses the two rankings with reciprocal rank fusion. Each search first checks whether the index has drifted from disk. When it has, the search answers from the current index, flags it as stale, and refreshes in the background.
+
+**Symbol engine.** tree-sitter parses each file into symbols, hierarchy, and identifier occurrences, stored as a compact JSON index per repository. It serves symbol search, file and repository outlines, source retrieval, and candidate references with no network call.
+
+**Runtime.** Blocking work never runs on the event loop. A supervisor routes each job to a bounded lane: queries, builds, or symbol work. Every job takes a cancellation event and a time budget, so a request that times out frees its thread. Symbol work runs in a separate spawned process, so CPU-bound parsing never holds the server's interpreter lock.
+
+**Cache custody.** Git worktrees of one repository can share one semantic cache. Each worktree stores only the files that differ from the main checkout. Garbage-collection commands remove orphaned caches, stale symbol indexes, and old LanceDB table versions. Deleting tools refuse to run unless the server operator grants it.
+
+## Engineering highlights
+
+lgrep runs as one shared daemon that serves many agent sessions at once, on repositories of several thousand files. Most of its engineering went into keeping that daemon fast, bounded, and correct under that load. Each item below states the measured problem, the fix, and the result recorded in the pull request.
+
+| Problem | Before | After | PR |
+|---|---|---|---|
+| Symbol index rebuild cost grew with index size for every changed file | 81.6 s cold build, 500 files | 15.1 s | [#53](https://github.com/Sharper-Flow/lgrep/pull/53) |
+| Symbol index stored full line text for every identifier | 432 MB index body | 60 MB (86% smaller, identical results) | [#45](https://github.com/Sharper-Flow/lgrep/pull/45) |
+| LanceDB kept every table version forever | 9.3 GiB cache, ~270 ms query | 1.7 GiB, ~22 ms | [#50](https://github.com/Sharper-Flow/lgrep/pull/50) |
+| Freed native memory stayed in fragmented allocator arenas | idle RSS climbing 1,778 → 2,482 MiB | flat at 697–792 MiB | [#48](https://github.com/Sharper-Flow/lgrep/pull/48) |
+| Worktree searches scanned a large path-exclusion filter | 7.8–8.6 s hybrid search | 0.91–0.96 s, same top 10 | [#51](https://github.com/Sharper-Flow/lgrep/pull/51) |
+| Symbol builds held the interpreter lock, stalling other tools | text search during a build: 1.14 s worst case | 0.095 s | [#54](https://github.com/Sharper-Flow/lgrep/pull/54) |
+| Symbol worker imported the vector database it never uses | 4.1–5.0 s cold start, ~204 MB | 0.14 s, ~73 MB | [#55](https://github.com/Sharper-Flow/lgrep/pull/55) |
+
+### Algorithmic: a quadratic index merge
+
+Profiling a cold symbol build of a 500-file repository showed 108 s of 134 s spent removing each changed file's old entries: the merge rebuilt the whole symbol table and every occurrence bucket once per file, so k files cost k × index size. The merge now indexes symbols and occurrence buckets by source file, so a removal touches only the buckets that hold that file's rows. A cold build fell from 81.6 s to 15.1 s, and merging 100 changed files into a 427 MB index fell from 34.9 s to 1.44 s. The saved index was identical field for field. ([#53](https://github.com/Sharper-Flow/lgrep/pull/53))
+
+### Storage: lossless interning of the symbol index
+
+On a 1,154-file repository the symbol index body was 432 MB, mostly repeated line text and identifiers. Occurrences are now stored in one interned JSON encoding and rebuilt into ordinary dictionaries on load. The body shrank 86% to 60 MB, every file, symbol, occurrence, and query result digest stayed identical, and warm reference queries fell from 7.7–8.1 s to 12–17 ms. Older indexes migrate in place on first load. ([#45](https://github.com/Sharper-Flow/lgrep/pull/45))
+
+### Storage: table versions nobody deleted
+
+Every LanceDB write leaves a table version, and nothing removed them. The semantic cache on one host reached 97 GiB, and one 170k-row table held 16,772 versions: 8.0 GiB of manifests beside 2.0 GiB of data. `lgrep gc` now compacts each table, deletes old versions, and retrains the vector index. Vector and hybrid search re-rank candidates by exact distance, which keeps top-10 agreement with exact search at 0.98. On a copy of that table, size fell from 9.3 GiB to 1.7 GiB and query time from ~270 ms to ~22 ms. Server connections recheck the latest version every 5 s, so a running server keeps working after another process cleans its tables. ([#50](https://github.com/Sharper-Flow/lgrep/pull/50))
+
+### Memory: native heap fragmentation in a long-lived daemon
+
+After 58 idle hours, the shared daemon held 33 GiB of resident memory plus 27 GiB of swap, while its own caches reported almost nothing. Allocator evidence showed about 1,500 fragmented 64 MiB glibc heap arenas left behind by LanceDB scans. The fix caps malloc arenas at startup, returns free heap to the OS on a timer after work finishes, and shares one bounded LanceDB session across all stores. In a 10-cycle probe over three real caches, idle memory stayed flat at 697–792 MiB, where the old code climbed from 1,778 to 2,482 MiB. `lgrep_diagnostics` now reports these figures. ([#48](https://github.com/Sharper-Flow/lgrep/pull/48))
+
+### Concurrency: one daemon, many sessions
+
+- **Cooperative cancellation.** A search that timed out abandoned its auto-index thread, which kept running and held a worker forever. Enough of them wedged the pool permanently. A cancellation event now reaches every blocking step, including the embedding retry sleep, and a wall-clock budget backs it up. An abandoned job on a 2,157-file repository now ends and frees its worker. ([#3](https://github.com/Sharper-Flow/lgrep/pull/3))
+- **Lanes and off-loop I/O.** Six tool calls ran 41–71 s, well past their timeout, because first-touch LanceDB I/O ran synchronously on the event loop and the timeout never fired. Store opening moved to worker threads, and index builds got their own lane, so queries no longer queue behind builds. ([#28](https://github.com/Sharper-Flow/lgrep/pull/28))
+- **Process isolation for CPU-bound work.** Symbol parsing is pure Python and holds the GIL. All symbol work now runs in one persistent spawned worker. A crashed worker is replaced on the next call, and its in-flight calls return a retryable error. During a full symbol build, the slowest overlapping text search fell from 1.143 s to 0.095 s ([#54](https://github.com/Sharper-Flow/lgrep/pull/54)). A follow-up made the storage package load its vector-database re-exports lazily, so the worker never imports LanceDB: cold start fell from 4.1–5.0 s to 0.14 s, and worker memory from ~204 MB to ~73 MB ([#55](https://github.com/Sharper-Flow/lgrep/pull/55)).
+- **Fast startup.** MCP `initialize` waited for every warm-up path to open its store, 9.99 s with five paths, which tripped the host's spawn deadline. Warm-up now runs after the handshake, which answers in 2.45 s. ([#49](https://github.com/Sharper-Flow/lgrep/pull/49))
+
+### Correctness: worktrees and embedding provenance
+
+- **Per-worktree views of one cache.** Shared caches once made every git worktree search the first checkout's files. Rows now carry a checkout column, and each worktree stores overlay rows only for files that differ from the main checkout ([#26](https://github.com/Sharper-Flow/lgrep/pull/26)). A later change replaced the large exclusion filter with a checkout prefilter plus over-fetch: hybrid search fell from 7.8–8.6 s to 0.91–0.96 s with the same top 10 ([#51](https://github.com/Sharper-Flow/lgrep/pull/51)).
+- **Model provenance.** Voyage Code 3 and Code 4 both emit 1024-dimensional vectors, so an index built by the old model loads without error, but its vectors cannot be compared with new query vectors. Every chunk now records the model that embedded it, and a mismatched table is rebuilt on first use instead of being searched. ([#14](https://github.com/Sharper-Flow/lgrep/pull/14))
+
+### How changes ship
+
+Each change above landed as a pull request that records the problem, the measurement, and the tests that cover the fix. CI runs Ruff and the full test suite on Python 3.11, 3.12, and 3.13, and a successful CI run on `main` publishes a release automatically.
+
+## Quick start
 
 Requirements: Python 3.11+, and a [Voyage API key](https://dash.voyageai.com/) for the semantic engine only.
 
@@ -33,6 +119,11 @@ pip install git+https://github.com/Sharper-Flow/lgrep.git
 # Or from a source checkout
 git clone https://github.com/Sharper-Flow/lgrep.git
 cd lgrep && pip install .
+
+# Try it without an agent
+lgrep index-symbols /path/to/project
+lgrep search-symbols "authenticate" /path/to/project
+VOYAGE_API_KEY=your-key lgrep search-semantic "where are sessions validated" /path/to/project
 ```
 
 ## OpenCode setup
@@ -78,7 +169,7 @@ lgrep --transport streamable-http --host 127.0.0.1 --port 6285
 { "mcp": { "lgrep": { "type": "remote", "url": "http://localhost:6285/mcp", "enabled": true } } }
 ```
 
-Optional: `lgrep init-ignore /path/to/project` scaffolds a `.lgrepignore` (in addition to the always-respected `.gitignore`). Cache maintenance, worktree dedup, and daemon tuning live in [docs/operations.md](docs/operations.md).
+Optional: `lgrep init-ignore /path/to/project` scaffolds a `.lgrepignore` (in addition to the always-respected `.gitignore`). Cache maintenance, worktree dedup, and daemon tuning live in [docs/operations.md](docs/operations.md). A complete config example is in [examples/opencode.json](examples/opencode.json).
 
 The active agent profile must also expose the lgrep tools in its manifest: a profile that allows only `read`/`glob`/`grep` cannot choose lgrep even when the server is configured.
 
@@ -91,9 +182,12 @@ The active agent profile must also expose the lgrep tools in its manifest: a pro
 
 Symbol IDs are deterministic `file_path:kind:name` strings, for example `src/auth.py:class:AuthManager` or `src/auth.py:method:login`.
 
-## Tool reference
+## Reference
 
-The server registers these bare names, and every MCP client sees them as registered. OpenCode displays them with the server-key prefix, so with an MCP entry named `lgrep`, `search_semantic` appears as `lgrep_search_semantic`. Only `lgrep_diagnostics` carries the prefix in its registered name.
+The server registers these bare names, and every MCP client sees them as registered. OpenCode displays them with the server-key prefix, so with an MCP entry named `lgrep`, `search_semantic` appears as `lgrep_search_semantic`. Only `lgrep_diagnostics` carries the prefix in its registered name. Response shapes and argument rules are in [docs/operations.md](docs/operations.md#mcp-response-format).
+
+<details>
+<summary><strong>MCP tools</strong> (22)</summary>
 
 ### Semantic tools
 
@@ -134,7 +228,10 @@ The server registers these bare names, and every MCP client sees them as registe
 
 Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant; the pruners also skip projects loaded in the running server.
 
-## CLI reference
+</details>
+
+<details>
+<summary><strong>CLI commands</strong></summary>
 
 | Command | Purpose |
 |---|---|
@@ -154,7 +251,10 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 
 `search` and `index` are aliases for `search-semantic` and `index-semantic`; `init-lgrepignore` aliases `init-ignore`. Prune commands are dry-run by default and `--execute`/`--dry-run` are mutually exclusive.
 
-## Configuration
+</details>
+
+<details>
+<summary><strong>Environment variables</strong></summary>
 
 | Variable | Default | Description |
 |---|---|---|
@@ -180,6 +280,8 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 | `LGREP_WORKTREE_DEDUP` | unset | Any non-empty value makes git worktrees of one repo share one semantic cache |
 | `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lets MCP prune/invalidate tools delete; keep unset on any shared server |
 
+</details>
+
 ## Transport and security
 
 `lgrep` supports `stdio` and `streamable-http`. Use stdio for the local single-session default; use the shared HTTP transport only when you intentionally want one shared local daemon.
@@ -202,7 +304,7 @@ a truncated completion is not full repository coverage. See
 - **Slow first semantic index** — the first run embeds the whole project; later runs skip unchanged files by content hash.
 - **`Repository not indexed`** — symbol tools auto-build the index on first query for local git checkouts; subdirectory queries need an explicit `index_symbols_folder`. Details in [operations](docs/operations.md#freshness-and-index-budgets).
 - **Stale semantic results** — searches serve the current index, set `is_stale: true` when it has drifted, and refresh it in the background; run `index_semantic` to force a fresh index before a query. See [operations](docs/operations.md#freshness-and-index-budgets).
-- **Investigating high CPU on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, and active jobs; see [operations](docs/operations.md#shared-daemon-tuning-vision--opencode).
+- **Investigating high CPU or memory on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, active jobs, and process memory; see [shared-daemon tuning](docs/operations.md#shared-daemon-tuning-vision--opencode).
 - **Native dependency build issues** — prebuilt wheels usually work; otherwise install a compiler toolchain.
 
 Since `3.0.0` every MCP tool returns structured dicts instead of JSON strings; upgrading from `2.x`? See [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x).
@@ -214,8 +316,11 @@ git clone https://github.com/Sharper-Flow/lgrep.git
 cd lgrep
 pip install -e ".[dev]"
 pytest -v
+ruff check . && ruff format --check .
 ```
+
+Design specifications live in [docs/specs/](docs/specs/), and operational detail in [docs/operations.md](docs/operations.md). Release notes are on the [releases page](https://github.com/Sharper-Flow/lgrep/releases).
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](LICENSE).
