@@ -696,9 +696,11 @@ class ChunkStore:
         limited to ``n`` rows. A ``file_path NOT IN`` list of every shadowed
         path makes the prefilter cost grow with the list, so a store with
         shadowed paths prefilters on checkout only, over-fetches, and drops
-        shadowed base rows. Row scores do not depend on the prefilter, so the
-        survivors keep their order; when too few survive, the exact
-        prefilter runs instead.
+        shadowed base rows; when too few survive, the exact prefilter runs
+        instead. Shadowed rows never return. Full-text and flat vector
+        scores do not depend on the prefilter, so those rankings are exact;
+        an indexed vector search refines a larger candidate pool, so its
+        approximate top rows can differ from the exact prefilter's.
         """
         shadowed = self._shadowed_base_paths()
         if not shadowed:
