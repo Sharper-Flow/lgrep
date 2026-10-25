@@ -81,7 +81,6 @@ class TestDiskCacheAutoLoad:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
@@ -120,7 +119,6 @@ class TestDiskCacheAutoLoad:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
@@ -486,7 +484,6 @@ class TestAcceptanceToolChoiceAndOnboarding:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
@@ -530,7 +527,6 @@ class TestAcceptanceToolChoiceAndOnboarding:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024
@@ -662,7 +658,6 @@ class TestAcceptanceToolChoiceAndOnboarding:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
 
@@ -771,7 +766,6 @@ class TestServerTools:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "code", 0.9, "hybrid")],
             query_time_ms=10.0,
-            total_chunks=100,
         )
         mock_db.search_hybrid.return_value = results
         app_ctx.embedder.embed_query.return_value = [0.1] * 1024

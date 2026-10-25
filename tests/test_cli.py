@@ -208,7 +208,6 @@ class TestCmdSearchExecution:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "def foo(): pass", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=50,
         )
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
@@ -249,7 +248,6 @@ class TestCmdSearchExecution:
         results = SearchResults(
             results=[SearchResult("b.py", 5, 15, "class Bar:", 0.85, "vector")],
             query_time_ms=3.0,
-            total_chunks=50,
         )
         mock_store.search_vector.return_value = results
         mock_store_cls.return_value = mock_store
@@ -279,7 +277,7 @@ class TestCmdSearchExecution:
 
         mock_store = MagicMock()
         mock_store.checkout = BASE_CHECKOUT
-        results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
+        results = SearchResults(results=[], query_time_ms=1.0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
 
@@ -309,7 +307,7 @@ class TestCmdSearchExecution:
 
         mock_store = MagicMock()
         mock_store.checkout = BASE_CHECKOUT
-        results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
+        results = SearchResults(results=[], query_time_ms=1.0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
 

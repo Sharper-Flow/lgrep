@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import lancedb
 import pyarrow as pa
+import pyarrow.compute as pc
 import structlog
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
@@ -28,7 +29,10 @@ from pydantic import Field
 from lgrep.embeddings import MODEL_NAME
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from lancedb import DBConnection
+    from lancedb.query import LanceQueryBuilder
     from lancedb.table import Table
 
 log = structlog.get_logger()
@@ -120,6 +124,10 @@ _OVERLAY_DIRNAME = "overlays"
 # Scalar indexes that keep the per-checkout search prefilter cheap.
 _FILTER_INDEX_COLUMNS = {"checkout": "BITMAP", "file_path": "BTREE"}
 
+# A worktree search prefilters on checkout only and drops its shadowed base
+# rows afterwards, so each ranked query fetches this multiple of the limit.
+_SHADOW_OVERFETCH = 4
+
 
 def _escape_sql_string(value: str) -> str:
     """Escape a string for use in a LanceDB SQL predicate.
@@ -186,7 +194,6 @@ class SearchResults:
 
     results: list[SearchResult] = field(default_factory=list)
     query_time_ms: float = 0.0
-    total_chunks: int = 0
 
 
 def canonical_repo_key(project_path: Path) -> Path:
@@ -678,6 +685,39 @@ class ChunkStore:
         """SQL predicate selecting the rows this store searches."""
         return self._own_where()
 
+    def _shadowed_base_paths(self) -> set[str]:
+        """Return base paths whose rows this store hides from search."""
+        return set()
+
+    def _top_visible(self, build: Callable[[str, int], LanceQueryBuilder], limit: int) -> pa.Table:
+        """Return the top ``limit`` rows of a ranked query that this store sees.
+
+        ``build(where, n)`` returns the query prefiltered by ``where`` and
+        limited to ``n`` rows. A ``file_path NOT IN`` list of every shadowed
+        path makes the prefilter cost grow with the list, so a store with
+        shadowed paths prefilters on checkout only, over-fetches, and drops
+        shadowed base rows. Row scores do not depend on the prefilter, so the
+        survivors keep their order; when too few survive, the exact
+        prefilter runs instead.
+        """
+        shadowed = self._shadowed_base_paths()
+        if not shadowed:
+            return build(self._visible_where(), limit).to_arrow()
+        fetch = limit * _SHADOW_OVERFETCH
+        checkouts = f"checkout IN ('', '{_escape_sql_string(self.checkout)}')"
+        rows = build(checkouts, fetch).to_arrow()
+        if rows.num_rows == 0:
+            return rows
+        hidden = pc.and_(
+            pc.equal(rows["checkout"], BASE_CHECKOUT),
+            pc.is_in(rows["file_path"], value_set=pa.array(sorted(shadowed))),
+        )
+        visible = rows.filter(pc.invert(hidden))
+        if visible.num_rows >= limit or rows.num_rows < fetch:
+            return visible.slice(0, limit)
+        log.debug("shadow_overfetch_short", checkout=self.checkout, visible=visible.num_rows)
+        return build(self._visible_where(), limit).to_arrow()
+
     def _rows_changed(self) -> None:
         """Record a write to this store's rows."""
         self._bump_base_generation()
@@ -869,9 +909,8 @@ class ChunkStore:
             except Exception as idx_err:
                 log.debug("vector_index_create_skipped", error=str(idx_err))
         if row_count > vector_index_row_threshold and not self._filter_indexed:
-            # A worktree prefilter excludes its shadowed base paths with
-            # ``file_path NOT IN (...)``. Without scalar indexes, hybrid
-            # search evaluates that list per row and slows with its length.
+            # Search prefilters on ``checkout``; per-file reads and deletes
+            # filter on ``file_path``. Without scalar indexes each scans every row.
             try:
                 for column, index_type in _FILTER_INDEX_COLUMNS.items():
                     self.table.create_scalar_index(column, index_type=index_type)
@@ -906,19 +945,31 @@ class ChunkStore:
             )
             return self.search_vector(query_vector, limit)
 
-        # Hybrid search with RRF reranking. The prefilter applies to both the
-        # vector and the full-text side, so only this checkout's rows rank.
-        reranker = RRFReranker()
-        raw_results = (
-            self.table.search(query_type="hybrid")
-            .vector(query_vector)
-            .text(query_text)
-            .refine_factor(_VECTOR_REFINE_FACTOR)
-            .where(self._visible_where(), prefilter=True)
-            .rerank(reranker)
-            .limit(limit)
-            .to_list()
+        # Each ranked leg holds only rows this checkout sees; RRF fuses them
+        # as LanceDB's hybrid query fuses its prefiltered legs.
+        vector = self._top_visible(
+            lambda where, n: (
+                self.table.search(query_vector)
+                .refine_factor(_VECTOR_REFINE_FACTOR)
+                .where(where, prefilter=True)
+                .with_row_id(True)
+                .limit(n)
+            ),
+            limit,
         )
+        fts = self._top_visible(
+            lambda where, n: (
+                self.table.search(query_text, query_type="fts")
+                .where(where, prefilter=True)
+                .with_row_id(True)
+                .limit(n)
+            ),
+            limit,
+        )
+        raw_results = []
+        if vector.num_rows or fts.num_rows:
+            fused = RRFReranker().rerank_hybrid(query_text, vector, fts)
+            raw_results = fused.slice(0, limit).to_pylist()
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -937,7 +988,6 @@ class ChunkStore:
         return SearchResults(
             results=results,
             query_time_ms=elapsed_ms,
-            total_chunks=self.count_chunks(),
         )
 
     def search_vector(
@@ -956,13 +1006,15 @@ class ChunkStore:
         """
         start = time.perf_counter()
 
-        raw_results = (
-            self.table.search(query_vector)
-            .refine_factor(_VECTOR_REFINE_FACTOR)
-            .where(self._visible_where(), prefilter=True)
-            .limit(limit)
-            .to_list()
-        )
+        raw_results = self._top_visible(
+            lambda where, n: (
+                self.table.search(query_vector)
+                .refine_factor(_VECTOR_REFINE_FACTOR)
+                .where(where, prefilter=True)
+                .limit(n)
+            ),
+            limit,
+        ).to_pylist()
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -981,7 +1033,6 @@ class ChunkStore:
         return SearchResults(
             results=results,
             query_time_ms=elapsed_ms,
-            total_chunks=self.count_chunks(),
         )
 
     def count_chunks(self) -> int:
@@ -1303,6 +1354,9 @@ class OverlayStore(ChunkStore):
 
     def _rows_changed(self) -> None:
         """Overlay writes leave the base generation unchanged."""
+
+    def _shadowed_base_paths(self) -> set[str]:
+        return self._state.shadowed
 
     def _visible_where(self) -> str:
         base = _BASE_WHERE
