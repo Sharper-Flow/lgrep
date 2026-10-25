@@ -61,12 +61,12 @@ if TYPE_CHECKING:
 
 
 def _daemon(ctx: Context | None) -> LgrepContext | None:
-    """Return the daemon context, or None for a call outside a daemon request."""
+    """Return the daemon context, or None for a call outside an MCP request."""
     if ctx is None:
         return None
     try:
         return ctx.request_context.lifespan_context
-    except (AttributeError, LookupError, RuntimeError, ValueError):
+    except ValueError:  # FastMCP: "Context is not available outside of a request"
         return None
 
 

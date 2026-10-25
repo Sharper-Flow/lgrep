@@ -32,6 +32,7 @@ import pickle
 import signal
 import sys
 import threading
+import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -50,9 +51,10 @@ log = structlog.get_logger(__name__)
 # Seconds a stopping worker gets to finish running calls before it is killed.
 SHUTDOWN_GRACE_S = 3.0
 
-# Worker threads. The daemon's symbol and explicit lanes bound in-flight
-# calls, so a request never waits for a worker thread in practice.
-WORKER_THREADS = 8
+# Worker threads. The daemon's symbol lane (8 threads), explicit lane (1), and
+# build-lane prune calls bound in-flight calls below this, so a request never
+# waits for a worker thread.
+WORKER_THREADS = 16
 
 # Plain operations: name -> (module, function). Modules load on first use.
 _QUERIES = {
@@ -85,7 +87,6 @@ class SymbolOperations:
     def __init__(self, stop_event: Any) -> None:
         self._stop = stop_event
         self._lock = threading.Lock()
-        self._tokens = itertools.count(1)
         self._snapshots: dict[str, tuple[CodeIndex | None, bool]] = {}
 
     def run(self, op: str, args: tuple, kwargs: dict) -> Any:
@@ -103,8 +104,10 @@ class SymbolOperations:
         from lgrep.tools import search_symbols
 
         snapshot = search_symbols.load_symbol_index(repo_key)
+        # Unique across workers: a token from a lost worker must never name a
+        # replacement worker's snapshot of another repository.
+        token = f"snapshot-{uuid.uuid4().hex}"
         with self._lock:
-            token = f"snapshot-{next(self._tokens)}"
             self._snapshots[token] = snapshot
         return token
 
@@ -387,9 +390,14 @@ def _initialize_worker(conn: Connection, send_lock: threading.Lock, symbols_dir:
 
 
 def _portable(exc: BaseException) -> BaseException:
-    """Return ``exc`` when it pickles, else a summary the daemon can read."""
+    """Return ``exc`` when it survives a pickle round trip, else a summary.
+
+    The daemon must be able to load the reply: an exception whose constructor
+    needs arguments pickles but fails to unpickle, and an unreadable reply
+    would make the daemon discard a healthy worker.
+    """
     try:
-        pickle.dumps(exc)
+        pickle.loads(pickle.dumps(exc))
     except Exception:
         return RuntimeError(f"{type(exc).__name__}: {exc}"[:500])
     return exc

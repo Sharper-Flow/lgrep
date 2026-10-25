@@ -331,7 +331,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   checkout identity. Refreshes that publish a changed body retain their
   publication-time stamp.
 - MCP symbol searches share one supervised index check/refresh per repository.
-  It uses a separate `symbol` lane with four threads, independent of query and
+  It uses a separate `symbol` lane with eight threads, independent of query and
   semantic-build workers, and appears as a `symbol_index` job in
   `lgrep_diagnostics`. The check, refresh, and search run in the symbol
   worker process (see Shared-daemon tuning). A query waits at most five seconds, or half
@@ -469,8 +469,10 @@ lgrep:
   hold the daemon's GIL, and text and semantic searches keep their latency
   during a build. The worker's log events go through the daemon's sinks with a
   `worker_pid` field; it never writes to stdout. If the worker exits, its
-  in-flight calls return `code="symbol_worker_restarted"`, `retryable=true`
-  (explicit jobs end `failed`), and the next symbol call starts a replacement.
+  in-flight symbol queries and outlines return `code="symbol_worker_restarted"`,
+  `retryable=true`; in-flight `list_repos`, `invalidate_cache`, and
+  `prune_symbols` calls fail with an MCP error that says to retry; explicit
+  jobs end `failed`. The next symbol call starts a replacement.
   The worker is never recycled.
 - Its `process_memory` snapshot is the daemon process's view and is separate
   from `symbol_cache`; it does not include the symbol worker process. `rss_bytes` and `swap_bytes` come from `/proc` (null where

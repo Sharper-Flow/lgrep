@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pickle
 import signal
 import subprocess
 import sys
@@ -19,7 +20,13 @@ from lgrep.exceptions import OperationCancelled
 from lgrep.server import LgrepContext, tools_symbols
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import index_store
-from lgrep.symbol_worker import SymbolWorkerLost, SymbolWorkerProcess
+from lgrep.symbol_worker import (
+    SymbolOperations,
+    SymbolWorkerLost,
+    SymbolWorkerProcess,
+    _portable,
+)
+from lgrep.tools import search_symbols
 from tests.test_explicit_symbol_jobs import context
 
 FILES = 300
@@ -184,6 +191,27 @@ def test_shutdown_kills_worker_that_misses_grace_window(repo):
         os.kill(pid, 0)
     with pytest.raises(OperationCancelled):
         worker.call("get_file_outline", str(repo / "m0.py"))
+
+
+def test_snapshot_tokens_never_repeat_across_workers(monkeypatch):
+    """A lost worker's token must not name a replacement worker's snapshot."""
+    monkeypatch.setattr(search_symbols, "load_symbol_index", lambda repo: (repo, False))
+    lost, replacement = SymbolOperations(threading.Event()), SymbolOperations(threading.Event())
+    stale = lost.run("acquire", ("/repo/a",), {})
+    assert replacement.run("acquire", ("/repo/b",), {}) != stale
+    with pytest.raises(SymbolWorkerLost):
+        replacement.run("search_symbols", (stale, "f", "/repo/a"), {})
+
+
+class NeedsArguments(Exception):
+    def __init__(self, path, reason):
+        super().__init__(f"{path}: {reason}")
+
+
+def test_failure_reply_always_loads_in_the_daemon():
+    """An exception that pickles but cannot unpickle is summarized, not sent as is."""
+    reply = pickle.loads(pickle.dumps(_portable(NeedsArguments("/repo", "unreadable"))))
+    assert "NeedsArguments: /repo: unreadable" in str(reply)
 
 
 class LostWorker:
