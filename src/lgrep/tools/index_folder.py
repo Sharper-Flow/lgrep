@@ -49,7 +49,7 @@ def _is_test_file_heuristic(rel_path: str) -> bool:
     return name.startswith("test_") or name.endswith("_test.py") or name == "conftest.py"
 
 
-def _occurrence_to_dict(occ, rel_path: str) -> dict:
+def _occurrence_to_dict(occ, is_test_file: bool) -> dict:
     """Serialize an Occurrence for JSON storage."""
     return {
         "id": occ.id,
@@ -61,8 +61,96 @@ def _occurrence_to_dict(occ, rel_path: str) -> dict:
         "line_text": occ.line_text,
         "kind": occ.kind,
         "enclosing_symbol_id": occ.enclosing_symbol_id,
-        "is_test_file": _is_test_file_heuristic(rel_path),
+        "is_test_file": is_test_file,
     }
+
+
+class _IndexMerge:
+    """Symbols and occurrence buckets under merge, indexed by source file.
+
+    Removing a file touches only that file's own entries, so a refresh does
+    not rescan the whole index once per changed file. The merged result,
+    including key and row order, is what filtering every symbol and bucket by
+    file_path would produce: each bucket is held as runs of consecutive rows
+    from one file, removing a file drops its runs, and an emptied bucket loses
+    its position. Lists of the loaded index, which the index cache may share,
+    are never mutated; an untouched bucket keeps its original list.
+    """
+
+    def __init__(self, symbols: dict[str, dict], occurrences: dict[str, list[dict]]) -> None:
+        self.symbols = dict(symbols)
+        self._occurrences = dict(occurrences)
+        self._file_symbols: dict[str, list[str]] | None = None
+        self._file_runs: dict[str, list[tuple[str, tuple[str, int]]]] = {}
+        self._runs: dict[str, dict[tuple[str, int], list[dict]]] = {}
+        self._changed: set[str] = set()
+        self._serial = 0
+
+    def _new_run(self, name: str, path: str, rows: list[dict]) -> None:
+        key = (path, self._serial)
+        self._serial += 1
+        self._runs[name][key] = rows
+        self._file_runs.setdefault(path, []).append((name, key))
+
+    def _ensure_indexed(self) -> None:
+        if self._file_symbols is not None:
+            return
+        self._file_symbols = {}
+        for symbol_id, data in self.symbols.items():
+            self._file_symbols.setdefault(data.get("file_path"), []).append(symbol_id)
+        # Filtering by file drops every empty bucket, not only emptied ones.
+        self._occurrences = {name: rows for name, rows in self._occurrences.items() if rows}
+        for name, rows in self._occurrences.items():
+            self._runs[name] = {}
+            start = 0
+            for end in range(1, len(rows) + 1):
+                path = rows[start].get("file_path")
+                if end == len(rows) or rows[end].get("file_path") != path:
+                    self._new_run(name, path, rows[start:end])
+                    start = end
+
+    def remove_file(self, path: str) -> None:
+        self._ensure_indexed()
+        for symbol_id in self._file_symbols.pop(path, ()):
+            data = self.symbols.get(symbol_id)
+            if data is not None and data.get("file_path") == path:
+                del self.symbols[symbol_id]
+        for name, key in self._file_runs.pop(path, ()):
+            bucket = self._runs.get(name)
+            if bucket is None or bucket.pop(key, None) is None:
+                continue
+            self._changed.add(name)
+            if not bucket:
+                del self._runs[name]
+                del self._occurrences[name]
+
+    def add_symbol(self, symbol_id: str, data: dict) -> None:
+        self._ensure_indexed()
+        self.symbols[symbol_id] = data
+        self._file_symbols.setdefault(data["file_path"], []).append(symbol_id)
+
+    def add_occurrence(self, row: dict) -> None:
+        self._ensure_indexed()
+        name, path = row["name"], row["file_path"]
+        self._changed.add(name)
+        bucket = self._runs.get(name)
+        if bucket is None:
+            self._runs[name] = {}
+            self._occurrences[name] = []
+        else:
+            last = next(reversed(bucket))
+            if last[0] == path:
+                bucket[last].append(row)
+                return
+        self._new_run(name, path, [row])
+
+    def occurrences(self) -> dict[str, list[dict]]:
+        for name in self._changed:
+            bucket = self._runs.get(name)
+            if bucket is not None:
+                self._occurrences[name] = [row for rows in bucket.values() for row in rows]
+        self._changed.clear()
+        return self._occurrences
 
 
 def index_folder(
@@ -138,7 +226,6 @@ def _index_folder_with_snapshot(
         # Load existing index for incremental comparison
         existing_index = store.load(resolved_root) if incremental else None
         existing_files = existing_index.files if existing_index else {}
-        existing_symbols = dict(existing_index.symbols) if existing_index else {}
 
         # Safe refresh migration: old indexes without occurrence data must be
         # fully re-parsed before callers can trust occurrence results. This is
@@ -153,10 +240,11 @@ def _index_folder_with_snapshot(
 
         discovery = FileDiscovery(root)
         files_dict: dict[str, str] = dict(existing_files)  # start from existing
-        symbols_dict: dict[str, dict] = dict(existing_symbols)
-        # Before appending, each changed file replaces the buckets below.
-        # An unchanged walk need not copy every occurrence list.
-        occurrences_dict = dict(existing_index.occurrences) if existing_index else {}
+        merge = (
+            _IndexMerge(existing_index.symbols, existing_index.occurrences)
+            if existing_index
+            else _IndexMerge({}, {})
+        )
 
         # Track every code file we observed on disk in this walk so we can detect
         # deletions after the loop. Distinct from `files_dict` (the post-state)
@@ -204,39 +292,32 @@ def _index_folder_with_snapshot(
 
             # Remove old symbols and occurrences for this file before re-parsing
             if incremental:
-                symbols_dict = {
-                    sid: sdata
-                    for sid, sdata in symbols_dict.items()
-                    if sdata.get("file_path") != rel_path
-                }
-                occurrences_dict = {
-                    name: [occ for occ in occs if occ.get("file_path") != rel_path]
-                    for name, occs in occurrences_dict.items()
-                }
-                # Drop empty occurrence buckets
-                occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
+                merge.remove_file(rel_path)
 
             symbols, occurrences = _extractor.extract_full(file_path, repo_root=root)
             for sym in symbols:
                 symbol_id = sym.id
-                if symbol_id in symbols_dict:
+                if symbol_id in merge.symbols:
                     symbol_id = f"{sym.id}@{sym.start_byte}"
 
-                symbols_dict[symbol_id] = {
-                    "id": symbol_id,
-                    "name": sym.name,
-                    "kind": sym.kind,
-                    "file_path": sym.file_path,
-                    "start_byte": sym.start_byte,
-                    "end_byte": sym.end_byte,
-                    "docstring": sym.docstring,
-                    "decorators": sym.decorators,
-                    "parent": sym.parent,
-                }
+                merge.add_symbol(
+                    symbol_id,
+                    {
+                        "id": symbol_id,
+                        "name": sym.name,
+                        "kind": sym.kind,
+                        "file_path": sym.file_path,
+                        "start_byte": sym.start_byte,
+                        "end_byte": sym.end_byte,
+                        "docstring": sym.docstring,
+                        "decorators": sym.decorators,
+                        "parent": sym.parent,
+                    },
+                )
 
+            is_test_file = _is_test_file_heuristic(rel_path)
             for occ in occurrences:
-                occs = occurrences_dict.setdefault(occ.name, [])
-                occs.append(_occurrence_to_dict(occ, rel_path))
+                merge.add_occurrence(_occurrence_to_dict(occ, is_test_file))
 
             files_processed += 1
 
@@ -259,18 +340,11 @@ def _index_folder_with_snapshot(
             if deleted_set:
                 for path in deleted_set:
                     files_dict.pop(path, None)
-                symbols_dict = {
-                    sid: sdata
-                    for sid, sdata in symbols_dict.items()
-                    if sdata.get("file_path") not in deleted_set
-                }
-                occurrences_dict = {
-                    name: [occ for occ in occs if occ.get("file_path") not in deleted_set]
-                    for name, occs in occurrences_dict.items()
-                }
-                occurrences_dict = {name: occs for name, occs in occurrences_dict.items() if occs}
+                    merge.remove_file(path)
                 files_deleted = len(deleted_set)
 
+        symbols_dict = merge.symbols
+        occurrences_dict = merge.occurrences()
         index = CodeIndex(
             repo_path=resolved_root,
             files=files_dict,
