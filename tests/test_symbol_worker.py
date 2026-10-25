@@ -231,7 +231,6 @@ class LostWorker:
 @pytest.mark.parametrize(
     ("tool", "arguments"),
     [
-        ("get_symbol", {"symbol_id": "m.py:function:f"}),
         ("get_symbols", {"symbol_ids": ["m.py:function:f"]}),
         ("get_file_outline", {}),
         ("get_repo_outline", {}),

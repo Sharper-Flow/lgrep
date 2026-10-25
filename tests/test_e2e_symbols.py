@@ -1,7 +1,7 @@
 """E2E integration tests for symbol workflows.
 
 Tests the full pipeline:
-- lgrep_index_symbols_folder → lgrep_search_symbols → lgrep_get_symbol
+- lgrep_index_symbols_folder → lgrep_search_symbols → lgrep_get_symbols
 - lgrep_get_file_outline structure
 - lgrep_invalidate_cache → full re-index
 - Stable ID regression across two index runs
@@ -41,7 +41,7 @@ def store_dir(tmp_path):
 
 
 class TestIndexSearchGetPipeline:
-    """Full pipeline: index → search → get_symbol."""
+    """Full pipeline: index → search → get_symbols."""
 
     def test_index_then_search_finds_symbol(self, sample_repo, store_dir):
         from lgrep.tools.index_folder import index_folder
@@ -55,18 +55,19 @@ class TestIndexSearchGetPipeline:
         names = [r["name"] for r in result["results"]]
         assert "authenticate" in names
 
-    def test_index_then_get_symbol_returns_source(self, sample_repo, store_dir):
-        from lgrep.tools.get_symbol import get_symbol
+    def test_index_then_get_symbols_returns_source(self, sample_repo, store_dir):
+        from lgrep.tools.get_symbol import get_symbols
         from lgrep.tools.index_folder import index_folder
 
         index_folder(str(sample_repo), storage_dir=store_dir)
         sym_id = "src/auth.py:function:authenticate"
-        result = get_symbol(sym_id, str(sample_repo), storage_dir=store_dir)
+        result = get_symbols([sym_id], str(sample_repo), storage_dir=store_dir)
 
         assert "error" not in result
-        assert "symbol" in result
-        assert result["symbol"]["source"] is not None
-        assert "authenticate" in result["symbol"]["source"]
+        (symbol,) = result["symbols"]
+        assert "error" not in symbol
+        assert symbol["source"] is not None
+        assert "authenticate" in symbol["source"]
 
     def test_index_then_get_symbols_batch(self, sample_repo, store_dir):
         from lgrep.tools.get_symbol import get_symbols

@@ -163,17 +163,6 @@ class TestInputValidation:
         result = search_text("", str(tmp_path))
         assert "error" in result
 
-    def test_get_symbol_empty_id_returns_error(self, tmp_path, tmp_path_factory):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        store = tmp_path_factory.mktemp("store")
-        (tmp_path / "auth.py").write_text("def authenticate(): pass\n")
-        index_folder(str(tmp_path), storage_dir=store)
-
-        result = get_symbol("", str(tmp_path), storage_dir=store)
-        assert "error" in result
-
     def test_index_folder_empty_path_returns_error(self):
         from lgrep.tools.index_folder import index_folder
 

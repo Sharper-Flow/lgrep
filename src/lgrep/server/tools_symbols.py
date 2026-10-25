@@ -21,7 +21,6 @@ from lgrep.server.responses import (
     GetFileOutlineResult,
     GetFileTreeResult,
     GetRepoOutlineResult,
-    GetSymbolResult,
     GetSymbolsResult,
     InvalidateCacheResult,
     ListReposResult,
@@ -41,7 +40,6 @@ from lgrep.tools._meta import make_meta
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
-from lgrep.tools.get_symbol import get_symbol as _get_symbol
 from lgrep.tools.get_symbol import get_symbols as _get_symbols
 from lgrep.tools.index_repo import _resolve_github_token as resolve_github_token
 from lgrep.tools.index_repo import credential_values, redact_credentials
@@ -672,53 +670,10 @@ async def search_text(
 
 @mcp.tool(
     description=(
-        "Get full metadata and source for one symbol ID from the symbol index. "
-        "Use after symbol search to inspect a specific implementation body. "
-        "MCP tool call only; do not invoke via shell."
-    ),
-    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
-)
-@time_tool
-async def get_symbol(
-    symbol_id: Annotated[
-        str,
-        Field(description="Stable symbol ID in file_path:kind:name format."),
-    ],
-    path: Annotated[
-        str,
-        Field(description="Absolute path to the indexed local repository root."),
-    ],
-    ctx: Context | None = None,
-) -> GetSymbolResult | ToolError:
-    """Get full metadata and source code for a single symbol by ID.
-
-    Symbol IDs use the format "file_path:kind:name" (e.g. "src/auth.py:function:authenticate").
-    Run lgrep_index_symbols_folder first to build the index.
-
-    Args:
-        symbol_id: Stable symbol ID in format "file_path:kind:name"
-        path: Absolute path to the indexed repository
-
-    Returns:
-        Symbol dict and meta envelope.
-    """
-    t0 = time.monotonic()
-    try:
-        result = await _run_symbol(ctx, "get_symbol", path, _get_symbol, symbol_id, path)
-    except SymbolWorkerLost as exc:
-        return _worker_lost(exc)
-    if "error" in result:
-        return error_response(result["error"])
-    return GetSymbolResult(
-        symbol=result["symbol"],
-        _meta=make_meta(t0, "get_symbol"),
-    )
-
-
-@mcp.tool(
-    description=(
-        "Batch-get metadata and source for multiple symbol IDs in a single request. "
-        "Use to reduce round-trips after search results provide several relevant IDs. "
+        "Get metadata and source for one or more symbol IDs from the symbol index. "
+        "Use after symbol search to read implementation bodies; pass every relevant ID in one call. "
+        "Each requested ID returns one entry in order. An unknown ID or a stale source range "
+        "returns {id, error} in its entry instead of a top-level error, so check each entry. "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
@@ -727,7 +682,7 @@ async def get_symbol(
 async def get_symbols(
     symbol_ids: Annotated[
         list[str],
-        Field(description="List of symbol IDs in file_path:kind:name format."),
+        Field(description="One or more symbol IDs in file_path:kind:name format."),
     ],
     path: Annotated[
         str,
@@ -735,14 +690,15 @@ async def get_symbols(
     ],
     ctx: Context | None = None,
 ) -> GetSymbolsResult | ToolError:
-    """Get full metadata and source code for multiple symbols in one call.
+    """Get full metadata and source code for one or more symbols in one call.
 
     Args:
         symbol_ids: List of stable symbol IDs (format: "file_path:kind:name")
         path: Absolute path to the indexed repository
 
     Returns:
-        Symbols list and meta envelope.
+        Symbols list and meta envelope. Missing IDs and source-range
+        mismatches appear as per-entry ``{"id", "error"}`` dicts.
     """
     t0 = time.monotonic()
     try:

@@ -84,6 +84,25 @@ class TestBootstrapTransportPlumbing:
         assert "LGREP_TRANSPORT" not in os.environ
         mock_run.assert_called_once_with(transport="streamable-http")
 
+    def test_run_server_applies_tool_profile_before_serving(
+        self, monkeypatch: pytest.MonkeyPatch, clean_logging_state
+    ):
+        from lgrep.server import mcp
+
+        monkeypatch.delenv("LGREP_ALLOW_DESTRUCTIVE_MCP", raising=False)
+        seen: list[set[str]] = []
+
+        def record_registry(**_kwargs):
+            seen.append({t.name for t in mcp._tool_manager.list_tools()})
+
+        with patch("lgrep.server.mcp.run", side_effect=record_registry):
+            bootstrap_module.run_server(transport="streamable-http")
+
+        assert len(seen) == 1
+        hidden = set(bootstrap_module.GRANT_ONLY_TOOLS) | set(bootstrap_module.STDIO_ONLY_TOOLS)
+        assert not hidden & seen[0]
+        assert "search_semantic" in seen[0]
+
     def test_run_server_default_records_stdio_transport(
         self, monkeypatch: pytest.MonkeyPatch, clean_logging_state
     ):

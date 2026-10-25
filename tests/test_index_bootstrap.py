@@ -164,8 +164,8 @@ class TestSeededFirstQuery:
         assert "error" not in miss
         assert miss["total_matches"] == 0
 
-    def test_get_symbol_serves_worktree_body_after_seed(self, split_repo, tmp_path):
-        from lgrep.tools.get_symbol import get_symbol
+    def test_get_symbols_serves_worktree_body_after_seed(self, split_repo, tmp_path):
+        from lgrep.tools.get_symbol import get_symbols
         from lgrep.tools.index_folder import index_folder
 
         trunk, worktree = split_repo
@@ -173,12 +173,12 @@ class TestSeededFirstQuery:
 
         assert "error" not in index_folder(str(trunk), storage_dir=store_dir)
 
-        result = get_symbol(
-            "src/shared.py:function:authenticate", str(worktree), storage_dir=store_dir
+        result = get_symbols(
+            ["src/shared.py:function:authenticate"], str(worktree), storage_dir=store_dir
         )
 
         assert "error" not in result
-        assert 'return "worktree"' in result["symbol"]["source"]
+        assert 'return "worktree"' in result["symbols"][0]["source"]
 
     def test_get_symbols_bootstraps_unindexed_worktree(self, split_repo, tmp_path):
         from lgrep.tools.get_symbol import get_symbols

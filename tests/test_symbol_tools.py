@@ -6,8 +6,7 @@ Tests cover:
 - Invalid repo error
 - Plain result field shapes
 - search_symbols result field shapes
-- get_symbol source retrieval
-- get_symbols batch
+- get_symbols source retrieval and batch
 - get_file_outline structure
 - get_repo_outline structure
 """
@@ -59,10 +58,6 @@ def test_search_text_importable():
 
 def test_search_references_importable():
     from lgrep.tools.search_references import search_references  # noqa: F401
-
-
-def test_get_symbol_importable():
-    from lgrep.tools.get_symbol import get_symbol  # noqa: F401
 
 
 def test_get_symbols_importable():
@@ -214,7 +209,7 @@ class TestIndexRepo:
     @pytest.mark.asyncio
     async def test_remote_repo_round_trip_queryable(self, tmp_store, monkeypatch):
         from lgrep.parser.symbols import Symbol
-        from lgrep.tools.get_symbol import get_symbol
+        from lgrep.tools.get_symbol import get_symbols
         from lgrep.tools.index_repo import index_repo
         from lgrep.tools.invalidate_cache import invalidate_cache
         from lgrep.tools.search_symbols import search_symbols
@@ -297,9 +292,9 @@ class TestIndexRepo:
         assert search["total_matches"] == 1
 
         symbol_id = search["results"][0]["id"]
-        lookup = get_symbol(symbol_id, repo_key, storage_dir=tmp_store)
+        lookup = get_symbols([symbol_id], repo_key, storage_dir=tmp_store)
         assert "error" not in lookup
-        assert lookup["symbol"]["name"] == "authenticate"
+        assert lookup["symbols"][0]["name"] == "authenticate"
 
         invalidated = invalidate_cache(repo_key, storage_dir=tmp_store)
         assert invalidated["status"] == "deleted"
@@ -1142,94 +1137,6 @@ class TestSearchText:
         assert "error" in result
 
 
-# ── get_symbol ────────────────────────────────────────────────────────────────
-
-
-class TestGetSymbol:
-    def test_returns_dict(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = "src/auth.py:function:authenticate"
-        result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
-        assert isinstance(result, dict)
-
-    def test_has_symbol_key(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = "src/auth.py:function:authenticate"
-        result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
-        assert "symbol" in result
-
-    def test_symbol_has_source(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        sym_id = "src/auth.py:function:authenticate"
-        result = get_symbol(sym_id, str(tmp_repo), storage_dir=tmp_store)
-        assert "source" in result["symbol"]
-        assert "authenticate" in result["symbol"]["source"]
-
-    def test_missing_index_returns_error(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-
-        result = get_symbol(
-            "src/auth.py:function:authenticate", str(tmp_repo), storage_dir=tmp_store
-        )
-        assert "error" in result
-
-    def test_unknown_symbol_returns_error(self, tmp_repo, tmp_store):
-        from lgrep.tools.get_symbol import get_symbol
-        from lgrep.tools.index_folder import index_folder
-
-        index_folder(str(tmp_repo), storage_dir=tmp_store)
-        result = get_symbol(
-            "src/auth.py:function:nonexistent_xyz", str(tmp_repo), storage_dir=tmp_store
-        )
-        assert "error" in result
-
-    def test_github_index_symbol_fetches_source(self, tmp_store, monkeypatch):
-        from lgrep.storage.index_store import CodeIndex, IndexStore
-        from lgrep.tools.get_symbol import get_symbol
-
-        class _FakeResponse:
-            content = b"def authenticate(user):\n    return True\n"
-
-            def raise_for_status(self):
-                return None
-
-        import httpx
-
-        monkeypatch.setattr(httpx, "get", lambda *_args, **_kwargs: _FakeResponse())
-
-        repo_key = "github:owner/repo@main"
-        store = IndexStore(storage_dir=tmp_store)
-        store.save(
-            CodeIndex(
-                repo_path=repo_key,
-                files={"src/auth.py": "hash"},
-                symbols={
-                    "src/auth.py:function:authenticate": {
-                        "id": "src/auth.py:function:authenticate",
-                        "name": "authenticate",
-                        "kind": "function",
-                        "file_path": "src/auth.py",
-                        "start_byte": 0,
-                        "end_byte": len(_FakeResponse.content.rstrip()),
-                    }
-                },
-            )
-        )
-
-        result = get_symbol("src/auth.py:function:authenticate", repo_key, storage_dir=tmp_store)
-        assert "error" not in result
-        assert result["symbol"]["source"] == _FakeResponse.content.decode().rstrip()
-
-
 # ── get_symbols (batch) ───────────────────────────────────────────────────────
 
 
@@ -1268,6 +1175,64 @@ class TestGetSymbols:
             ["src/auth.py:function:authenticate"], str(tmp_repo), storage_dir=tmp_store
         )
         assert "error" in result
+
+    def test_symbol_has_source(self, tmp_repo, tmp_store):
+        from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
+
+        index_folder(str(tmp_repo), storage_dir=tmp_store)
+        sym_id = "src/auth.py:function:authenticate"
+        (symbol,) = get_symbols([sym_id], str(tmp_repo), storage_dir=tmp_store)["symbols"]
+        assert "authenticate" in symbol["source"]
+
+    def test_unknown_symbol_returns_entry_error(self, tmp_repo, tmp_store):
+        from lgrep.tools.get_symbol import get_symbols
+        from lgrep.tools.index_folder import index_folder
+
+        index_folder(str(tmp_repo), storage_dir=tmp_store)
+        known = "src/auth.py:function:authenticate"
+        unknown = "src/auth.py:function:nonexistent_xyz"
+        result = get_symbols([unknown, known], str(tmp_repo), storage_dir=tmp_store)
+        assert "error" not in result
+        assert result["symbols"][0] == {"id": unknown, "error": "not_found"}
+        assert result["symbols"][1]["id"] == known
+
+    def test_github_index_symbol_fetches_source(self, tmp_store, monkeypatch):
+        from lgrep.storage.index_store import CodeIndex, IndexStore
+        from lgrep.tools.get_symbol import get_symbols
+
+        class _FakeResponse:
+            content = b"def authenticate(user):\n    return True\n"
+
+            def raise_for_status(self):
+                return None
+
+        import httpx
+
+        monkeypatch.setattr(httpx, "get", lambda *_args, **_kwargs: _FakeResponse())
+
+        repo_key = "github:owner/repo@main"
+        store = IndexStore(storage_dir=tmp_store)
+        store.save(
+            CodeIndex(
+                repo_path=repo_key,
+                files={"src/auth.py": "hash"},
+                symbols={
+                    "src/auth.py:function:authenticate": {
+                        "id": "src/auth.py:function:authenticate",
+                        "name": "authenticate",
+                        "kind": "function",
+                        "file_path": "src/auth.py",
+                        "start_byte": 0,
+                        "end_byte": len(_FakeResponse.content.rstrip()),
+                    }
+                },
+            )
+        )
+
+        result = get_symbols(["src/auth.py:function:authenticate"], repo_key, storage_dir=tmp_store)
+        assert "error" not in result
+        assert result["symbols"][0]["source"] == _FakeResponse.content.decode().rstrip()
 
 
 # ── invalidate_cache ──────────────────────────────────────────────────────────

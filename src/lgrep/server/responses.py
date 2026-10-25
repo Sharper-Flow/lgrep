@@ -144,29 +144,6 @@ class StatusAllProjectsResult(TypedDict):
     projects: list[StatusSemanticResult]
 
 
-class WatchStartResult(TypedDict):
-    """Response for watch_start_semantic."""
-
-    path: str
-    watching: bool
-    message: str | None  # "Already watching" when idempotent
-
-
-class WatchStopResult(TypedDict):
-    """Response for watch_stop_semantic (single project)."""
-
-    stopped: bool
-    project: str | None  # None when stopping all
-    message: str | None  # "Not watching" when no active watcher
-
-
-class WatchStopAllResult(TypedDict):
-    """Response for watch_stop_semantic (all projects)."""
-
-    stopped: bool
-    projects_stopped: list[str]
-
-
 class IndexSymbolsFolderResult(TypedDict):
     """Final local counters returned by get_symbol_index_job."""
 
@@ -323,13 +300,6 @@ class SearchReferencesResult(_SearchReferencesResultRequired, total=False):
     """
 
     error: str
-
-
-class GetSymbolResult(TypedDict):
-    """Response for get_symbol."""
-
-    symbol: dict[str, Any]
-    _meta: _Meta
 
 
 class GetSymbolsResult(TypedDict):

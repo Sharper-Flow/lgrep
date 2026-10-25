@@ -10,7 +10,7 @@ import pytest
 from lgrep.discovery import FileDiscovery
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.storage.index_store import IndexStore
-from lgrep.tools.get_symbol import get_symbol
+from lgrep.tools.get_symbol import get_symbols
 from lgrep.tools.index_folder import index_folder
 from lgrep.tools.search_symbols import search_symbols
 
@@ -94,8 +94,8 @@ def test_search_loads_one_snapshot_and_publishes_only_changes(large_index, monke
         )
         assert calls == {"load": 1, "save": 0, "parse": 0}
     elif change == "edited_last_file":
-        symbol = get_symbol(result["results"][0]["id"], str(root), storage_dir=store_dir)
-        assert symbol["symbol"]["source"] == "function far_target() { return 42; }"
+        symbol = get_symbols([result["results"][0]["id"]], str(root), storage_dir=store_dir)
+        assert symbol["symbols"][0]["source"] == "function far_target() { return 42; }"
 
 
 def test_concurrent_publication_cannot_hide_change_from_loaded_snapshot(tmp_path, monkeypatch):

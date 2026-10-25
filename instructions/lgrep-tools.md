@@ -19,6 +19,7 @@ the question:
 |---|---|---|
 | Intent/concept discovery | `lgrep_search_semantic` | "how is auth handled?", "where is rate limiting?" |
 | Find function/class by name | `lgrep_search_symbols` | "find the authenticate function" |
+| Symbol source by ID | `lgrep_get_symbols` | pass every ID in one call; check each entry for `error` |
 | File structure overview | `lgrep_get_file_outline` | "what's in auth.py?" |
 | Repo structure overview | `lgrep_get_repo_outline` | "what's in this codebase?" |
 | Exact text/regex lookup | `lgrep_search_text` or `grep` | "find all references to verifyToken" |
@@ -36,7 +37,7 @@ the question:
 
 - Explicit `index_symbols_folder` and `index_symbols_repo` calls submit stdio-only background jobs. Read `get_symbol_index_job(job_id)` for final counters before relying on the index; the submission contains no counters.
 - `max_files` is the file cap. Explicit jobs also have a default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`. Status reports deadline stops as `truncation_reason="deadline"`; a capped or deadline-truncated completion is not full repository coverage.
-- Identical nonterminal submissions share an ID; different submissions receive retryable `symbol_index_busy`. HTTP and missing/unknown contexts refuse with `symbol_index_jobs_unavailable`. Status retains 100 terminal explicit jobs independently of query traffic, but loses them on restart. There is no cancel tool.
+- Identical nonterminal submissions share an ID; different submissions receive retryable `symbol_index_busy`. Servers on `streamable-http` do not list these job tools; symbol queries there index a missing local checkout on first use. Status retains 100 terminal explicit jobs independently of query traffic, but loses them on restart. There is no cancel tool.
 
 - Do NOT call multiple `lgrep_*` tools in parallel. Treat the lgrep MCP server as a sequential shared service.
 - For lgrep exploration, issue exactly one lgrep call, inspect result/failure, then decide the next call.

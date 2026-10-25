@@ -10,7 +10,7 @@ import pytest
 from lgrep.discovery import FileDiscovery
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.storage.index_store import IndexStore
-from lgrep.tools.get_symbol import get_symbol, get_symbols
+from lgrep.tools.get_symbol import get_symbols
 from lgrep.tools.index_folder import index_folder
 from lgrep.tools.search_symbols import search_symbols
 
@@ -65,9 +65,9 @@ def test_refreshed_lookup_returns_shifted_typescript_body(
     assert len(found["results"]) == 1
     symbol = found["results"][0]
     assert symbol["start_byte"] > 47000
-    result = get_symbol(symbol["id"], str(worktree), storage_dir=store_dir)
+    (result,) = get_symbols([symbol["id"]], str(worktree), storage_dir=store_dir)["symbols"]
     assert "error" not in result
-    assert result["symbol"]["source"] == body
+    assert result["source"] == body
 
 
 def test_batch_validates_one_snapshot_per_file(linked_typescript, tmp_path, monkeypatch):
@@ -112,14 +112,14 @@ def test_github_lookup_refuses_changed_symbol(linked_typescript, tmp_path, monke
         request=httpx.Request("GET", "https://example.invalid/large.ts"),
     )
     monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: response)
-    result = get_symbol("large.ts:function:samePath", index.repo_path, storage_dir=store_dir)
-    assert "error" in result
-    assert "symbol" not in result
+    result = get_symbols(["large.ts:function:samePath"], index.repo_path, storage_dir=store_dir)
+    (entry,) = result["symbols"]
+    assert "error" in entry
+    assert "source" not in entry
 
 
-@pytest.mark.parametrize("batch", [False, True])
 @pytest.mark.parametrize("mismatch", ["shift", "other_symbol", "truncated", "negative"])
-def test_source_lookup_refuses_mismatched_range(linked_typescript, tmp_path, batch, mismatch):
+def test_source_lookup_refuses_mismatched_range(linked_typescript, tmp_path, mismatch):
     _, worktree, prefix, body = linked_typescript
     store_dir = tmp_path / "store"
     assert "error" not in index_folder(str(worktree), storage_dir=store_dir)
@@ -139,12 +139,8 @@ def test_source_lookup_refuses_mismatched_range(linked_typescript, tmp_path, bat
             symbol["start_byte"] = -1
         store.save(index)
 
-    if batch:
-        result = get_symbols([symbol_id], str(worktree), storage_dir=store_dir)["symbols"][0]
-        assert "source" not in result
-    else:
-        result = get_symbol(symbol_id, str(worktree), storage_dir=store_dir)
-        assert "symbol" not in result
+    result = get_symbols([symbol_id], str(worktree), storage_dir=store_dir)["symbols"][0]
+    assert "source" not in result
     assert "error" in result
 
 
@@ -169,9 +165,9 @@ def test_refresh_updates_indexed_file_beyond_default_walk_cap(
     assert found["index_refreshed"] is True
     assert len(found["results"]) == 1
     symbol = found["results"][0]
-    result = get_symbol(symbol["id"], str(worktree), storage_dir=store_dir)
+    (result,) = get_symbols([symbol["id"]], str(worktree), storage_dir=store_dir)["symbols"]
     assert "error" not in result
-    assert result["symbol"]["source"] == body
+    assert result["source"] == body
 
 
 def test_incremental_parse_budget_remains_bounded(linked_typescript, tmp_path, monkeypatch):
