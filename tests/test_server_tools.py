@@ -920,7 +920,6 @@ class TestSearchSemanticCompactDefault:
                 ),
             ],
             query_time_ms=1.0,
-            total_chunks=10,
         )
         mock_db.search_hybrid.return_value = results
         return mock_ctx

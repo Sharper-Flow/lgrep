@@ -349,7 +349,6 @@ class TestSearch:
 
         results = chunk_store.search_vector(query_vector, limit=2)
         assert len(results.results) == 2
-        assert results.total_chunks == 3
         assert results.results[0].match_type == "vector"
 
     def test_search_hybrid(self, chunk_store, sample_chunks):
@@ -360,7 +359,6 @@ class TestSearch:
 
         results = chunk_store.search_hybrid(query_vector, "def pass", limit=2)
         assert len(results.results) == 2
-        assert results.total_chunks == 3
         assert results.results[0].match_type == "hybrid"
         assert chunk_store._fts_indexed is True
 

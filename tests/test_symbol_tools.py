@@ -1090,6 +1090,45 @@ class TestSearchText:
         assert "line_number" in r
         assert "line" in r
 
+    def test_reuses_complete_file_list_within_ttl(self, tmp_path, monkeypatch):
+        from lgrep.tools import search_text as module
+
+        (tmp_path / "a.py").write_text("needle = 1\n")
+        clock = [100.0]
+        monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(module, "_file_lists", {})
+        walks = []
+        from lgrep.discovery import FileDiscovery
+
+        class CountingDiscovery(FileDiscovery):
+            def find_files(self):
+                walks.append(self.root_path)
+                return super().find_files()
+
+        monkeypatch.setattr("lgrep.discovery.FileDiscovery", CountingDiscovery)
+
+        assert len(module.search_text("needle", str(tmp_path))["results"]) == 1
+        (tmp_path / "b.py").write_text("needle = 2\n")
+        # Inside the window the cached list stands; b.py is not seen yet.
+        clock[0] += module._FILE_LIST_TTL_S - 0.1
+        assert len(module.search_text("needle", str(tmp_path))["results"]) == 1
+        assert len(walks) == 1
+        clock[0] += 0.2
+        assert len(module.search_text("needle", str(tmp_path))["results"]) == 2
+        assert len(walks) == 2
+
+    def test_early_exit_walk_is_not_cached(self, tmp_path, monkeypatch):
+        from lgrep.tools import search_text as module
+
+        for i in range(3):
+            (tmp_path / f"f{i}.py").write_text("needle\n")
+        monkeypatch.setattr(module, "_file_lists", {})
+
+        assert len(module.search_text("needle", str(tmp_path), max_results=1)["results"]) == 1
+        assert module._file_lists == {}
+        module.search_text("needle", str(tmp_path))
+        assert len(module._file_lists[tmp_path.resolve()][1]) == 3
+
     def test_no_match_returns_empty_list(self, tmp_repo):
         from lgrep.tools.search_text import search_text
 
