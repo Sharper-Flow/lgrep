@@ -28,7 +28,7 @@ def isolated_cache():
 
 
 def _reference_merge(existing, parsed, deleted, incremental):
-    """The merge as written before per-file indexing: rebuild everything per file."""
+    """The merge specification: filter every symbol and bucket by file for each change."""
     symbols_dict = dict(existing.symbols) if existing else {}
     occurrences_dict = dict(existing.occurrences) if existing else {}
     for rel_path, symbols, occurrences in parsed:
@@ -251,20 +251,23 @@ def _large_merge(files: int) -> folder._IndexMerge:
 @pytest.mark.parametrize("files", [200, 4000])
 def test_removing_a_file_reads_only_that_files_entries(files):
     merge = _large_merge(files)
-    merge.remove_file("src/m0.py")  # the first removal indexes the merge once
+    # The first removal indexes the merge and filters each bucket; the second
+    # splits each bucket into runs. Each happens once per bucket.
+    merge.remove_file("src/m0.py")
+    merge.remove_file("src/m1.py")
 
     _CountingDict.reads = 0
-    for n in range(1, 51):
+    for n in range(2, 52):
         merge.remove_file(f"src/m{n}.py")
         merge.add_symbol(f"src/m{n}.py:function:f", {"file_path": f"src/m{n}.py"})
         for name in _NAMES:
             merge.add_occurrence({"name": name, "file_path": f"src/m{n}.py"})
 
-    # Two symbol reads per removed file, whatever the index size; the
-    # rebuild-per-file merge read every symbol and every row for each file.
-    assert _CountingDict.reads == 50 * 2
+    # Bounded by the 50 files' own entries (two symbols, one row per bucket),
+    # whatever the index size.
+    assert _CountingDict.reads <= 50 * (2 + len(_NAMES))
     occurrences = merge.occurrences()
     assert [row["file_path"] for row in occurrences["err"][-50:]] == [
-        f"src/m{n}.py" for n in range(1, 51)
+        f"src/m{n}.py" for n in range(2, 52)
     ]
-    assert len(occurrences["err"]) == files - 1
+    assert len(occurrences["err"]) == files - 2

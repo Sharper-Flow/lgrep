@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from itertools import count, groupby
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,29 +69,26 @@ def _occurrence_to_dict(occ, is_test_file: bool) -> dict:
 class _IndexMerge:
     """Symbols and occurrence buckets under merge, indexed by source file.
 
-    Removing a file touches only that file's own entries, so a refresh does
-    not rescan the whole index once per changed file. The merged result,
+    Removing a file touches only the buckets that hold its rows, so a refresh
+    does not rescan the whole index once per changed file. The merged result,
     including key and row order, is what filtering every symbol and bucket by
-    file_path would produce: each bucket is held as runs of consecutive rows
-    from one file, removing a file drops its runs, and an emptied bucket loses
-    its position. Lists of the loaded index, which the index cache may share,
-    are never mutated; an untouched bucket keeps its original list.
+    file_path would produce. A bucket's first removal filters it into a list
+    the merge owns. A bucket touched by a second removal is split once into
+    runs of consecutive rows from one file, and later removals drop only their
+    runs. An emptied bucket loses its position. Lists of the loaded index,
+    which the index cache may share, are never mutated; an untouched bucket
+    keeps its original list.
     """
 
     def __init__(self, symbols: dict[str, dict], occurrences: dict[str, list[dict]]) -> None:
         self.symbols = dict(symbols)
         self._occurrences = dict(occurrences)
         self._file_symbols: dict[str, list[str]] | None = None
-        self._file_runs: dict[str, list[tuple[str, tuple[str, int]]]] = {}
-        self._runs: dict[str, dict[tuple[str, int], list[dict]]] = {}
-        self._changed: set[str] = set()
-        self._serial = 0
-
-    def _new_run(self, name: str, path: str, rows: list[dict]) -> None:
-        key = (path, self._serial)
-        self._serial += 1
-        self._runs[name][key] = rows
-        self._file_runs.setdefault(path, []).append((name, key))
+        self._file_buckets: dict[str, set[str]] = {}
+        self._owned: set[str] = set()
+        self._runs: dict[str, dict[int, list[dict]]] = {}
+        self._file_runs: dict[str, list[tuple[str, int]]] = {}
+        self._serials = count()
 
     def _ensure_indexed(self) -> None:
         if self._file_symbols is not None:
@@ -101,13 +99,23 @@ class _IndexMerge:
         # Filtering by file drops every empty bucket, not only emptied ones.
         self._occurrences = {name: rows for name, rows in self._occurrences.items() if rows}
         for name, rows in self._occurrences.items():
-            self._runs[name] = {}
-            start = 0
-            for end in range(1, len(rows) + 1):
-                path = rows[start].get("file_path")
-                if end == len(rows) or rows[end].get("file_path") != path:
-                    self._new_run(name, path, rows[start:end])
-                    start = end
+            for path in {row.get("file_path") for row in rows}:
+                self._file_buckets.setdefault(path, set()).add(name)
+
+    def _new_run(self, name: str, path: str | None, rows: list[dict]) -> None:
+        key = next(self._serials)
+        self._runs[name][key] = rows
+        self._file_runs.setdefault(path, []).append((name, key))
+
+    def _split(self, name: str) -> None:
+        rows = self._occurrences[name]
+        self._owned.discard(name)
+        self._runs[name] = {}
+        start = 0
+        for path, group in groupby([row.get("file_path") for row in rows]):
+            end = start + len(list(group))
+            self._new_run(name, path, rows[start:end])
+            start = end
 
     def remove_file(self, path: str) -> None:
         self._ensure_indexed()
@@ -115,11 +123,19 @@ class _IndexMerge:
             data = self.symbols.get(symbol_id)
             if data is not None and data.get("file_path") == path:
                 del self.symbols[symbol_id]
+        for name in self._file_buckets.pop(path, ()):
+            if name in self._owned:
+                self._split(name)
+            elif name in self._occurrences and name not in self._runs:
+                kept = [row for row in self._occurrences[name] if row.get("file_path") != path]
+                if kept:
+                    self._occurrences[name] = kept
+                    self._owned.add(name)
+                else:
+                    del self._occurrences[name]
         for name, key in self._file_runs.pop(path, ()):
-            bucket = self._runs.get(name)
-            if bucket is None or bucket.pop(key, None) is None:
-                continue
-            self._changed.add(name)
+            bucket = self._runs[name]
+            del bucket[key]
             if not bucket:
                 del self._runs[name]
                 del self._occurrences[name]
@@ -132,24 +148,27 @@ class _IndexMerge:
     def add_occurrence(self, row: dict) -> None:
         self._ensure_indexed()
         name, path = row["name"], row["file_path"]
-        self._changed.add(name)
         bucket = self._runs.get(name)
-        if bucket is None:
-            self._runs[name] = {}
-            self._occurrences[name] = []
-        else:
-            last = next(reversed(bucket))
-            if last[0] == path:
-                bucket[last].append(row)
-                return
-        self._new_run(name, path, [row])
+        if bucket is not None:
+            last = bucket[next(reversed(bucket))]
+            if last[0].get("file_path") == path:
+                last.append(row)
+            else:
+                self._new_run(name, path, [row])
+            return
+        rows = self._occurrences.get(name)
+        if rows is None:
+            rows = self._occurrences[name] = []
+        elif name not in self._owned:
+            rows = self._occurrences[name] = list(rows)
+        self._owned.add(name)
+        rows.append(row)
+        self._file_buckets.setdefault(path, set()).add(name)
 
     def occurrences(self) -> dict[str, list[dict]]:
-        for name in self._changed:
-            bucket = self._runs.get(name)
-            if bucket is not None:
-                self._occurrences[name] = [row for rows in bucket.values() for row in rows]
-        self._changed.clear()
+        """Return the merged buckets; call once, after the last change."""
+        for name, bucket in self._runs.items():
+            self._occurrences[name] = [row for rows in bucket.values() for row in rows]
         return self._occurrences
 
 
