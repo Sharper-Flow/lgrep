@@ -9,8 +9,9 @@ from unittest.mock import MagicMock
 import pytest
 from mcp.server.fastmcp import Context
 
-from lgrep.server import LgrepContext, mcp, memory
-from lgrep.server.memory import IdleTrimmer
+from lgrep import memory
+from lgrep.memory import IdleTrimmer
+from lgrep.server import LgrepContext, mcp
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage import _chunk_store
 from lgrep.storage._chunk_store import (

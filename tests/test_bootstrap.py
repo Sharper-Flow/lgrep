@@ -106,7 +106,7 @@ class TestBootstrapTransportPlumbing:
         libc = MagicMock()
         libc.mallopt.return_value = 1
         with (
-            patch("lgrep.server.memory._glibc", return_value=libc),
+            patch("lgrep.memory._glibc", return_value=libc),
             patch("lgrep.server.mcp.run"),
         ):
             bootstrap_module.run_server()

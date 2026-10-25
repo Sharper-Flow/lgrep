@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from lgrep.server import LgrepContext, mcp
+from lgrep.symbol_worker import InProcessSymbolWorker
 
 
 def _tool(name: str):
@@ -29,6 +30,7 @@ def _runtime_ctx():
     class RuntimeStub:
         started_at = time.time()
         max_workers = 4
+        symbol_worker = InProcessSymbolWorker()
 
         async def run_blocking(self, kind, caller, project, fn, *args, lane="query", **kwargs):
             kwargs.pop("cancel_event", None)

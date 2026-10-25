@@ -1,10 +1,11 @@
-"""Native heap bounds for the long-running lgrep daemon.
+"""Native heap bounds for the long-running lgrep daemon and its symbol worker.
 
 LanceDB scans run on many native threads. Under glibc each thread may get its
 own malloc arena (up to 8 per core by default), and memory freed after a scan
-stays in fragmented arenas instead of returning to the OS. The daemon caps the
-arena count once at startup and trims free heap when the runtime goes idle.
-Both hooks are no-ops when the C library is not glibc.
+stays in fragmented arenas instead of returning to the OS. Each process caps
+the arena count once at startup and trims free heap when its work goes idle.
+Both hooks are no-ops when the C library is not glibc. The module sits outside
+``lgrep.server`` so the symbol worker can use it without loading the server.
 """
 
 from __future__ import annotations

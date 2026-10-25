@@ -24,11 +24,14 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import structlog
 
 from lgrep.exceptions import OperationCancelled
-from lgrep.server.memory import IdleTrimmer
+from lgrep.memory import IdleTrimmer
+from lgrep.symbol_worker import InProcessSymbolWorker
 from lgrep.tools.index_repo import credential_values, redact_credentials
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from lgrep.symbol_worker import SymbolWorkerProcess
 
 T = TypeVar("T")
 
@@ -43,7 +46,7 @@ call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 DEFAULT_WORKER_MAX_THREADS = 4
 DEFAULT_BUILD_MAX_THREADS = 1
-DEFAULT_SYMBOL_MAX_THREADS = 2
+DEFAULT_SYMBOL_MAX_THREADS = 4
 DEFAULT_HISTORY_LIMIT = 100
 DEFAULT_EXPLICIT_BUDGET_S = 150.0
 
@@ -130,8 +133,12 @@ class RuntimeSupervisor:
     ``LGREP_WORKER_MAX_THREADS``) serves tool-call work, and the build lane
     (``lgrep-build`` threads, sized by ``LGREP_BUILD_MAX_THREADS``) serves
     build/maintenance kinds so they cannot occupy query threads. Symbol
-    acquisition has its own bounded lane (``lgrep-symbol`` threads), so it
-    neither waits behind semantic builds nor occupies their query workers.
+    calls have their own bounded lane (``lgrep-symbol`` threads), so they
+    neither wait behind semantic builds nor occupy query workers.
+
+    ``symbol_worker`` runs symbol operations. The daemon passes a
+    ``SymbolWorkerProcess``, so symbol-lane threads only wait on the worker
+    process; without one, operations run in the lane thread itself.
     """
 
     def __init__(
@@ -141,6 +148,7 @@ class RuntimeSupervisor:
         max_build_workers: int | None = None,
         max_symbol_workers: int = DEFAULT_SYMBOL_MAX_THREADS,
         history_limit: int = DEFAULT_HISTORY_LIMIT,
+        symbol_worker: InProcessSymbolWorker | SymbolWorkerProcess | None = None,
     ):
         if max_workers is None:
             max_workers = _worker_limit_from_env()
@@ -159,6 +167,7 @@ class RuntimeSupervisor:
         self.max_build_workers = max_build_workers
         self.max_symbol_workers = max_symbol_workers
         self.history_limit = history_limit
+        self.symbol_worker = symbol_worker if symbol_worker is not None else InProcessSymbolWorker()
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="lgrep-worker",
@@ -401,6 +410,7 @@ class RuntimeSupervisor:
                 job.stop_event.set()
                 if job.future is not None:
                     job.future.cancel()
+        self.symbol_worker.stop()
 
     def shutdown(self, *, cancel_futures: bool = True) -> None:
         """Shut down all executors and mark queued/running jobs honestly."""
@@ -420,6 +430,7 @@ class RuntimeSupervisor:
         self._symbol_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._explicit_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._idle_trimmer.close()
+        self.symbol_worker.shutdown()
 
     def _create_job(
         self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE

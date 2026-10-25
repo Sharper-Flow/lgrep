@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from functools import partial
 from typing import Annotated
 
 from mcp.server.fastmcp import Context  # noqa: TC002 — FastMCP evaluates annotations at runtime
@@ -184,11 +185,17 @@ async def prune_symbols(
         effective_dry_run = True
         refused_reason = _refusal_reason("lgrep prune-symbols --execute")
 
+    if ctx is not None:
+        # The symbol worker owns the symbol index cache that pruning evicts.
+        worker = ctx.request_context.lifespan_context.runtime.symbol_worker
+        prune = partial(worker.call, "prune_symbols")
+    else:
+        prune = _prune_symbols
     result = await _run_blocking(
         ctx,
         "prune_symbols",
         None,
-        _prune_symbols,
+        prune,
         dry_run=effective_dry_run,
         active_set=active_set,
         lane="build",
