@@ -224,8 +224,8 @@ async def test_transport_refuses_every_job_tool_before_helper(transport, monkeyp
         calls.append(True)
         return counters(repo="owner/repo")
 
-    monkeypatch.setattr(tools_symbols, "_index_folder", folder)
-    monkeypatch.setattr(tools_symbols, "_index_repo", repo)
+    monkeypatch.setattr("lgrep.tools.index_folder.index_folder", folder)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", repo)
     ctx = None if transport == "missing" else context(app)
     try:
         results = [
@@ -265,7 +265,7 @@ async def test_submission_is_prompt_and_status_validates(tmp_path, monkeypatch):
             truncation_reason=None,
         )
 
-    monkeypatch.setattr(tools_symbols, "_index_folder", held)
+    monkeypatch.setattr("lgrep.tools.index_folder.index_folder", held)
     ctx = context(app)
     try:
         started = time.monotonic()
@@ -395,7 +395,7 @@ async def test_remote_credentials_and_deadline_are_captured_at_admission(monkeyp
             "truncation_reason": None,
         }
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", remote)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", remote)
     try:
         app.runtime._explicit_executor.submit(lambda: (entered.set(), release.wait(3)))
         assert await asyncio.to_thread(entered.wait, 1)
@@ -491,7 +491,7 @@ async def test_credentials_do_not_cross_result_error_diagnostics_or_logs(monkeyp
     async def failed(*_args, **_kwargs):
         return {"error": "x" * 490 + token + " fetch failed"}
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", failed)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", failed)
     try:
         with capture_logs() as logs:
             result = await tools_symbols.index_symbols_repo(
@@ -523,7 +523,7 @@ async def test_empty_token_argument_uses_deployment_token(monkeypatch):
             "truncation_reason": None,
         }
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", remote)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", remote)
     try:
         result = await tools_symbols.index_symbols_repo(
             "owner/repo", github_token="", ctx=context(app)

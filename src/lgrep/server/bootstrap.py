@@ -182,7 +182,7 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     configure_logging()
 
     # Before any worker or LanceDB thread exists, so the cap binds every arena.
-    from lgrep.server.memory import cap_malloc_arenas
+    from lgrep.memory import cap_malloc_arenas
 
     cap_malloc_arenas()
 

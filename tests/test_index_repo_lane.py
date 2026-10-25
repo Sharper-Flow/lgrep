@@ -25,7 +25,7 @@ def test_supervised_index_repo_runner_uses_explicit_lane(monkeypatch):
             "truncation_reason": None,
         }
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", fake_index_repo)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", fake_index_repo)
 
     async def scenario():
         submitted = await tools_symbols.index_symbols_repo("o/r", ctx=context(app))

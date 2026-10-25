@@ -13,10 +13,11 @@ import pytest
 import lgrep.server as server
 import lgrep.tools.index_folder as folder
 from lgrep.parser.extractor import SymbolExtractor
-from lgrep.server import LgrepContext, mcp, tools_symbols
+from lgrep.server import LgrepContext, mcp
 from lgrep.server.lifecycle import _shutdown
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage.index_store import IndexStore
+from lgrep.tools import search_symbols
 from lgrep.tools.get_symbol import get_symbol
 from lgrep.tools.index_folder import index_folder
 
@@ -162,7 +163,7 @@ async def test_failed_acquisition_clears_ownership_and_records_failure(slow_refr
 
     state = slow_refresh
     app = LgrepContext()
-    load = tools_symbols.load_symbol_index
+    load = search_symbols.load_symbol_index
     attempts = 0
 
     def fail_once(*args, **kwargs):
@@ -172,7 +173,7 @@ async def test_failed_acquisition_clears_ownership_and_records_failure(slow_refr
             raise OSError("fixture index read failed")
         return load(*args, **kwargs)
 
-    monkeypatch.setattr(tools_symbols, "load_symbol_index", fail_once)
+    monkeypatch.setattr(search_symbols, "load_symbol_index", fail_once)
     try:
         with pytest.raises(ToolError, match="fixture index read failed"):
             await search(app, state.root, "after_35")
@@ -330,7 +331,7 @@ async def test_slow_symbol_acquisitions_do_not_starve_other_query_tools(
         assert release.wait(30)
         return None, False
 
-    monkeypatch.setattr(tools_symbols, "load_symbol_index", hold_acquisition)
+    monkeypatch.setattr(search_symbols, "load_symbol_index", hold_acquisition)
     callers = [asyncio.create_task(search(app, root, "anything")) for root in roots]
     try:
         for started in entered.values():

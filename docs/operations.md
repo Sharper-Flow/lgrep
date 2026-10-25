@@ -331,9 +331,10 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   checkout identity. Refreshes that publish a changed body retain their
   publication-time stamp.
 - MCP symbol searches share one supervised index check/refresh per repository.
-  It uses a separate `symbol` lane with two workers, independent of query and
+  It uses a separate `symbol` lane with eight threads, independent of query and
   semantic-build workers, and appears as a `symbol_index` job in
-  `lgrep_diagnostics`. A query waits at most five seconds, or half
+  `lgrep_diagnostics`. The check, refresh, and search run in the symbol
+  worker process (see Shared-daemon tuning). A query waits at most five seconds, or half
   `LGREP_TOOL_TIMEOUT_S` if smaller, for that snapshot. If the check, queued
   job, bootstrap, or refresh takes longer, the query returns
   `code="indexing_in_progress"`, `retryable=true`, and no symbol results.
@@ -382,11 +383,14 @@ A truncated completion is not full repository coverage. For incremental local
 work, resubmit to advance another window and inspect status again.
 
 Stopping is cooperative: lock waits, one file, blocking I/O, and an already-started
-save can overrun the budget. Shutdown closes admission and signals the stop event.
-A queued cancelled job never enters its helper. Running jobs retain ownership
-until their worker stops. A stop observed before publication starts no save; an
-already-started save finishes or fails normally. There is no preemption, rollback,
-public cancellation tool, or hard shutdown-duration guarantee.
+save can overrun the budget. Shutdown closes admission and signals the stop event,
+which reaches the symbol worker process. A queued cancelled job never enters its
+helper. Running jobs retain ownership until their worker stops. A stop observed
+before publication starts no save; an already-started save finishes or fails
+normally, unless the symbol worker is still running three seconds after shutdown
+began. The daemon then kills it. The index file is replaced atomically, so a
+killed save keeps the previous index and can leave one orphan `.tmp` file beside
+it. There is no preemption, rollback, or public cancellation tool.
 
 Status retains the latest 100 terminal explicit jobs independently of query-job
 diagnostics. Later explicit completions evict old records. Random per-supervisor
@@ -452,20 +456,33 @@ lgrep:
 - A connection or table-open failure returns an error without deleting the
   last-good cache. An error alone does not authorize destructive recovery.
   Existing model/schema migration checks still apply when a table opens.
-- Its `symbol_cache` snapshot reports process-global `entries`, `tracked_bytes`,
-  and `limit_bytes` without reading index files. The 64 MiB limit counts retained
+- Its `symbol_cache` snapshot reports the symbol worker's `entries`,
+  `tracked_bytes`, and `limit_bytes` as of the worker's last reply, without
+  reading index files; before the worker first replies it reports zero entries. The 64 MiB limit counts retained
   serialized index bytes, not parsed heap or RSS. In-flight callers can keep
   evicted objects alive. Indexes larger than the limit remain readable from disk
   but bypass retention, so repeated queries on those indexes parse them again.
-- Its `process_memory` snapshot is the process-level view and is separate from
-  `symbol_cache`. `rss_bytes` and `swap_bytes` come from `/proc` (null where
+- All symbol work runs in one persistent symbol worker process that the daemon
+  starts with `spawn` on the first symbol call: index checks, refreshes,
+  bootstraps, explicit jobs, symbol queries, outlines, `list_repos`,
+  `invalidate_cache`, and `prune_symbols`. Symbol builds therefore no longer
+  hold the daemon's GIL, and text and semantic searches keep their latency
+  during a build. The worker's log events go through the daemon's sinks with a
+  `worker_pid` field; it never writes to stdout. If the worker exits, its
+  in-flight symbol queries and outlines return `code="symbol_worker_restarted"`,
+  `retryable=true`; in-flight `list_repos`, `invalidate_cache`, and
+  `prune_symbols` calls fail with an MCP error that says to retry; explicit
+  jobs end `failed`. The next symbol call starts a replacement.
+  The worker is never recycled.
+- Its `process_memory` snapshot is the daemon process's view and is separate
+  from `symbol_cache`; it does not include the symbol worker process. `rss_bytes` and `swap_bytes` come from `/proc` (null where
   unreadable). `lance_cache_bytes` is the current size of the one LanceDB
   session that every semantic store shares; `lance_cache_limit_bytes` is its
   fixed bound (256 MiB index plus 256 MiB metadata cache), whatever the number
   of open owners. RSS above that cache is mostly native heap from LanceDB
   scans, not Python objects.
-- On glibc the server caps malloc arenas at startup (`malloc_arena_max`, 4)
-  and returns free heap to the OS after the runtime goes idle, at most once
+- On glibc the server and the symbol worker each cap malloc arenas at startup
+  (`malloc_arena_max`, 4), and the server returns free heap to the OS after the runtime goes idle, at most once
   every 30 seconds (`heap_trims` counts trims). Without both, memory freed
   after scans stays in fragmented per-thread arenas and RSS climbs over days.
   Other C libraries report `malloc_arena_max: null` and no trims. Neither

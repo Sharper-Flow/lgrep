@@ -19,6 +19,7 @@ import pytest
 from lgrep.server import mcp
 from lgrep.storage import get_project_db_path, write_project_meta
 from lgrep.storage.index_store import IndexStore
+from lgrep.symbol_worker import InProcessSymbolWorker
 from lgrep.tools.index_folder import index_folder
 
 if TYPE_CHECKING:
@@ -67,6 +68,8 @@ def _tool_fn(name: str):
 
 class _InlineRuntime:
     """Runs supervised work inline so the guard, not the scheduler, is under test."""
+
+    symbol_worker = InProcessSymbolWorker()
 
     async def run_blocking(self, kind, caller, project, fn, *args, lane="query", **kwargs):
         kwargs.pop("cancel_event", None)
