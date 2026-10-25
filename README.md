@@ -279,7 +279,7 @@ Without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, the pruners return 
 | `LGREP_BUILD_MAX_THREADS` | `1` | Shared build-lane threads: semantic index windows, re-indexes, prune sweeps; explicit symbol jobs have a separate one-worker lane |
 | `LGREP_PRUNE_MIN_AGE_S` | `3600` | Grace window (seconds) before pruning; `0` disables grace |
 | `LGREP_WORKTREE_DEDUP` | unset | Any non-empty value makes git worktrees of one repo share one semantic cache |
-| `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lets MCP prune/invalidate tools delete; keep unset on any shared server |
+| `LGREP_ALLOW_DESTRUCTIVE_MCP` | unset | `true`/`1`/`yes` lists the invalidate tools and lets MCP prune/invalidate tools delete; keep unset on any shared server |
 
 </details>
 
@@ -287,7 +287,7 @@ Without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, the pruners return 
 
 `lgrep` supports two transports: `stdio` and `streamable-http`. stdio is the local default and suits one session. Use streamable HTTP only when you want one shared local daemon.
 
-Explicit symbol-index jobs require stdio. Both submission tools return a `job_id`, not final counters; call `get_symbol_index_job` before using their results. Two limits can stop a run: `max_files` caps the file count, and a separate cooperative job budget, 150 seconds by default, caps the time. Status reports `truncation_reason` as `"max_files"`, `"deadline"`, or null. A truncated run does not cover the whole repository. See [job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
+Explicit symbol-index jobs require stdio, so a streamable-HTTP server does not list their tools. Both submission tools return a `job_id`, not final counters; call `get_symbol_index_job` before using their results. Two limits can stop a run: `max_files` caps the file count, and a separate cooperative job budget, 150 seconds by default, caps the time. Status reports `truncation_reason` as `"max_files"`, `"deadline"`, or null. A truncated run does not cover the whole repository. See [job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
 
 - The HTTP server binds `127.0.0.1` by default and has no built-in authentication.
 - lgrep sets no CORS headers. Do not connect browser-based clients directly to the streamable-HTTP endpoint.
@@ -301,9 +301,10 @@ Explicit symbol-index jobs require stdio. Both submission tools return a `job_id
 - **`Repository not indexed`** — for a local git checkout, symbol tools build the index on the first query. A query on a subdirectory needs an explicit `index_symbols_folder`. Details in [operations](docs/operations.md#freshness-and-index-budgets).
 - **Stale semantic results** — a search answers from the current index, sets `is_stale: true` when that index has drifted, and refreshes it in the background. Run `index_semantic` to force a fresh index before a query. See [operations](docs/operations.md#freshness-and-index-budgets).
 - **Diagnosing high CPU or memory on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, active jobs, and process memory; see [shared-daemon tuning](docs/operations.md#shared-daemon-tuning-vision--opencode).
+- **A tool is missing from the list** — `get_symbol` and the `watch_*_semantic` tools were removed in `4.0.0`; use `get_symbols` and `LGREP_AUTO_WATCH`. The invalidate tools need `LGREP_ALLOW_DESTRUCTIVE_MCP`, and the symbol-index job tools need stdio. See [Tool profile](docs/operations.md#tool-profile).
 - **Native dependency build fails** — prebuilt wheels usually work; otherwise install a compiler toolchain.
 
-Since `3.0.0`, every MCP tool returns structured dicts instead of JSON strings. To upgrade from `2.x`, see [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x).
+To upgrade from `3.x`, see [Upgrade from 3.x](CHANGELOG.md#upgrade-from-3x): `4.0.0` removes three tools and hides tools a server cannot run. Indexes need no rebuild. Since `3.0.0`, every MCP tool returns structured dicts instead of JSON strings; to upgrade from `2.x`, see [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x).
 
 ## Development
 
