@@ -130,7 +130,7 @@ lgrep search-semantic "where are sessions validated" /path/to/project
 
 ## OpenCode setup
 
-Use **stdio** for one user and one session. OpenCode starts lgrep itself, so no separate server process runs. For many sessions, use the shared HTTP server below.
+**stdio is the local default**, for one user and one session. OpenCode starts lgrep itself, so no separate server process runs. For many sessions, use the shared HTTP server below.
 
 ### 1. Run the installer
 
@@ -286,7 +286,7 @@ Prune and invalidate tools refuse to delete without the server-side `LGREP_ALLOW
 
 ## Transport and security
 
-`lgrep` supports two transports: `stdio` and `streamable-http`. stdio is the default and suits one local session. Use streamable HTTP only when you want one shared local daemon.
+`lgrep` supports two transports: `stdio` and `streamable-http`. stdio is the local default and suits one session. Use streamable HTTP only when you want one shared local daemon.
 
 Explicit symbol-index jobs require stdio. Both submission tools return a `job_id`, not final counters; call `get_symbol_index_job` before using their results. Two limits can stop a run: `max_files` caps the file count, and a separate cooperative job budget, 150 seconds by default, caps the time. Status reports `truncation_reason` as `"max_files"`, `"deadline"`, or null. A truncated run does not cover the whole repository. See [job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
 
@@ -301,7 +301,7 @@ Explicit symbol-index jobs require stdio. Both submission tools return a `job_id
 - **Slow first semantic index** — the first run embeds the whole project; later runs skip unchanged files by content hash.
 - **`Repository not indexed`** — for a local git checkout, symbol tools build the index on the first query. A query on a subdirectory needs an explicit `index_symbols_folder`. Details in [operations](docs/operations.md#freshness-and-index-budgets).
 - **Stale semantic results** — a search answers from the current index, sets `is_stale: true` when that index has drifted, and refreshes it in the background. Run `index_semantic` to force a fresh index before a query. See [operations](docs/operations.md#freshness-and-index-budgets).
-- **High CPU or memory on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, active jobs, and process memory; see [shared-daemon tuning](docs/operations.md#shared-daemon-tuning-vision--opencode).
+- **Diagnosing high CPU or memory on a shared daemon** — call `lgrep_diagnostics` for PID, worker limit, active jobs, and process memory; see [shared-daemon tuning](docs/operations.md#shared-daemon-tuning-vision--opencode).
 - **Native dependency build fails** — prebuilt wheels usually work; otherwise install a compiler toolchain.
 
 Since `3.0.0`, every MCP tool returns structured dicts instead of JSON strings. To upgrade from `2.x`, see [Upgrade from 2.x](CHANGELOG.md#upgrade-from-2x).
