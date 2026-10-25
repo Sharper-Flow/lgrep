@@ -15,7 +15,7 @@
 
 `lgrep` is a code-intelligence server for AI coding agents. It speaks the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), so an agent such as [OpenCode](https://github.com/opencode-ai/opencode) can search a codebase by meaning when it does not know the name of what it wants, and by symbol when it does.
 
-Without it, an agent explores a repository with `glob`, `grep`, and random file reads, and repeats that work in every session. `lgrep` keeps both indexes warm in one long-running local server and answers from them instead. Indexes stay on the machine. The semantic engine sends only queries and the chunks it embeds to the Voyage API; symbol lookup is fully local and needs no API key.
+Without it, an agent explores a repository with `glob`, `grep`, and random file reads, and repeats that work in every session. `lgrep` keeps both indexes on disk between sessions and answers from them instead; one shared local server can keep them warm for every session. Indexes stay on the machine. The semantic engine sends only queries and the chunks it embeds to the Voyage API; symbol lookup is fully local and needs no API key.
 
 ## At a glance
 
@@ -26,7 +26,7 @@ Without it, an agent explores a repository with `glob`, `grep`, and random file 
 | **Surface** | 22 MCP tools, a CLI, and a one-command OpenCode installer |
 | **Languages** | 30+ for semantic chunking, 165+ for symbol parsing |
 | **Size** | ~16k lines of source, ~25k lines of tests (1,100+ test functions) |
-| **Delivery** | CI on Python 3.11, 3.12, and 3.13; automatic release on every merge to `main` (64 releases) |
+| **Delivery** | CI on Python 3.11, 3.12, and 3.13; automatic release on every merge to `main` |
 
 ## Architecture
 
@@ -50,7 +50,7 @@ flowchart LR
     slane -- "pipe" --> worker
 
     subgraph worker["Symbol worker process (spawned)"]
-        ts["tree-sitter parsing"] --> symidx[("Symbol index<br/>JSON on disk")]
+        ts["tree-sitter parsing<br/>and symbol queries"] --> symidx[("Symbol index<br/>JSON on disk")]
     end
 ```
 
@@ -58,13 +58,13 @@ flowchart LR
 
 **Symbol engine.** tree-sitter parses each file into symbols, hierarchy, and identifier occurrences, stored as a compact JSON index per repository. It serves symbol search, file and repository outlines, source retrieval, and candidate references with no network call.
 
-**Runtime.** Blocking work never runs on the event loop. A supervisor routes each job to a bounded lane: queries, builds, or symbol work. Every job takes a cancellation event and a time budget, so a request that times out frees its thread. Symbol work runs in a separate spawned process, so CPU-bound parsing never holds the server's interpreter lock.
+**Runtime.** Blocking work never runs on the event loop. A supervisor routes each job to a bounded lane: queries, builds, or symbol work. When a tool call hits its server-side timeout, the supervisor sets the job's cancellation event; indexing checks that event between steps and also stops at a wall-clock budget, so abandoned work ends and frees its thread. Symbol work runs in a separate spawned process, so its CPU-bound Python never holds the server's interpreter lock.
 
-**Cache custody.** Git worktrees of one repository can share one semantic cache. Each worktree stores only the files that differ from the main checkout. Garbage-collection commands remove orphaned caches, stale symbol indexes, and old LanceDB table versions. Deleting tools refuse to run unless the server operator grants it.
+**Cache custody.** Git worktrees of one repository can share one semantic cache. Each worktree stores only the files that differ from the main checkout. Garbage-collection commands remove orphaned caches, stale symbol indexes, and old LanceDB table versions. MCP tools refuse to delete anything unless the server operator grants it.
 
 ## Engineering highlights
 
-lgrep runs as one shared daemon that serves many agent sessions at once, on repositories of several thousand files. Most of its engineering went into keeping that daemon fast, bounded, and correct under that load. Each item below states the measured problem, the fix, and the result recorded in the pull request.
+lgrep runs as one shared daemon that serves many agent sessions at once, on repositories of more than a thousand files. The work below keeps that daemon fast, bounded, and correct under that load. Each item below states the measured problem, the fix, and the result recorded in the pull request.
 
 | Problem | Before | After | PR |
 |---|---|---|---|
@@ -82,11 +82,11 @@ Profiling a cold symbol build of a 500-file repository showed 108 s of 134 s spe
 
 ### Storage: lossless interning of the symbol index
 
-On a 1,154-file repository the symbol index body was 432 MB, mostly repeated line text and identifiers. Occurrences are now stored in one interned JSON encoding and rebuilt into ordinary dictionaries on load. The body shrank 86% to 60 MB, every file, symbol, occurrence, and query result digest stayed identical, and warm reference queries fell from 7.7–8.1 s to 12–17 ms. Older indexes migrate in place on first load. ([#45](https://github.com/Sharper-Flow/lgrep/pull/45))
+On a 1,154-file repository the symbol index body was 432 MB, because every identifier occurrence stored its full line text. Occurrences are now stored in one interned JSON encoding and rebuilt into ordinary dictionaries on load. The body shrank 86% to 60 MB, every file, symbol, occurrence, and query result digest stayed identical, and warm reference queries fell from 7.7–8.1 s to 12–17 ms. The accepted cost is memory: resident size after a query rose from about 201 MiB to 762 MiB. An older index keeps its format until its next rewrite, which publishes the compact form. ([#45](https://github.com/Sharper-Flow/lgrep/pull/45))
 
 ### Storage: table versions nobody deleted
 
-Every LanceDB write leaves a table version, and nothing removed them. The semantic cache on one host reached 97 GiB, and one 170k-row table held 16,772 versions: 8.0 GiB of manifests beside 2.0 GiB of data. `lgrep gc` now compacts each table, deletes old versions, and retrains the vector index. Vector and hybrid search re-rank candidates by exact distance, which keeps top-10 agreement with exact search at 0.98. On a copy of that table, size fell from 9.3 GiB to 1.7 GiB and query time from ~270 ms to ~22 ms. Server connections recheck the latest version every 5 s, so a running server keeps working after another process cleans its tables. ([#50](https://github.com/Sharper-Flow/lgrep/pull/50))
+Every LanceDB write leaves a table version, and nothing removed them. The semantic cache on one host reached 97 GiB, and one 170k-row table held 16,772 versions: 8.0 GiB of manifests beside 2.0 GiB of data. `lgrep gc` now compacts each table, deletes old versions, and retrains the vector index. Vector and hybrid search re-rank candidates by exact distance, which lifts top-10 agreement with exact search on the retrained index from 0.60 to 0.98. On a copy of that table, size fell from 9.3 GiB to 1.7 GiB and query time from ~270 ms to ~22 ms. Server connections recheck the latest version every 5 s, so a running server keeps working after another process cleans its tables. ([#50](https://github.com/Sharper-Flow/lgrep/pull/50))
 
 ### Memory: native heap fragmentation in a long-lived daemon
 
@@ -94,10 +94,10 @@ After 58 idle hours, the shared daemon held 33 GiB of resident memory plus 27 Gi
 
 ### Concurrency: one daemon, many sessions
 
-- **Cooperative cancellation.** A search that timed out abandoned its auto-index thread, which kept running and held a worker forever. Enough of them wedged the pool permanently. A cancellation event now reaches every blocking step, including the embedding retry sleep, and a wall-clock budget backs it up. An abandoned job on a 2,157-file repository now ends and frees its worker. ([#3](https://github.com/Sharper-Flow/lgrep/pull/3))
+- **Cooperative cancellation.** A search that timed out abandoned its auto-index thread, which kept running and held its worker. Enough of them wedged the pool permanently. A cancellation event now reaches every blocking step of that indexing path, including the embedding retry sleep, and a wall-clock budget backs it up. An abandoned job on a 2,157-file repository now ends and frees its worker. ([#3](https://github.com/Sharper-Flow/lgrep/pull/3))
 - **Lanes and off-loop I/O.** Six tool calls ran 41–71 s, well past their timeout, because first-touch LanceDB I/O ran synchronously on the event loop and the timeout never fired. Store opening moved to worker threads, and index builds got their own lane, so queries no longer queue behind builds. ([#28](https://github.com/Sharper-Flow/lgrep/pull/28))
-- **Process isolation for CPU-bound work.** Symbol parsing is pure Python and holds the GIL. All symbol work now runs in one persistent spawned worker. A crashed worker is replaced on the next call, and its in-flight calls return a retryable error. During a full symbol build, the slowest overlapping text search fell from 1.143 s to 0.095 s ([#54](https://github.com/Sharper-Flow/lgrep/pull/54)). A follow-up made the storage package load its vector-database re-exports lazily, so the worker never imports LanceDB: cold start fell from 4.1–5.0 s to 0.14 s, and worker memory from ~204 MB to ~73 MB ([#55](https://github.com/Sharper-Flow/lgrep/pull/55)).
-- **Fast startup.** MCP `initialize` waited for every warm-up path to open its store, 9.99 s with five paths, which tripped the host's spawn deadline. Warm-up now runs after the handshake, which answers in 2.45 s. ([#49](https://github.com/Sharper-Flow/lgrep/pull/49))
+- **Process isolation for CPU-bound work.** Symbol builds and queries are CPU-bound Python and hold the GIL. All symbol work now runs in one persistent spawned worker. A crashed worker is replaced on the next call, and its in-flight calls return a retryable error. During a full symbol build, the slowest overlapping text search fell from 1.143 s to 0.095 s ([#54](https://github.com/Sharper-Flow/lgrep/pull/54)). A follow-up made the storage package load its vector-database re-exports lazily, so the worker never imports LanceDB: cold start fell from 4.1–5.0 s to 0.14 s, and worker memory from ~204 MB to ~73 MB ([#55](https://github.com/Sharper-Flow/lgrep/pull/55)).
+- **Fast startup.** MCP `initialize` waited for every warm-up path to open its store, 9.99 s with five paths, which tripped the host's spawn deadline. Warm-up now runs as a background task, and `initialize` answers in 2.45 s. ([#49](https://github.com/Sharper-Flow/lgrep/pull/49))
 
 ### Correctness: worktrees and embedding provenance
 
@@ -106,7 +106,7 @@ After 58 idle hours, the shared daemon held 33 GiB of resident memory plus 27 Gi
 
 ### How changes ship
 
-Each change above landed as a pull request that records the problem, the measurement, and the tests that cover the fix. CI runs Ruff and the full test suite on Python 3.11, 3.12, and 3.13, and a successful CI run on `main` publishes a release automatically.
+Each change above landed as a pull request that records the problem, the evidence, and how the fix was verified. CI runs Ruff and the full test suite on every pull request, and a successful CI run on `main` publishes a release.
 
 ## Quick start
 
@@ -123,7 +123,9 @@ cd lgrep && pip install .
 # Try it without an agent
 lgrep index-symbols /path/to/project
 lgrep search-symbols "authenticate" /path/to/project
-VOYAGE_API_KEY=your-key lgrep search-semantic "where are sessions validated" /path/to/project
+export VOYAGE_API_KEY=your-key
+lgrep index-semantic /path/to/project
+lgrep search-semantic "where are sessions validated" /path/to/project
 ```
 
 ## OpenCode setup
