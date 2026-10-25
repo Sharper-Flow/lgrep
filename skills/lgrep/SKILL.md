@@ -130,7 +130,7 @@ To remove them: `lgrep uninstall-opencode`.
 
 > **Note:** Tool functions are named `search_semantic`, `index_semantic`, etc. OpenCode auto-prefixes them as `lgrep_search_semantic`, `lgrep_index_semantic`, etc.
 
-> **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (file input/parse budget; incremental symbol indexing counts changed/new parses, not unchanged files). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool that declares them (`lgrep_get_symbols` / `lgrep_index_symbols_folder`).
+> **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (file input/parse budget; incremental symbol indexing counts changed/new parses, not unchanged files). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool and argument to use instead (`lgrep_get_symbols` with `symbol_ids` / `lgrep_index_symbols_folder` with `path`).
 
 ### lgrep_search_semantic
 
@@ -344,7 +344,7 @@ Listed only when the server sets `LGREP_ALLOW_DESTRUCTIVE_MCP`.
 
 1. **Ignore large or generated files (`.lgrepignore`)**: `lgrep` respects `.gitignore` automatically. For additional exclusions, create a `.lgrepignore` file in the project root (e.g. `src/generated/`, `*.test.data`) to speed up indexing and avoid clutter.
 2. **Semantic search — be specific**: Instead of "auth", use "JWT authentication flow and session management".
-3. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols`, `lgrep_search_references`, or `lgrep_get_symbols`.
+3. **Symbol search — no setup for a checkout root**: `lgrep_search_symbols`, `lgrep_search_references`, and `lgrep_get_symbols` index a missing local git checkout on first use. A subdirectory query needs `lgrep_index_symbols_folder` first (stdio servers only).
 4. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
 5. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
 6. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.

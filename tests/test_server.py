@@ -969,6 +969,10 @@ class TestServerErrorPaths:
         assert ("status_count_chunks", "_get_project_stats", "/proj/scoped") in calls
         assert ("status_indexed_files", "_get_project_stats", "/proj/scoped") in calls
 
+
+class TestMaxProjectsLimit:
+    """Tests for MAX_PROJECTS resource guard."""
+
     @pytest.mark.asyncio
     async def test_max_projects_rejects_when_all_busy(self, tmp_path):
         """Only active owners, rather than past project count, refuse admission."""

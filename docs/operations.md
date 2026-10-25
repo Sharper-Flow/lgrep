@@ -90,8 +90,8 @@ declared name: `max_results`/`maxResults` â†’ `limit`, `symbol`/`symbol_name` â†
 declares the canonical name and the caller did not send both spellings. Any
 other undeclared argument is refused with the tool's valid argument names;
 `symbol_id` on `search_references` and `path` on `index_symbols_repo` are
-refused with the tool that declares them (`get_symbols` and
-`index_symbols_folder`).
+refused with the tool and argument to use instead (`get_symbols` with
+`symbol_ids`, and `index_symbols_folder` with `path`).
 
 ## Cache maintenance
 
