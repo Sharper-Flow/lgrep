@@ -14,11 +14,18 @@ import pytest
 import lgrep.storage
 from lgrep.storage import _chunk_store
 
-# Modules the worker imports outside its _QUERIES table, in its _op_* handlers.
+# Modules the worker imports outside its _QUERIES table: at startup, in its
+# _op_* handlers, and inside the symbol tool functions when they run.
 _WORKER_HANDLER_MODULES = (
+    "lgrep.memory",
     "lgrep.tools.search_symbols",
     "lgrep.tools.index_folder",
     "lgrep.tools.index_repo",
+    "lgrep.tools._index_bootstrap",
+    "lgrep.tools._index_freshness",
+    "lgrep.discovery",
+    "lgrep.parser.extractor",
+    "lgrep.parser.languages",
 )
 
 _PROBE = """
