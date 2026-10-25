@@ -358,11 +358,13 @@ class RuntimeSupervisor:
         with self._lock:
             if job.id in self._active:
                 job.future = future
+        # Done callbacks run in registration order. Releasing the project
+        # first means no caller sees the job gone while it still holds it.
+        if release is not None:
+            future.add_done_callback(lambda _: release())
         future.add_done_callback(
             lambda done_future: self._complete_from_future(job.id, done_future)
         )
-        if release is not None:
-            future.add_done_callback(lambda _: release())
 
         try:
             return await asyncio.wrap_future(future)
