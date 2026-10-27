@@ -400,13 +400,21 @@ Deadline stops report a partial result with `truncation_reason="deadline"` and
 `"max_files"`; an unstopped run reports null. Folder runs preserve out-of-window
 entries under the existing incremental deletion rules.
 
-Remote results also report `published`. An incomplete refresh leaves an existing
-saved index unchanged (`published=false`); searches keep using that snapshot,
-which may be outdated. New entries are not merged with older ones. With no saved
-index, a partial first build may publish (`published=true`), with
-`walk_truncated=true` persisted in its index body. Subsequent incomplete attempts
-preserve that baseline too. A complete refresh replaces the baseline, including
-a complete empty tree. Counters describe the attempt, not the retained snapshot.
+Remote results also report `published`. An incomplete refresh never replaces a
+complete saved index or one whose coverage is unknown (`published=false`). It may
+replace a known-incomplete baseline only when coverage was limited solely by
+`max_files` or GitHub tree truncation, with every selected file fetched and parsed
+and no deadline stop. Fetch/parse failures or deadline stops preserve any saved
+baseline, even when an earlier limit hides the failure in `truncation_reason`.
+Legacy indexes without a coverage marker and unreadable or malformed baselines
+remain protected. The coverage check reads the saved index body under the lock.
+
+Replacement is wholesale; new entries are never merged with older ones. A smaller
+requested cap may reduce partial coverage. With no saved index, a partial first
+build may publish (`published=true`), with `walk_truncated=true` persisted in its
+index body. A complete refresh replaces any baseline, including a complete empty
+tree. Counters describe the attempt, not the retained snapshot. When publication
+is refused, searches keep using the saved snapshot, which may be outdated.
 Remote truncation reasons also include `"tree_truncated"`, `"fetch_failed"`, and
 `"parse_failed"`. Malformed tree responses fail without publication. The
 publication decision and save share the per-repository lock. Save failures are

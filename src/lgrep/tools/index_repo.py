@@ -116,7 +116,8 @@ async def index_repo(
 
     Returns:
         Counters for this attempt, its coverage, and whether it was published.
-        Incomplete attempts never replace an existing saved index.
+        Incomplete attempts protect complete or unknown saved coverage. A
+        limit-only attempt may replace a baseline explicitly marked incomplete.
     """
     credentials = credential_values((github_token,) if github_token else ())
 
@@ -175,12 +176,15 @@ async def index_repo(
     fetched: list[tuple[str, object, bytes]] = []
     truncated = False
     truncation_reason: str | None = None
+    # A cap/tree reason may hide later failures. Keep publication health separate.
+    limit_only = True
 
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         # Get the file tree from GitHub
         tree_url = f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1"
         if expired():
             truncated = True
+            limit_only = False
             truncation_reason = "deadline"
             tree_data = {}
         else:
@@ -199,6 +203,7 @@ async def index_repo(
                         redact_credentials(f"Network error fetching {repo}: {e}", credentials)
                     )
                 truncated = True
+                limit_only = False
                 truncation_reason = "deadline"
                 tree_data = {}
             else:
@@ -253,6 +258,7 @@ async def index_repo(
             check_stop()
             if expired():
                 truncated = True
+                limit_only = False
                 truncation_reason = "deadline"
                 log.info(
                     "index_repo_deadline_reached",
@@ -271,6 +277,7 @@ async def index_repo(
             for (file_path, spec), result in zip(wave, results, strict=True):
                 if isinstance(result, BaseException):
                     truncated = True
+                    limit_only = False
                     if isinstance(result, httpx.TimeoutException) and expired():
                         truncation_reason = "deadline"
                     elif truncation_reason is None:
@@ -293,7 +300,7 @@ async def index_repo(
                 fetched.append((file_path, spec, content))
 
     def _parse_and_persist():
-        nonlocal truncated, truncation_reason
+        nonlocal truncated, truncation_reason, limit_only
         files_processed = 0
         files_dict: dict[str, str] = {}
         symbols_dict: dict[str, dict] = {}
@@ -301,6 +308,7 @@ async def index_repo(
             check_stop()
             if expired():
                 truncated = True
+                limit_only = False
                 truncation_reason = "deadline"
                 break
             try:
@@ -326,6 +334,7 @@ async def index_repo(
                     }
             except Exception as e:
                 truncated = True
+                limit_only = False
                 if truncation_reason is None:
                     truncation_reason = "parse_failed"
                 log.warning(
@@ -355,7 +364,9 @@ async def index_repo(
                 except FileNotFoundError:
                     pass
                 else:
-                    return files_processed, len(symbols_dict), False
+                    if not limit_only or not store.has_incomplete_index(repo_key):
+                        return files_processed, len(symbols_dict), False
+            check_stop()
             store.save(index)
         return files_processed, len(symbols_dict), True
 

@@ -1,4 +1,4 @@
-"""Incomplete GitHub observations must not replace a saved symbol index."""
+"""Remote publication preserves complete baselines and rejects failed refreshes."""
 
 import json
 import threading
@@ -44,11 +44,12 @@ def remote(tmp_path, monkeypatch):
     return state
 
 
-def seed(storage):
+def seed(storage, *, partial=False):
     store = IndexStore(storage_dir=storage)
     store.save(
         CodeIndex(
             repo_path=KEY,
+            walk_truncated=partial,
             files={"old.py": "last-good-hash"},
             symbols={
                 "old.py:function:previous": {
@@ -159,8 +160,11 @@ async def test_invalid_tree_is_a_reported_error_without_publication(remote, tree
 
 
 @pytest.mark.parametrize("empty", [False, True])
-async def test_complete_refresh_replaces_old_index_including_complete_empty_tree(remote, empty):
-    store = seed(remote.storage)
+@pytest.mark.parametrize("partial", [False, True])
+async def test_complete_refresh_replaces_old_index_including_complete_empty_tree(
+    remote, empty, partial
+):
+    store = seed(remote.storage, partial=partial)
     if empty:
         remote.tree["tree"] = []
 
@@ -174,8 +178,13 @@ async def test_complete_refresh_replaces_old_index_including_complete_empty_tree
     assert len(current.files) == (0 if empty else 1)
 
 
-async def test_publication_decision_and_save_hold_the_same_repo_lock(remote, monkeypatch):
+@pytest.mark.parametrize("partial", [False, True])
+async def test_publication_decision_and_save_hold_the_same_repo_lock(remote, monkeypatch, partial):
+    if partial:
+        seed(remote.storage, partial=True)
+        remote.tree["truncated"] = True
     original_lock, original_save = IndexStore.repo_lock, IndexStore.save
+    original_coverage = IndexStore.has_incomplete_index
     held = []
 
     @contextmanager
@@ -191,8 +200,13 @@ async def test_publication_decision_and_save_hold_the_same_repo_lock(remote, mon
         assert held == [KEY]
         original_save(self, index)
 
+    def coverage(self, key):
+        assert held == [KEY]
+        return original_coverage(self, key)
+
     monkeypatch.setattr(IndexStore, "repo_lock", lock)
     monkeypatch.setattr(IndexStore, "save", save)
+    monkeypatch.setattr(IndexStore, "has_incomplete_index", coverage)
     result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
     assert result["published"] is True
 
@@ -218,14 +232,105 @@ async def test_incomplete_attempt_preserves_a_baseline_published_while_fetching(
     assert saved_bytes(remote.storage) == before
 
 
-async def test_incomplete_attempt_preserves_even_a_partial_first_build(remote):
-    remote.tree["truncated"] = True
-    first = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
-    assert first["published"] is True
+@pytest.mark.parametrize("limit", ["tree_truncated", "max_files"])
+async def test_limit_only_refresh_replaces_partial_baseline_without_merging(
+    remote, monkeypatch, limit
+):
+    store = seed(remote.storage, partial=True)
+    kwargs = make_incomplete(remote, monkeypatch, limit)
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage, **kwargs)
+    assert result["published"] is True
+    assert result["truncated"] is True
+    assert result["truncation_reason"] == limit
+    current = store.load(KEY)
+    assert current.walk_truncated is True
+    assert set(current.files) == {"new.py"}
+    assert search_symbols("previous", KEY, storage_dir=remote.storage)["total_matches"] == 0
+    assert search_symbols("refreshed", KEY, storage_dir=remote.storage)["total_matches"] == 1
+
+
+@pytest.mark.parametrize("caps", [(1, 2), (2, 1)])
+async def test_changed_file_cap_can_widen_or_reduce_partial_coverage(remote, caps):
+    remote.tree["tree"] = [{"type": "blob", "path": f"{name}.py"} for name in "abc"]
+    store = IndexStore(remote.storage)
+    for cap in caps:
+        result = await index_repo(
+            "owner/repo", ref="main", storage_dir=remote.storage, max_files=cap
+        )
+        assert result["published"] is True
+        assert result["truncation_reason"] == "max_files"
+        assert len(store.load(KEY).files) == cap
+
+
+@pytest.mark.parametrize("limit", ["tree_truncated", "max_files"])
+@pytest.mark.parametrize("failure", ["fetch_failed", "parse_failed"])
+async def test_a_limit_reason_cannot_hide_a_failed_partial_refresh(
+    remote, monkeypatch, limit, failure
+):
+    seed(remote.storage, partial=True)
     before = saved_bytes(remote.storage)
-    remote.tree["tree"] = [{"type": "blob", "path": "another.py"}]
-    second = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
-    assert second["published"] is False
+    kwargs = make_incomplete(remote, monkeypatch, limit)
+    make_incomplete(remote, monkeypatch, failure)
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage, **kwargs)
+    assert result["published"] is False
+    assert result["truncation_reason"] == limit
+    assert saved_bytes(remote.storage) == before
+
+
+@pytest.mark.parametrize("marker", [None, False, "true", "false", 1, {}, []])
+async def test_unknown_or_complete_coverage_does_not_allow_partial_replacement(remote, marker):
+    store = seed(remote.storage)
+    path = store._index_path(KEY)
+    body = json.loads(path.read_text())
+    if marker is None:
+        del body["walk_truncated"]
+    else:
+        body["walk_truncated"] = marker
+    path.write_text(json.dumps(body))
+    before = saved_bytes(remote.storage)
+    remote.tree["truncated"] = True
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
+    assert result["published"] is False
+    assert saved_bytes(remote.storage) == before
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "not JSON",
+        "[]",
+        '{"walk_truncated":true}',
+        '{"repo_path":"other","walk_truncated":true,"files":{},"symbols":{}}',
+    ],
+)
+async def test_unknown_baseline_is_not_overwritten_by_a_limited_refresh(remote, body):
+    store = seed(remote.storage)
+    store._index_path(KEY).write_text(body)
+    before = saved_bytes(remote.storage)
+    remote.tree["truncated"] = True
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
+    assert result["published"] is False
+    assert saved_bytes(remote.storage) == before
+
+
+@pytest.mark.parametrize("error", [PermissionError, RecursionError])
+async def test_unreadable_partial_baseline_is_not_assumed_missing(remote, monkeypatch, error):
+    from pathlib import Path
+
+    store = seed(remote.storage, partial=True)
+    path = store._index_path(KEY)
+    original = Path.read_text
+    before = saved_bytes(remote.storage)
+    remote.tree["truncated"] = True
+
+    def read(self, *args, **kwargs):
+        if self == path:
+            raise error("injected read failure")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage)
+    assert result["published"] is False
     assert saved_bytes(remote.storage) == before
 
 
@@ -238,13 +343,16 @@ async def test_tree_truncation_is_not_hidden_by_the_file_cap(remote):
 
 
 @pytest.mark.parametrize("stage", ["before_parse", "between_parses"])
-async def test_deadline_preserves_baseline_after_successful_fetch(remote, monkeypatch, stage):
+@pytest.mark.parametrize("partial", [False, True])
+async def test_deadline_preserves_baseline_after_successful_fetch(
+    remote, monkeypatch, stage, partial
+):
     import importlib
 
     import lgrep.parser.extractor as extractor
 
     module = importlib.import_module("lgrep.tools.index_repo")
-    seed(remote.storage)
+    seed(remote.storage, partial=partial)
     before = saved_bytes(remote.storage)
     remote.tree["tree"].append({"type": "blob", "path": "other.py"})
     clock = [0.0]
@@ -284,6 +392,24 @@ async def test_shutdown_while_waiting_for_publication_lock_prevents_save(remote,
             yield
 
     monkeypatch.setattr(IndexStore, "repo_lock", lock)
+    with pytest.raises(OperationCancelled):
+        await index_repo("owner/repo", ref="main", storage_dir=remote.storage, cancel_event=stop)
+    assert saved_bytes(remote.storage) == before
+
+
+async def test_shutdown_during_baseline_coverage_read_prevents_save(remote, monkeypatch):
+    seed(remote.storage, partial=True)
+    before = saved_bytes(remote.storage)
+    remote.tree["truncated"] = True
+    stop = threading.Event()
+    original = IndexStore.has_incomplete_index
+
+    def coverage(self, key):
+        partial = original(self, key)
+        stop.set()
+        return partial
+
+    monkeypatch.setattr(IndexStore, "has_incomplete_index", coverage)
     with pytest.raises(OperationCancelled):
         await index_repo("owner/repo", ref="main", storage_dir=remote.storage, cancel_event=stop)
     assert saved_bytes(remote.storage) == before

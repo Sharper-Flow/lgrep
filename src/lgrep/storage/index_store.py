@@ -511,6 +511,25 @@ class IndexStore:
         except OSError:
             return None
 
+    def has_incomplete_index(self, repo_path: str) -> bool:
+        """Check explicit saved coverage under the caller's publication lock.
+
+        Unlike load(), this requires a literal true marker. Legacy, unreadable,
+        malformed, and foreign index bodies never authorize partial replacement.
+        """
+        normalized_repo = normalize_repo_key(repo_path)
+        try:
+            data = json.loads(self._index_path(normalized_repo).read_text(encoding="utf-8"))
+        except (ValueError, RecursionError, OSError):
+            return False
+        return (
+            isinstance(data, dict)
+            and data.get("repo_path") == normalized_repo
+            and data.get("walk_truncated") is True
+            and isinstance(data.get("files"), dict)
+            and isinstance(data.get("symbols"), dict)
+        )
+
     def load(self, repo_path: str) -> CodeIndex | None:
         """Load a CodeIndex from disk.
 

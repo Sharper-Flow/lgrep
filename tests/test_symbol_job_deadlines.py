@@ -15,7 +15,7 @@ from structlog.testing import capture_logs
 
 from lgrep.exceptions import OperationCancelled
 from lgrep.server import LgrepContext, tools_symbols
-from lgrep.storage.index_store import IndexStore
+from lgrep.storage.index_store import CodeIndex, IndexStore
 from tests.test_explicit_symbol_jobs import context, settled
 
 folder = importlib.import_module("lgrep.tools.index_folder")
@@ -151,11 +151,21 @@ def test_folder_deadline_after_finished_work_does_not_replace_stop_reason(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("capped", [False, True])
+@pytest.mark.parametrize("partial_baseline", [False, True])
 async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
-    tmp_path, monkeypatch, capped
+    tmp_path, monkeypatch, capped, partial_baseline
 ):
     import tree_sitter_language_pack
 
+    if partial_baseline:
+        IndexStore(tmp_path / "symbols").save(
+            CodeIndex(
+                repo_path="github:owner/repo@HEAD",
+                files={"old.py": "old-hash"},
+                symbols={},
+                walk_truncated=True,
+            )
+        )
     clock = [0.0]
     monkeypatch.setattr(remote, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     real_client = httpx.AsyncClient
@@ -193,6 +203,7 @@ async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
     assert result["files_indexed"] == 1
     assert result["truncated"] is capped
     assert result["truncation_reason"] == ("max_files" if capped else None)
+    assert result["published"] is True
 
 
 @pytest.mark.asyncio
