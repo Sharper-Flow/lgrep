@@ -248,7 +248,7 @@ from `lgrep_get_symbol_index_job`, not the submission acknowledgement.
   `"fetch_failed"`, or `"parse_failed"`. Completion with truncation is not full
   repository coverage. For remote jobs, check `published`: false means searches
   still use the saved baseline; true means this attempt was saved. See
-  [publication and recovery](https://github.com/Sharper-Flow/lgrep/tree/main/docs/operations.md#explicit-symbol-index-jobs).
+  [publication and recovery](https://github.com/Sharper-Flow/lgrep/blob/main/docs/operations.md#explicit-symbol-index-jobs).
 - Identical nonterminal submissions join one job. Different ones return
   `symbol_index_busy`, retryable=true. Retry later, rather than submitting in parallel.
 - Only the latest 100 terminal explicit jobs are retained; unrelated queries do

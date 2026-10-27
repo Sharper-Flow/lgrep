@@ -229,6 +229,14 @@ async def test_incomplete_attempt_preserves_even_a_partial_first_build(remote):
     assert saved_bytes(remote.storage) == before
 
 
+async def test_tree_truncation_is_not_hidden_by_the_file_cap(remote):
+    remote.tree["truncated"] = True
+    remote.tree["tree"].append({"type": "blob", "path": "another.py"})
+    result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage, max_files=1)
+    assert result["truncated"] is True
+    assert result["truncation_reason"] == "tree_truncated"
+
+
 @pytest.mark.parametrize("stage", ["before_parse", "between_parses"])
 async def test_deadline_preserves_baseline_after_successful_fetch(remote, monkeypatch, stage):
     import importlib

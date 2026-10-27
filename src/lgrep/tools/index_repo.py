@@ -235,7 +235,8 @@ async def index_repo(
             eligible.append((file_path, spec))
         if not eligible_exhausted:
             truncated = True
-            truncation_reason = "max_files"
+            if truncation_reason is None:
+                truncation_reason = "max_files"
 
         async def _fetch(file_path: str, timeout: float):
             content_url = f"https://raw.githubusercontent.com/{repo}/{ref}/{file_path}"
