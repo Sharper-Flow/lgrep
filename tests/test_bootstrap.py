@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog
 
+import lgrep.logging_setup as logging_setup
 import lgrep.server.bootstrap as bootstrap_module
 from lgrep.server import _startup
 
@@ -213,7 +214,7 @@ class TestConfigureLogging:
         def injected_eio(fd, op):
             raise OSError(errno.EIO, "Input/output error")
 
-        monkeypatch.setattr(bootstrap_module.fcntl, "flock", injected_eio)
+        monkeypatch.setattr(logging_setup.fcntl, "flock", injected_eio)
         bootstrap_module.configure_logging()
 
         root = logging.getLogger()
@@ -241,9 +242,9 @@ class TestConfigureLogging:
         monkeypatch.setenv("LGREP_LOG_FILE", str(tmp_path / "lgrep.log"))
 
         bootstrap_module.configure_logging()
-        first = len(bootstrap_module._owned_handlers)
+        first = len(logging_setup._owned_handlers)
         bootstrap_module.configure_logging()
-        second = len(bootstrap_module._owned_handlers)
+        second = len(logging_setup._owned_handlers)
 
         assert first == 2
         assert second == 2

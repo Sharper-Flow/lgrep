@@ -8,10 +8,8 @@ import sys
 import pytest
 
 
-def _run(args, level):
-    env = {**os.environ, "LGREP_LOG_LEVEL": level}
-    # The daemon's optional file sink must not be opened by these test processes.
-    env.pop("LGREP_LOG_FILE", None)
+def _run(args, level, log_file):
+    env = {**os.environ, "LGREP_LOG_LEVEL": level, "LGREP_LOG_FILE": str(log_file)}
     return subprocess.run(
         [sys.executable, *args], capture_output=True, text=True, env=env, timeout=30
     )
@@ -23,9 +21,12 @@ def test_symbol_commands_emit_only_json_on_stdout(tmp_path, level):
     project.mkdir()
     (project / "example.py").write_text("def cli_probe():\n    return 1\n")
     storage = tmp_path / "symbols"
+    log_file = tmp_path / "daemon.log"
 
     indexed = _run(
-        ["-m", "lgrep", "index-symbols", str(project), "--storage-dir", str(storage)], level
+        ["-m", "lgrep", "index-symbols", str(project), "--storage-dir", str(storage)],
+        level,
+        log_file,
     )
     assert indexed.returncode == 0, indexed.stderr
     assert json.loads(indexed.stdout)["files_indexed"] == 1
@@ -49,6 +50,7 @@ def test_symbol_commands_emit_only_json_on_stdout(tmp_path, level):
             str(storage),
         ],
         level,
+        log_file,
     )
     assert searched.returncode == 0, searched.stderr
     assert any(symbol["name"] == "cli_probe" for symbol in json.loads(searched.stdout)["results"])
@@ -56,6 +58,8 @@ def test_symbol_commands_emit_only_json_on_stdout(tmp_path, level):
     assert any(event["level"] == "debug" for event in events) == (level == "DEBUG")
     if level == "ERROR":
         assert events == []
+    assert not log_file.exists()
+    assert not log_file.with_suffix(".log.lock").exists()
 
 
 @pytest.mark.parametrize("command", ["search-semantic", "index-semantic"])
@@ -92,7 +96,7 @@ with (
     # Supply no real credential, even if the parent process has one.
     with pytest.MonkeyPatch.context() as env:
         env.setenv("VOYAGE_API_KEY", "test-not-a-real-key")
-        result = _run(args, level)
+        result = _run(args, level, tmp_path / "daemon.log")
     assert result.returncode == 1, result.stderr
     assert json.loads(result.stdout) == {"error": "offline embedding failure"}
     events = [json.loads(line) for line in result.stderr.splitlines()]
@@ -102,3 +106,31 @@ with (
         "ERROR": ["cli_probe_error"],
     }
     assert [event["event"] for event in events] == expected[level]
+    assert not (tmp_path / "daemon.log").exists()
+    assert not (tmp_path / "daemon.log.lock").exists()
+
+
+def test_symbol_cli_does_not_import_the_server_or_semantic_stack(tmp_path):
+    script = """
+import sys
+from lgrep.cli import main
+
+assert main() == 1
+for name in ('lgrep.server', 'lgrep.indexing', 'lancedb', 'mcp'):
+    assert name not in sys.modules, name
+"""
+    result = _run(
+        [
+            "-c",
+            script,
+            "search-symbols",
+            "probe",
+            str(tmp_path),
+            "--storage-dir",
+            str(tmp_path / "symbols"),
+        ],
+        "ERROR",
+        tmp_path / "daemon.log",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "error" in json.loads(result.stdout)

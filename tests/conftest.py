@@ -12,7 +12,7 @@ def cli_logging(capsys):
 
     import structlog
 
-    from lgrep.server.bootstrap import shutdown_logging
+    from lgrep.logging_setup import shutdown_logging
 
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level
