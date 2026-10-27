@@ -6,6 +6,21 @@ import pytest
 
 
 @pytest.fixture
+def isolated_gc_stores(tmp_path, monkeypatch):
+    """Pin both maintenance store roots to this test's temporary storage.
+
+    ``lgrep gc --execute`` tests reach real ``prune_symbols``,
+    ``gc_worktree_meta``, and ``optimize_caches`` passes. Without this
+    fixture the symbol store falls back to the developer's
+    ``~/.cache/lgrep/symbols`` when ``LGREP_SYMBOLS_DIR`` is unset, and
+    inherited ``LGREP_CACHE_DIR``/``LGREP_SYMBOLS_DIR`` values escape
+    the per-test fixture entirely.
+    """
+    monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("LGREP_SYMBOLS_DIR", str(tmp_path / "symbols"))
+
+
+@pytest.fixture
 def cli_logging(capsys):
     """Release CLI handlers before the test's temporary stderr stream closes."""
     import logging

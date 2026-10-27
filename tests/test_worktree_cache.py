@@ -905,9 +905,8 @@ class TestGcWorktreeMeta:
         # No error, no work done on dirs without meta
         assert report["checked"] >= 1
 
-    def test_lgrep_gc_runs_both_passes(self, tmp_path, monkeypatch, capsys, cli_logging):
+    def test_lgrep_gc_runs_both_passes(self, isolated_gc_stores, capsys, cli_logging):
         """lgrep gc --execute runs both prune_orphans AND gc_worktree_meta."""
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         from lgrep.cli import _cmd_gc
 
