@@ -94,6 +94,44 @@ class TestGitCommonDir:
 class TestSeededFirstQuery:
     """First query against an unindexed linked worktree of an indexed trunk."""
 
+    def test_identical_content_seed_publishes_worktree_identity(self, tmp_path, monkeypatch):
+        from lgrep.parser.extractor import SymbolExtractor
+        from lgrep.tools.index_folder import index_folder
+        from lgrep.tools.search_symbols import search_symbols
+
+        trunk = tmp_path / "trunk"
+        (trunk / "src").mkdir(parents=True)
+        (trunk / "src" / "shared.ts").write_text("function identical() { return 1; }\n")
+        _git("init", cwd=trunk)
+        _commit_all(trunk, "fixture")
+        worktree = tmp_path / "linked"
+        _git("worktree", "add", "-b", "linked", str(worktree), cwd=trunk)
+        store_dir = tmp_path / "store"
+        index_folder(str(trunk), storage_dir=store_dir)
+        saved = []
+        save = IndexStore.save
+
+        def record_save(self, index):
+            saved.append(index.repo_path)
+            return save(self, index)
+
+        def reject_parse(*args, **kwargs):
+            pytest.fail("identical-content seeding must not reparse unchanged files")
+
+        monkeypatch.setattr(IndexStore, "save", record_save)
+        monkeypatch.setattr(SymbolExtractor, "extract_full", reject_parse)
+        found = search_symbols("identical", str(worktree), storage_dir=store_dir)
+        assert found["total_matches"] == 1
+        assert found["index_refreshed"] is True
+        assert saved == [str(worktree.resolve())]
+        IndexStore._cache.clear()
+        store = IndexStore(store_dir)
+        target_index = store.load(str(worktree.resolve()))
+        seed_index = store.load(str(trunk.resolve()))
+        assert target_index.repo_path == str(worktree.resolve())
+        assert seed_index.repo_path == str(trunk.resolve())
+        assert target_index.files == seed_index.files
+
     def test_search_symbols_builds_worktree_key_and_answers_from_worktree(
         self, split_repo, tmp_path
     ):
@@ -126,8 +164,8 @@ class TestSeededFirstQuery:
         assert "error" not in miss
         assert miss["total_matches"] == 0
 
-    def test_get_symbol_serves_worktree_body_after_seed(self, split_repo, tmp_path):
-        from lgrep.tools.get_symbol import get_symbol
+    def test_get_symbols_serves_worktree_body_after_seed(self, split_repo, tmp_path):
+        from lgrep.tools.get_symbol import get_symbols
         from lgrep.tools.index_folder import index_folder
 
         trunk, worktree = split_repo
@@ -135,12 +173,12 @@ class TestSeededFirstQuery:
 
         assert "error" not in index_folder(str(trunk), storage_dir=store_dir)
 
-        result = get_symbol(
-            "src/shared.py:function:authenticate", str(worktree), storage_dir=store_dir
+        result = get_symbols(
+            ["src/shared.py:function:authenticate"], str(worktree), storage_dir=store_dir
         )
 
         assert "error" not in result
-        assert 'return "worktree"' in result["symbol"]["source"]
+        assert 'return "worktree"' in result["symbols"][0]["source"]
 
     def test_get_symbols_bootstraps_unindexed_worktree(self, split_repo, tmp_path):
         from lgrep.tools.get_symbol import get_symbols

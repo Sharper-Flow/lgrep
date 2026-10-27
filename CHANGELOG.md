@@ -1,3 +1,59 @@
+Releases after v3.6.19 are listed on GitHub Releases: https://github.com/Sharper-Flow/lgrep/releases
+
+## 4.0.0
+
+### Upgrade from 3.x
+
+The MCP server lists fewer tools. Indexes are unchanged; nothing needs re-indexing.
+
+1. **`get_symbol` is removed.** Call `get_symbols(symbol_ids=[id], path=...)`.
+   The response is `{"symbols": [...]}` with one entry per requested ID, in
+   order. An unknown ID or a stale source range returns
+   `{"id": ..., "error": ...}` in that entry instead of a top-level error, so
+   check each entry.
+2. **`watch_start_semantic` and `watch_stop_semantic` are removed.** Searches
+   already refresh a stale index. Set `LGREP_AUTO_WATCH=true` on the server to
+   watch projects warmed at startup.
+3. **`invalidate_cache` and `invalidate_worktree_cache` are listed only when
+   the server starts with `LGREP_ALLOW_DESTRUCTIVE_MCP`.** Without the grant they
+   refused every call; now they are absent.
+4. **`index_symbols_folder`, `index_symbols_repo`, and `get_symbol_index_job`
+   are listed only on stdio.** A server started with
+   `--transport streamable-http` refused every call to them; now they are
+   absent. Symbol queries still index a missing local checkout on first use.
+5. **Agent allowlists.** Remove `lgrep_get_symbol`, `lgrep_watch_start_semantic`,
+   and `lgrep_watch_stop_semantic` from agent tool allowlists and add
+   `lgrep_get_symbols` where needed. Re-run `lgrep install-opencode` to refresh
+   the packaged instructions and skill.
+
+Without the destructive grant, a stdio server lists 17 tools and a
+streamable-HTTP server lists 14 (22 before). Rollback: pin `lgrep<4`.
+
+## 2026-10-18 (v3.6.19)
+
+- fix(symbols): intern occurrence storage without changing results (#45)
+- docs: update changelog for v3.6.18
+
+## 2026-10-18 (v3.6.18)
+
+- fix(symbols): supervise bounded explicit indexing jobs (#44)
+- docs: update changelog for v3.6.17
+
+## 2026-10-18 (v3.6.17)
+
+- fix(symbols): supervise shared refreshes outside query waits (#43)
+- docs: update changelog for v3.6.16
+
+## 2026-10-18 (v3.6.16)
+
+- fix(symbols): avoid redundant refresh loads and writes (#42)
+- docs: update changelog for v3.6.15
+
+## 2026-10-18 (v3.6.15)
+
+- fix(symbols): validate source ranges after refresh (#41)
+- docs: update changelog for v3.6.14
+
 ## 2026-10-16 (v3.6.14)
 
 - fix(server): evict idle semantic owners without restarting (#40)

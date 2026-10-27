@@ -208,7 +208,6 @@ class TestCmdSearchExecution:
         results = SearchResults(
             results=[SearchResult("a.py", 1, 10, "def foo(): pass", 0.9, "hybrid")],
             query_time_ms=5.0,
-            total_chunks=50,
         )
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
@@ -249,7 +248,6 @@ class TestCmdSearchExecution:
         results = SearchResults(
             results=[SearchResult("b.py", 5, 15, "class Bar:", 0.85, "vector")],
             query_time_ms=3.0,
-            total_chunks=50,
         )
         mock_store.search_vector.return_value = results
         mock_store_cls.return_value = mock_store
@@ -279,7 +277,7 @@ class TestCmdSearchExecution:
 
         mock_store = MagicMock()
         mock_store.checkout = BASE_CHECKOUT
-        results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
+        results = SearchResults(results=[], query_time_ms=1.0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
 
@@ -309,7 +307,7 @@ class TestCmdSearchExecution:
 
         mock_store = MagicMock()
         mock_store.checkout = BASE_CHECKOUT
-        results = SearchResults(results=[], query_time_ms=1.0, total_chunks=0)
+        results = SearchResults(results=[], query_time_ms=1.0)
         mock_store.search_hybrid.return_value = results
         mock_store_cls.return_value = mock_store
 
@@ -810,7 +808,9 @@ class TestGcPruneSymbols:
             patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
             patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
             patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+            patch("lgrep.tools.prune_orphans.optimize_caches") as mock_optimize,
         ):
+            mock_optimize.return_value = {"dry_run": True, "caches": []}
             mock_prune.return_value = {
                 "dry_run": True,
                 "dirs_examined": 0,
@@ -828,7 +828,13 @@ class TestGcPruneSymbols:
             data = json.loads(out)
 
         assert rc == 0
-        assert set(data.keys()) == {"prune_orphans", "gc_worktree_meta", "prune_symbols"}
+        assert set(data.keys()) == {
+            "prune_orphans",
+            "gc_worktree_meta",
+            "prune_symbols",
+            "optimize_caches",
+        }
+        assert data["optimize_caches"] == mock_optimize.return_value
         assert data["prune_symbols"] == symbol_report
         assert data["prune_orphans"] == mock_prune.return_value
         assert data["gc_worktree_meta"] == mock_gc.return_value
@@ -841,7 +847,9 @@ class TestGcPruneSymbols:
             patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
             patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
             patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+            patch("lgrep.tools.prune_orphans.optimize_caches") as mock_optimize,
         ):
+            mock_optimize.return_value = {"dry_run": True, "caches": []}
             mock_prune.return_value = {
                 "dry_run": True,
                 "dirs_examined": 0,
@@ -860,6 +868,7 @@ class TestGcPruneSymbols:
         assert mock_prune.call_args[1]["dry_run"] is False
         assert mock_gc.call_args[1]["dry_run"] is False
         assert mock_prune_symbols.call_args[1]["dry_run"] is False
+        assert mock_optimize.call_args[1]["dry_run"] is False
 
     def test_gc_dispatch_prune_symbols(self):
         """main() dispatches 'prune-symbols' subcommand."""
@@ -884,6 +893,7 @@ class TestGcSymbolsDir:
             patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
             patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
             patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+            patch("lgrep.tools.prune_orphans.optimize_caches", return_value={}),
         ):
             mock_prune.return_value = {"dry_run": True}
             mock_gc.return_value = {"removed_aliases": 0}
@@ -901,6 +911,7 @@ class TestGcSymbolsDir:
             patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune,
             patch("lgrep.tools.prune_orphans.gc_worktree_meta") as mock_gc,
             patch("lgrep.tools.prune_symbols.prune_symbols") as mock_prune_symbols,
+            patch("lgrep.tools.prune_orphans.optimize_caches", return_value={}),
         ):
             mock_prune.return_value = {"dry_run": True}
             mock_gc.return_value = {"removed_aliases": 0}

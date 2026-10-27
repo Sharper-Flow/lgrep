@@ -14,25 +14,49 @@ from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from lgrep.memory import allocator_info, process_rss_swap_bytes
 from lgrep.server import mcp, time_tool
 from lgrep.server.lifecycle import owner_store_snapshot
 from lgrep.server.responses import (  # noqa: TC001
     DiagnosticsResult,
     LoadedProjectEntry,
+    ProcessMemoryInfo,
     TimeoutAbandonmentSummary,
 )
 from lgrep.server.runtime import JobStatus
+from lgrep.storage._chunk_store import (
+    LANCE_INDEX_CACHE_BYTES,
+    LANCE_METADATA_CACHE_BYTES,
+    lance_session,
+)
 from lgrep.storage.index_store import IndexStore
 
 if TYPE_CHECKING:
     from lgrep.server.lifecycle import LgrepContext
 
 
+def process_memory_snapshot() -> ProcessMemoryInfo:
+    """Return process RSS/swap, shared Lance cache use, and allocator bounds."""
+    rss, swap = process_rss_swap_bytes()
+    arena_max, trims = allocator_info()
+    return ProcessMemoryInfo(
+        rss_bytes=rss,
+        swap_bytes=swap,
+        lance_cache_bytes=lance_session().size_bytes,
+        lance_cache_limit_bytes=LANCE_INDEX_CACHE_BYTES + LANCE_METADATA_CACHE_BYTES,
+        lance_index_cache_limit_bytes=LANCE_INDEX_CACHE_BYTES,
+        lance_metadata_cache_limit_bytes=LANCE_METADATA_CACHE_BYTES,
+        malloc_arena_max=arena_max,
+        heap_trims=trims,
+    )
+
+
 @mcp.tool(
     description=(
         "Return a read-only diagnostic snapshot of the lgrep daemon. "
         "Includes PID, uptime, loaded projects, active/recent jobs, and "
-        "timeout/abandonment summary, and bounded symbol-cache accounting. "
+        "timeout/abandonment summary, bounded symbol-cache accounting, and "
+        "process memory (RSS, swap, shared LanceDB cache, allocator bounds). "
         "Contains no secrets or env vars."
     ),
     annotations=ToolAnnotations(
@@ -110,8 +134,14 @@ async def lgrep_diagnostics(
         loaded_projects=loaded_projects,
         active_jobs=active_jobs,
         recent_jobs=recent_jobs,
-        symbol_cache=IndexStore.cache_info(),
+        # The symbol worker owns the daemon's symbol index cache.
+        symbol_cache=(
+            app_ctx.runtime.symbol_worker.cache_info()
+            if app_ctx is not None
+            else IndexStore.cache_info()
+        ),
         owner_stores=owner_store_snapshot(app_ctx),
+        process_memory=process_memory_snapshot(),
         timeout_abandonment_summary=TimeoutAbandonmentSummary(
             abandoned_count=abandoned_count,
             finished_after_abandon_count=finished_after_abandon_count,

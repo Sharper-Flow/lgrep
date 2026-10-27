@@ -14,7 +14,7 @@ Response convention:
 
 from __future__ import annotations
 
-from typing import Any, NotRequired
+from typing import Any, Literal, NotRequired
 
 from typing_extensions import TypedDict
 
@@ -144,31 +144,8 @@ class StatusAllProjectsResult(TypedDict):
     projects: list[StatusSemanticResult]
 
 
-class WatchStartResult(TypedDict):
-    """Response for watch_start_semantic."""
-
-    path: str
-    watching: bool
-    message: str | None  # "Already watching" when idempotent
-
-
-class WatchStopResult(TypedDict):
-    """Response for watch_stop_semantic (single project)."""
-
-    stopped: bool
-    project: str | None  # None when stopping all
-    message: str | None  # "Not watching" when no active watcher
-
-
-class WatchStopAllResult(TypedDict):
-    """Response for watch_stop_semantic (all projects)."""
-
-    stopped: bool
-    projects_stopped: list[str]
-
-
 class IndexSymbolsFolderResult(TypedDict):
-    """Response for index_symbols_folder."""
+    """Final local counters returned by get_symbol_index_job."""
 
     files_indexed: int
     files_skipped: int
@@ -176,17 +153,40 @@ class IndexSymbolsFolderResult(TypedDict):
     symbols_indexed: int
     occurrences_indexed: int
     repo_path: str
-    _meta: _Meta
+    walk_truncated: bool
+    truncation_reason: str | None
 
 
 class IndexSymbolsRepoResult(TypedDict):
-    """Response for index_symbols_repo."""
+    """Final remote counters returned by get_symbol_index_job."""
 
     files_indexed: int
     symbols_indexed: int
     repo: str
+    ref: str
     truncated: bool
     truncation_reason: str | None
+
+
+SymbolIndexJobState = Literal["queued", "running", "completed", "failed", "cancelled"]
+
+
+class SymbolIndexSubmissionResult(TypedDict):
+    """Acknowledgement only; final counters belong to status."""
+
+    job_id: str
+    state: SymbolIndexJobState
+    duplicate: bool
+    _meta: _Meta
+
+
+class SymbolIndexJobResult(TypedDict):
+    """Status in the current stdio daemon's bounded explicit-job history."""
+
+    job_id: str
+    state: SymbolIndexJobState
+    result: IndexSymbolsFolderResult | IndexSymbolsRepoResult | None
+    error: str | None
     _meta: _Meta
 
 
@@ -300,13 +300,6 @@ class SearchReferencesResult(_SearchReferencesResultRequired, total=False):
     """
 
     error: str
-
-
-class GetSymbolResult(TypedDict):
-    """Response for get_symbol."""
-
-    symbol: dict[str, Any]
-    _meta: _Meta
 
 
 class GetSymbolsResult(TypedDict):
@@ -448,6 +441,25 @@ class OwnerStoreSnapshot(TypedDict):
     evictions: int
 
 
+class ProcessMemoryInfo(TypedDict):
+    """Process-level memory, separate from symbol-cache serialized bytes.
+
+    ``rss_bytes``/``swap_bytes`` come from /proc and are None where it is
+    unreadable. ``lance_cache_*`` describe the one LanceDB session every
+    semantic store shares. ``malloc_arena_max`` is None when no cap applies
+    (non-glibc or not set at startup); ``heap_trims`` counts idle trims.
+    """
+
+    rss_bytes: int | None
+    swap_bytes: int | None
+    lance_cache_bytes: int
+    lance_cache_limit_bytes: int
+    lance_index_cache_limit_bytes: int
+    lance_metadata_cache_limit_bytes: int
+    malloc_arena_max: int | None
+    heap_trims: int
+
+
 class DiagnosticsResult(TypedDict):
     """Response for lgrep_diagnostics.
 
@@ -468,6 +480,7 @@ class DiagnosticsResult(TypedDict):
     timeout_abandonment_summary: TimeoutAbandonmentSummary
     symbol_cache: SymbolCacheInfo
     owner_stores: OwnerStoreSnapshot
+    process_memory: ProcessMemoryInfo
 
 
 # --------------------------------------------------------------------------- #

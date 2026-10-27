@@ -149,7 +149,7 @@ def test_table_open_failure_preserves_last_good_cache(tmp_path, monkeypatch, err
         create_table=Mock(),
         drop_table=Mock(),
     )
-    monkeypatch.setattr("lgrep.storage._chunk_store.lancedb.connect", lambda _: connection)
+    monkeypatch.setattr("lgrep.storage._chunk_store.lancedb.connect", lambda _, **__: connection)
     store = ChunkStore(tmp_path)
     with pytest.raises(error_type, match="transient table error") as error:
         _ = store.table
@@ -164,7 +164,7 @@ def test_failed_table_validation_never_publishes_partial_handle(tmp_path, monkey
     failure = PermissionError("cannot inspect stored rows")
     table = SimpleNamespace(count_rows=Mock(side_effect=failure))
     connection = SimpleNamespace(open_table=Mock(return_value=table))
-    monkeypatch.setattr("lgrep.storage._chunk_store.lancedb.connect", lambda _: connection)
+    monkeypatch.setattr("lgrep.storage._chunk_store.lancedb.connect", lambda _, **__: connection)
     store = ChunkStore(tmp_path)
     for _ in range(2):
         with pytest.raises(PermissionError, match="cannot inspect stored rows"):

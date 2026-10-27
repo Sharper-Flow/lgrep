@@ -36,11 +36,16 @@ from typing import ClassVar
 import structlog
 from typing_extensions import TypedDict
 
+from lgrep.storage._occurrences import STORAGE_VERSION, decode_occurrences, encode_occurrences
+
 log = structlog.get_logger()
 
 # Default symbol index storage directory. Importable so sibling modules
 # (tools/prune_symbols.py) do not duplicate this default and drift.
 DEFAULT_SYMBOLS_DIR = Path.home() / ".cache" / "lgrep" / "symbols"
+
+# Allow coarse kernel timestamp lag or whole-second source mtime quantization.
+_NOOP_CHECK_MARGIN_NS = 2_000_000_000
 
 
 @dataclass
@@ -67,6 +72,7 @@ class CodeIndex:
     occurrences: dict[str, list[dict]] = field(default_factory=dict)  # name → occurrences
     version: str = "2.0"
     walk_truncated: bool = False
+    _storage_version: int = field(default=0, repr=False, compare=False)
 
 
 class SymbolCacheInfo(TypedDict):
@@ -90,7 +96,9 @@ class _IndexCache:
         with self._lock:
             return self._generation
 
-    def lookup(self, path: Path, mtime_ns: int, size: int) -> tuple[CodeIndex | None, int]:
+    def lookup(
+        self, path: Path, mtime_ns: int, size: int, limit: int
+    ) -> tuple[CodeIndex | None, int]:
         with self._lock:
             entry = self._entries.get(path)
             if entry is not None and entry[:2] == (mtime_ns, size):
@@ -98,7 +106,18 @@ class _IndexCache:
                 return entry[2], self._generation
             if entry is not None:
                 self.pop(path)
+            if size <= limit:
+                # Release cache-only custody before allocating a replacement.
+                # Active callers may still hold their own checked snapshots.
+                # A failed load still leaves this room free.
+                self._make_room(size, limit)
             return None, self._generation
+
+    def _make_room(self, size: int, limit: int) -> None:
+        """Evict only the LRU entries needed; the caller holds _lock."""
+        while self._entries and self._tracked_bytes + size > limit:
+            _, evicted = self._entries.popitem(last=False)
+            self._tracked_bytes -= evicted[1]
 
     def admit(
         self, path: Path, mtime_ns: int, size: int, index: CodeIndex, limit: int, generation: int
@@ -113,9 +132,7 @@ class _IndexCache:
                 self._tracked_bytes -= previous[1]
             if size > limit:
                 return
-            while self._entries and self._tracked_bytes + size > limit:
-                _, evicted = self._entries.popitem(last=False)
-                self._tracked_bytes -= evicted[1]
+            self._make_room(size, limit)
             self._entries[path] = (mtime_ns, size, index)
             self._tracked_bytes += size
 
@@ -407,13 +424,16 @@ class IndexStore:
         generation = self._cache.generation()
 
         try:
+            occurrences, strings = encode_occurrences(index.occurrences)
             data = {
                 "repo_path": normalized_repo,
                 "files": index.files,
                 "symbols": index.symbols,
-                "occurrences": index.occurrences,
+                "occurrences": occurrences,
                 "version": index.version,
                 "walk_truncated": index.walk_truncated,
+                "storage_version": STORAGE_VERSION,
+                "occurrence_strings": strings,
             }
             # Compact serialization. Measured on the real symbol store,
             # pretty-print padding was 19.1% of stored bytes (~480MB of 2.5GB).
@@ -425,6 +445,7 @@ class IndexStore:
             # breaks re-indexing there. os.replace overwrites atomically on
             # both POSIX and Windows.
             os.replace(tmp, target)
+            index._storage_version = STORAGE_VERSION
             # Sidecar AFTER the index: the only crash window then leaves
             # index-without-sidecar, which readers handle via the parse
             # fallback. Sidecar-first could leave sidecar-without-index, a
@@ -456,12 +477,35 @@ class IndexStore:
                 tmp.unlink(missing_ok=True)
             raise
 
+    def mark_checked(self, index: CodeIndex, checked_at_ns: int) -> None:
+        """Advance a no-op check without rewriting its body, under repo_lock.
+
+        Stamp two seconds before walk start for coarse kernel timestamp lag
+        or whole-second source mtime quantization, not a FAT timing guarantee.
+        Recent files may trigger another no-op refresh.
+        A concurrently removed index leaves the caller's snapshot usable and
+        is not recreated or retained in the global cache.
+        """
+        target = self._index_path(normalize_repo_key(index.repo_path))
+        generation = self._cache.generation()
+        checked_at_ns -= _NOOP_CHECK_MARGIN_NS
+        try:
+            os.utime(target, ns=(checked_at_ns, checked_at_ns))
+            stat = target.stat()
+        except FileNotFoundError:
+            self.release_cached_file(target)
+            log.warning("index_disappeared_during_noop_check", repo=index.repo_path)
+            return
+        self._cache.admit(
+            target, stat.st_mtime_ns, stat.st_size, index, self.CACHE_LIMIT_BYTES, generation
+        )
+
     def last_indexed_at(self, repo_path: str) -> float | None:
         """Return the persisted index file's mtime, or None when unindexed.
 
-        The mtime of the atomically-saved index file is the moment the last
-        index window completed, so freshness gates compare working-tree file
-        mtimes against it.
+        The index file's mtime records its last publication, or two seconds
+        before the start of its last no-op check. Freshness gates compare
+        source mtimes to it.
         """
         try:
             return self._index_path(normalize_repo_key(repo_path)).stat().st_mtime
@@ -481,21 +525,26 @@ class IndexStore:
         index_file = self._index_path(normalized_repo)
         try:
             stat = index_file.stat()
-            cached, generation = self._cache.lookup(index_file, stat.st_mtime_ns, stat.st_size)
+            cached, generation = self._cache.lookup(
+                index_file, stat.st_mtime_ns, stat.st_size, self.CACHE_LIMIT_BYTES
+            )
             if cached is not None:
                 return cached
 
             data = json.loads(index_file.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("Invalid symbol index body")
             index = CodeIndex(
                 repo_path=data["repo_path"],
                 files=data.get("files", {}),
                 symbols=data.get("symbols", {}),
-                occurrences=data.get("occurrences", {}),
+                occurrences=decode_occurrences(data),
                 version=data.get("version", "2.0"),
                 # Legacy bodies carry no marker and load as complete; the
                 # freshness gate then refreshes them once, and the refreshed
                 # save lands the marker.
                 walk_truncated=bool(data.get("walk_truncated", False)),
+                _storage_version=data.get("storage_version", 0),
             )
             self._cache.admit(
                 index_file,
@@ -509,7 +558,7 @@ class IndexStore:
         except FileNotFoundError:
             self.release_cached_file(index_file)
             return None
-        except (json.JSONDecodeError, KeyError, OSError) as e:
+        except (ValueError, KeyError, OSError) as e:
             log.warning("index_load_failed", repo=normalized_repo, error=str(e))
             return None
 
@@ -677,7 +726,7 @@ class IndexStore:
         self,
         file_path: Path | str,
         start_byte: int,
-        end_byte: int,
+        end_byte: int | None,
     ) -> bytes | None:
         """Retrieve the source bytes for a symbol by byte offset.
 
@@ -687,7 +736,7 @@ class IndexStore:
         Args:
             file_path: Path to the source file
             start_byte: Start byte offset of the symbol
-            end_byte: End byte offset of the symbol
+            end_byte: End byte offset, or None for the complete remaining snapshot
 
         Returns:
             Source bytes for the symbol, or None if the file cannot be read

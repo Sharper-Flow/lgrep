@@ -34,7 +34,7 @@ Use this first-action policy:
 | **File structure** ("what's in auth.py?") | `lgrep_get_file_outline` | No index needed |
 | **Repo structure** ("what's in this codebase?") | `lgrep_get_repo_outline` | Full symbol map |
 | **Exact text/identifier** ("find verifyToken") | `lgrep_search_text` or `Grep` | Literal matching |
-| **Get symbol source** (by ID) | `lgrep_get_symbol` | Byte-precise retrieval |
+| **Get symbol source** (by ID) | `lgrep_get_symbols` | Byte-precise retrieval; one or more IDs |
 | **Known-file review** | `Read` | Direct inspection |
 
 ### Priority examples
@@ -111,7 +111,7 @@ LGREP_PRUNE_MIN_AGE_S=7200 lgrep prune-orphans --dry-run   # 2h grace window
 ```
 Dry-run by default. Active projects and the `symbols/` subdir are always skipped. `--execute` and `--dry-run` are mutually exclusive.
 
-**MCP safety.** The `lgrep_prune_orphans` MCP tool forces `dry_run=True` on non-stdio (shared HTTP) transports. Destructive prunes on shared servers must use the CLI.
+**MCP safety.** Over MCP, `lgrep_prune_orphans` and `lgrep_prune_symbols` delete only when the server sets `LGREP_ALLOW_DESTRUCTIVE_MCP`; otherwise they return a preview and say why. Destructive prunes on shared servers should use the CLI.
 
 This installs three artifacts into `~/.config/opencode/`: the MCP server entry,
 the always-on `instructions/lgrep-tools.md` policy file, and this skill file.
@@ -130,7 +130,7 @@ To remove them: `lgrep uninstall-opencode`.
 
 > **Note:** Tool functions are named `search_semantic`, `index_semantic`, etc. OpenCode auto-prefixes them as `lgrep_search_semantic`, `lgrep_index_semantic`, etc.
 
-> **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (files scanned). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool that declares them (`lgrep_get_symbol` / `lgrep_index_symbols_folder`).
+> **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (file input/parse budget; incremental symbol indexing counts changed/new parses, not unchanged files). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool and argument to use instead (`lgrep_get_symbols` with `symbol_ids` / `lgrep_index_symbols_folder` with `path`).
 
 ### lgrep_search_semantic
 
@@ -202,17 +202,8 @@ Agents do **not** need to manually call `lgrep_index_semantic` to refresh
 between searches. Call `lgrep_status_semantic` if a project's drift behavior
 seems wrong (e.g., to inspect `disk_cache` / `watching` state per project).
 
-### lgrep_watch_start_semantic
-
-Start watching a directory for file changes (auto-reindex on save).
-
-- `path` (string, **required**): Absolute path to project root.
-
-### lgrep_watch_stop_semantic
-
-Stop watching for file changes.
-
-- `path` (string, optional): Absolute path to project to stop watching. If omitted, stops **all** watchers.
+Background file watchers are server configuration, not a tool: set
+`LGREP_AUTO_WATCH=true` to watch projects warmed at startup.
 
 ## Symbol Engine Tools
 
@@ -229,18 +220,39 @@ src/auth.py:method:login
 
 ### lgrep_index_symbols_folder
 
-Index all symbols in a local folder. Run once before using `lgrep_search_symbols` or `lgrep_get_symbol`.
+Submit a local background job on stdio. The acknowledgement contains `job_id`,
+`state`, and `duplicate`, not final counters. Read `lgrep_get_symbol_index_job`
+before using `lgrep_search_symbols` or `lgrep_get_symbols`.
 
 - `path` (string, **required**): Absolute path to the repository/folder root.
-- `max_files` (int): Maximum files to index (default: 500).
+- `max_files` (int): Changed/new file parse cap (default: 500); unchanged files do not consume it. A separate default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`, also bounds the job. Deadline stops report `truncation_reason="deadline"` in status.
 - `incremental` (bool): Skip files whose SHA-256 hash matches the stored index (default: `true`). Set to `false` to force a full re-index.
 
 ### lgrep_index_symbols_repo
 
-Index symbols from a GitHub repository via the REST API (no git clone).
+Submit a background GitHub API job on stdio (no git clone). Read final counters
+from `lgrep_get_symbol_index_job`, not the submission acknowledgement.
 
 - `repo` (string, **required**): GitHub repo in `owner/name` format.
 - `ref` (string): Branch, tag, or commit SHA (default: `HEAD`).
+- `max_files` (int): File fetch/parse cap (default: 500). Jobs also use the default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`; deadline stops report `truncation_reason="deadline"` in status.
+- `github_token` (string, optional): Explicit credential; otherwise `LGREP_GITHUB_TOKEN`, then `GITHUB_TOKEN`.
+
+### lgrep_get_symbol_index_job
+
+- `job_id` (string, **required**): ID returned by a submission in this daemon.
+- States: `queued`, `running`, `completed`, `failed`, `cancelled` (shutdown only).
+- A completed job returns final counters in `result`. Check `walk_truncated`
+  (folder) or `truncated` (remote), and `truncation_reason`: `"max_files"`,
+  `"deadline"`, or null. Completion with truncation is not full repository coverage.
+- Identical nonterminal submissions join one job. Different ones return
+  `symbol_index_busy`, retryable=true. Retry later, rather than submitting in parallel.
+- Only the latest 100 terminal explicit jobs are retained; unrelated queries do
+  not evict them. Restart loses jobs. Unknown/evicted IDs return
+  `unknown_symbol_index_job`, retryable=false. There is no public cancel tool.
+- These three tools are listed only when the server runs on stdio. A server
+  started with `--transport streamable-http` does not offer them; symbol tools
+  there build a missing index on first query instead.
 
 ### lgrep_list_repos
 
@@ -302,30 +314,29 @@ Search for candidate references/usages of a symbol name in an indexed Python rep
 - `usage_filter` (string): One of `production_first` (default), `include_tests`, or `tests_only`.
 - `kind` (string, optional): Occurrence kind filter (`call`, `attribute`, `import`, `reference`).
 
-Results are **candidate occurrences only** — they are not compiler-accurate or exhaustive. Each result includes the file path, line number, line text, occurrence kind, and the nearest enclosing symbol. Use `lgrep_get_file_outline` or `lgrep_get_symbol` to inspect the surrounding code in more detail.
+Results are **candidate occurrences only** — they are not compiler-accurate or exhaustive. Each result includes the file path, line number, line text, occurrence kind, and the nearest enclosing symbol. Use `lgrep_get_file_outline` or `lgrep_get_symbols` to inspect the surrounding code in more detail.
 
 **Example usage:**
 ```python
 lgrep_search_references(query="helper", path="/home/user/dev/project", usage_filter="production_first")
 ```
 
-### lgrep_get_symbol
-
-Get full metadata and source code for a single symbol by ID.
-
-- `symbol_id` (string, **required**): Symbol ID in format `file_path:kind:name`.
-- `path` (string, **required**): Absolute path to the indexed repository.
-
 ### lgrep_get_symbols
 
-Batch retrieval of multiple symbols by ID.
+Get full metadata and source code for one or more symbols by ID. Pass every
+relevant ID in one call.
 
-- `symbol_ids` (list[string], **required**): List of symbol IDs.
+- `symbol_ids` (list[string], **required**): One or more IDs in format `file_path:kind:name`.
 - `path` (string, **required**): Absolute path to the indexed repository.
+
+The response holds one entry per requested ID, in order. An unknown ID or a
+source range that no longer matches the file returns `{"id": ..., "error": ...}`
+in that entry rather than a top-level error, so check each entry.
 
 ### lgrep_invalidate_cache
 
 Remove the symbol index for a repository, forcing a full re-index on next use.
+Listed only when the server sets `LGREP_ALLOW_DESTRUCTIVE_MCP`.
 
 - `path` (string, **required**): Absolute path to the repository root.
 
@@ -333,7 +344,7 @@ Remove the symbol index for a repository, forcing a full re-index on next use.
 
 1. **Ignore large or generated files (`.lgrepignore`)**: `lgrep` respects `.gitignore` automatically. For additional exclusions, create a `.lgrepignore` file in the project root (e.g. `src/generated/`, `*.test.data`) to speed up indexing and avoid clutter.
 2. **Semantic search — be specific**: Instead of "auth", use "JWT authentication flow and session management".
-3. **Symbol search — use after indexing**: Run `lgrep_index_symbols_folder` once per project before using `lgrep_search_symbols`, `lgrep_search_references`, or `lgrep_get_symbol`.
+3. **Symbol search — no setup for a checkout root**: `lgrep_search_symbols`, `lgrep_search_references`, and `lgrep_get_symbols` index a missing local git checkout on first use. A subdirectory query needs `lgrep_index_symbols_folder` first (stdio servers only).
 4. **File outline — no index needed**: `lgrep_get_file_outline` works immediately without any prior indexing.
 5. **Hybrid is better**: Keep `hybrid=true` (default) for semantic search — it combines keyword precision with semantic breadth.
 6. **Just search semantically**: After initial indexing, `lgrep_search_semantic` auto-loads from disk on server restart. No need to re-run `lgrep_index_semantic` each session.

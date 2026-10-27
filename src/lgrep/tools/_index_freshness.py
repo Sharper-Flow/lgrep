@@ -14,7 +14,7 @@ from pathlib import Path
 import structlog
 
 from lgrep.parser.languages import get_language_spec
-from lgrep.storage.index_store import IndexStore, normalize_repo_key
+from lgrep.storage.index_store import CodeIndex, IndexStore, normalize_repo_key
 
 log = structlog.get_logger()
 
@@ -32,9 +32,10 @@ def _index_is_behind(
 ) -> bool:
     """Compare the walked working tree against the index in one pass.
 
-    Fires when any source file is newer than the last index window closed
-    (mtime branch) or when the index cannot account for the walked tree
-    (set branch). The set branch differs by index kind:
+    Fires when a source file is newer than the recorded index timestamp
+    (last publication, or two seconds before the last no-op check started),
+    or when the index cannot account for the walked tree (set branch).
+    The set branch differs by index kind:
 
     - Complete index (the marker absent or False): any set difference is
       staleness — additions, or deletions the refresh will prune.
@@ -66,33 +67,27 @@ def _index_is_behind(
     return any(not (root / rel_path).exists() for rel_path in set(index_files) - walked)
 
 
-def refresh_stale_index(repo_path: str, storage_dir: Path | str | None = None) -> dict | None:
-    """Incrementally re-index ``repo_path`` when its index is behind the tree.
+def load_fresh_index(
+    repo_path: str, storage_dir: Path | str | None = None
+) -> tuple[CodeIndex | None, bool]:
+    """Load once and return the checked snapshot plus whether a refresh ran.
 
-    Returns the index_folder result dict when a refresh ran, and None when no
-    refresh was needed, the gate is disabled, or the path is not a local
-    repository backed by the working tree (remote ``github:`` keys are out of
-    scope: their content is not on this disk). A failed refresh returns None
-    so the caller serves the index it has rather than erroring.
+    A refresh takes its own current snapshot under the writer lock and returns
+    its result directly. Oversized indexes need not be globally retained or
+    repeatedly deserialized within this query. A failed refresh serves the
+    original snapshot, matching the query's best-effort freshness contract.
     """
-    if not auto_refresh_enabled():
-        return None
-    if repo_path.startswith("github:"):
-        return None
-    root = Path(repo_path)
-    if not root.is_dir():
-        return None
-
     store = IndexStore(storage_dir=storage_dir)
     repo_key = normalize_repo_key(repo_path)
-    index = store.load(repo_key)
-    if index is None:
-        # Unindexed repos are search_symbols' own "not indexed" error, not
-        # a staleness problem.
-        return None
+    # Read the timestamp before the body. A concurrent publication must not
+    # make an older caller-held snapshot appear checked through its new mtime.
     indexed_at = store.last_indexed_at(repo_key)
-    if indexed_at is None:
-        return None
+    index = store.load(repo_key)
+    if index is None or not auto_refresh_enabled() or indexed_at is None:
+        return index, False
+    root = Path(repo_path)
+    if repo_path.startswith("github:") or not root.is_dir():
+        return index, False
 
     try:
         behind = _index_is_behind(
@@ -103,20 +98,20 @@ def refresh_stale_index(repo_path: str, storage_dir: Path | str | None = None) -
         )
     except OSError as e:
         log.warning("index_freshness_check_failed", repo=repo_key, error=str(e))
-        return None
+        return index, False
     if not behind:
-        return None
+        return index, False
 
-    from lgrep.tools.index_folder import index_folder
+    from lgrep.tools.index_folder import _index_folder_with_snapshot
 
-    result = index_folder(repo_path, storage_dir=storage_dir)
+    result, refreshed_index = _index_folder_with_snapshot(repo_path, storage_dir=storage_dir)
     if "error" in result:
         log.warning("index_auto_refresh_failed", repo=repo_key, error=result["error"])
-        return None
+        return index, False
     log.info(
         "index_auto_refreshed",
         repo=repo_key,
         files_indexed=result.get("files_indexed", 0),
         files_deleted=result.get("files_deleted", 0),
     )
-    return result
+    return refreshed_index, True

@@ -1,24 +1,17 @@
-"""Test that all 20 MCP tools are registered after the server split."""
+"""Pin the complete MCP registry and the per-transport tool profile."""
 
+import pytest
 
-def test_server_has_21_tools():
-    from lgrep.server import mcp
+from lgrep.server.bootstrap import GRANT_ONLY_TOOLS, STDIO_ONLY_TOOLS, apply_tool_profile
 
-    tool_count = len(mcp._tool_manager._tools)
-    assert tool_count == 21, f"Expected 21 tools, got {tool_count}"
-
-
-def test_all_expected_tools_present():
-    from lgrep.server import mcp
-
-    expected = {
+ALL_TOOLS = frozenset(
+    {
         "search_semantic",
         "index_semantic",
         "status_semantic",
-        "watch_start_semantic",
-        "watch_stop_semantic",
         "index_symbols_folder",
         "index_symbols_repo",
+        "get_symbol_index_job",
         "list_repos",
         "get_file_tree",
         "get_file_outline",
@@ -26,7 +19,6 @@ def test_all_expected_tools_present():
         "search_symbols",
         "search_text",
         "search_references",
-        "get_symbol",
         "get_symbols",
         "invalidate_cache",
         "prune_orphans",
@@ -34,10 +26,53 @@ def test_all_expected_tools_present():
         "invalidate_worktree_cache",
         "lgrep_diagnostics",
     }
-    registered = {t.name for t in mcp._tool_manager.list_tools()}
-    assert registered == expected, (
-        f"Missing: {expected - registered}\nExtra: {registered - expected}"
+)
+
+RETIRED_TOOLS = ("get_symbol", "watch_start_semantic", "watch_stop_semantic")
+
+
+def _registered() -> set[str]:
+    from lgrep.server import mcp
+
+    return {t.name for t in mcp._tool_manager.list_tools()}
+
+
+def test_full_registry_before_profile():
+    registered = _registered()
+    assert registered == ALL_TOOLS, (
+        f"Missing: {ALL_TOOLS - registered}\nExtra: {registered - ALL_TOOLS}"
     )
+
+
+@pytest.mark.parametrize("name", RETIRED_TOOLS)
+def test_retired_tools_are_not_registered(name):
+    assert name not in _registered()
+
+
+@pytest.mark.parametrize(
+    ("transport", "grant", "expected_count", "hidden"),
+    [
+        ("stdio", None, 17, set(GRANT_ONLY_TOOLS)),
+        ("streamable-http", None, 14, set(GRANT_ONLY_TOOLS) | set(STDIO_ONLY_TOOLS)),
+        ("stdio", "1", 19, set()),
+        ("streamable-http", "1", 16, set(STDIO_ONLY_TOOLS)),
+    ],
+)
+def test_tool_profile(monkeypatch, transport, grant, expected_count, hidden):
+    """A listed tool can succeed: grant-only and stdio-only tools hide otherwise."""
+    from lgrep.server import mcp
+
+    if grant is None:
+        monkeypatch.delenv("LGREP_ALLOW_DESTRUCTIVE_MCP", raising=False)
+    else:
+        monkeypatch.setenv("LGREP_ALLOW_DESTRUCTIVE_MCP", grant)
+
+    removed = apply_tool_profile(mcp, transport)
+
+    registered = _registered()
+    assert set(removed) == hidden
+    assert registered == ALL_TOOLS - hidden
+    assert len(registered) == expected_count
 
 
 EXPECTED_DESTRUCTIVE_TOOLS = frozenset(

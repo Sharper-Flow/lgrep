@@ -10,19 +10,28 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import itertools
+import math
 import os
+import secrets
 import threading
 import time
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import structlog
 
+from lgrep.exceptions import OperationCancelled
+from lgrep.memory import IdleTrimmer
+from lgrep.symbol_worker import InProcessSymbolWorker
+from lgrep.tools.index_repo import credential_values, redact_credentials
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from lgrep.symbol_worker import SymbolWorkerProcess
 
 T = TypeVar("T")
 
@@ -37,10 +46,13 @@ call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 DEFAULT_WORKER_MAX_THREADS = 4
 DEFAULT_BUILD_MAX_THREADS = 1
+DEFAULT_SYMBOL_MAX_THREADS = 8
 DEFAULT_HISTORY_LIMIT = 100
+DEFAULT_EXPLICIT_BUDGET_S = 150.0
 
 QUERY_LANE = "query"
 BUILD_LANE = "build"
+SYMBOL_LANE = "symbol"
 
 
 class JobStatus(StrEnum):
@@ -85,6 +97,10 @@ class RuntimeJob:
     call_id: str | None = None
     lane: str = QUERY_LANE
     future: Future[Any] | None = None
+    result: dict[str, Any] | None = None
+    request_key: str | None = field(default=None, repr=False)
+    stop_event: threading.Event | None = field(default=None, repr=False)
+    credentials: tuple[str, ...] = field(default=(), repr=False)
 
     def snapshot(self, *, now: float | None = None) -> dict[str, Any]:
         """Return an operator-safe diagnostic representation."""
@@ -113,10 +129,16 @@ class RuntimeJob:
 class RuntimeSupervisor:
     """Owns bounded execution and lifecycle state for blocking work.
 
-    Two executors: the query lane (``lgrep-worker`` threads, sized by
+    The query lane (``lgrep-worker`` threads, sized by
     ``LGREP_WORKER_MAX_THREADS``) serves tool-call work, and the build lane
     (``lgrep-build`` threads, sized by ``LGREP_BUILD_MAX_THREADS``) serves
-    build/maintenance kinds so they cannot occupy query threads.
+    build/maintenance kinds so they cannot occupy query threads. Symbol
+    calls have their own bounded lane (``lgrep-symbol`` threads), so they
+    neither wait behind semantic builds nor occupy query workers.
+
+    ``symbol_worker`` runs symbol operations. The daemon passes a
+    ``SymbolWorkerProcess``, so symbol-lane threads only wait on the worker
+    process; without one, operations run in the lane thread itself.
     """
 
     def __init__(
@@ -124,7 +146,9 @@ class RuntimeSupervisor:
         *,
         max_workers: int | None = None,
         max_build_workers: int | None = None,
+        max_symbol_workers: int = DEFAULT_SYMBOL_MAX_THREADS,
         history_limit: int = DEFAULT_HISTORY_LIMIT,
+        symbol_worker: InProcessSymbolWorker | SymbolWorkerProcess | None = None,
     ):
         if max_workers is None:
             max_workers = _worker_limit_from_env()
@@ -134,12 +158,16 @@ class RuntimeSupervisor:
             max_build_workers = _build_limit_from_env()
         if max_build_workers < 1:
             raise ValueError("max_build_workers must be >= 1")
+        if max_symbol_workers < 1:
+            raise ValueError("max_symbol_workers must be >= 1")
         if history_limit < 1:
             raise ValueError("history_limit must be >= 1")
 
         self.max_workers = max_workers
         self.max_build_workers = max_build_workers
+        self.max_symbol_workers = max_symbol_workers
         self.history_limit = history_limit
+        self.symbol_worker = symbol_worker if symbol_worker is not None else InProcessSymbolWorker()
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="lgrep-worker",
@@ -148,12 +176,141 @@ class RuntimeSupervisor:
             max_workers=max_build_workers,
             thread_name_prefix="lgrep-build",
         )
+        self._symbol_executor = ThreadPoolExecutor(
+            max_workers=max_symbol_workers, thread_name_prefix="lgrep-symbol"
+        )
+        self._explicit_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="lgrep-explicit"
+        )
+        self.explicit_budget_s = _explicit_budget_from_env()
+        self._generation = secrets.token_hex(12)
+        self._explicit_counter = itertools.count(1)
+        self._explicit_active: RuntimeJob | None = None
+        self._explicit_recent: deque[RuntimeJob] = deque(maxlen=100)
+        self._closed = False
         self._counter = itertools.count(1)
         self._lock = threading.RLock()
         self._active: dict[str, RuntimeJob] = {}
         self._recent: deque[RuntimeJob] = deque(maxlen=history_limit)
         self.started_at = time.time()
         self.retain_project = None
+        # Freed native scan memory stays in malloc arenas until trimmed.
+        self._idle_trimmer = IdleTrimmer(self.is_idle)
+
+    def is_idle(self) -> bool:
+        """Return whether no job of any lane is queued or running."""
+        with self._lock:
+            return not self._active
+
+    def submit_symbol_index(
+        self,
+        *,
+        caller: str,
+        project: str,
+        request_key: str,
+        work: Callable[[float, threading.Event], dict],
+        credentials: tuple[str, ...] = (),
+    ) -> tuple[str, dict | None]:
+        """Atomically admit one detached explicit job; never queue a second one."""
+        credentials = credential_values(credentials)
+        with self._lock:
+            if self._closed:
+                return "unavailable", None
+            if self._explicit_active is not None:
+                if self._explicit_active.request_key == request_key:
+                    return "duplicate", self._explicit_snapshot(self._explicit_active)
+                return "busy", None
+            job = RuntimeJob(
+                id=f"symbol-index-{self._generation}-{next(self._explicit_counter):08d}",
+                kind="explicit_symbol_index",
+                caller=redact_credentials(caller, credentials),
+                project=redact_credentials(project, credentials),
+                status=JobStatus.QUEUED,
+                created_at=time.time(),
+                call_id=call_id_var.get(),
+                lane="explicit",
+                request_key=request_key,
+                stop_event=threading.Event(),
+                credentials=credentials,
+            )
+            deadline = time.monotonic() + self.explicit_budget_s
+            self._active[job.id] = self._explicit_active = job
+            context = contextvars.copy_context()
+
+            def invoke() -> dict:
+                self._mark_started(job.id)
+                if job.stop_event.is_set():
+                    raise OperationCancelled("Symbol indexing stopped during shutdown")
+                return work(deadline, job.stop_event)
+
+            try:
+                future = self._explicit_executor.submit(lambda: context.run(invoke))
+            except RuntimeError:
+                self._active.pop(job.id)
+                self._explicit_active = None
+                return "unavailable", None
+            job.future = future
+            future.add_done_callback(lambda done: self._complete_explicit(job, done))
+            return "accepted", self._explicit_snapshot(job)
+
+    def get_symbol_index_job(self, job_id: str) -> dict | None:
+        """Read the explicit-only history, independent of diagnostic eviction."""
+        with self._lock:
+            if self._explicit_active is not None and self._explicit_active.id == job_id:
+                return self._explicit_snapshot(self._explicit_active)
+            for job in self._explicit_recent:
+                if job.id == job_id:
+                    return self._explicit_snapshot(job)
+        return None
+
+    @staticmethod
+    def _explicit_snapshot(job: RuntimeJob) -> dict:
+        return {
+            "job_id": job.id,
+            "state": "completed" if job.status == JobStatus.FINISHED else job.status.value,
+            "result": dict(job.result) if job.result is not None else None,
+            "error": job.error,
+        }
+
+    def _complete_explicit(self, job: RuntimeJob, future: Future) -> None:
+        if future.cancelled():
+            self._finish_job(job.id, JobStatus.CANCELLED)
+            return
+        error = None
+        try:
+            result = future.result()
+            if "error" in result:
+                error = redact_credentials(str(result["error"]), job.credentials)[:500]
+                status = JobStatus.FAILED
+            else:
+                # Retain fixed counters/metadata, never arbitrary helper data or source text.
+                keys = {
+                    "files_indexed",
+                    "files_skipped",
+                    "files_deleted",
+                    "symbols_indexed",
+                    "occurrences_indexed",
+                    "repo_path",
+                    "repo",
+                    "ref",
+                    "walk_truncated",
+                    "truncated",
+                    "truncation_reason",
+                }
+                job.result = {
+                    key: redact_credentials(value, job.credentials)
+                    if isinstance(value, str)
+                    else value
+                    for key, value in result.items()
+                    if key in keys and (value is None or isinstance(value, (str, int, bool)))
+                }
+                status = JobStatus.FINISHED
+        except OperationCancelled:
+            status = JobStatus.CANCELLED
+        except BaseException as exc:
+            error = redact_credentials(f"{type(exc).__name__}: {exc}", job.credentials)[:500]
+            status = JobStatus.FAILED
+        self._finish_job(job.id, status, error=error)
 
     async def run_blocking(
         self,
@@ -179,15 +336,20 @@ class RuntimeSupervisor:
                 calls ``cancel_event.set()`` BEFORE propagating the
                 ``CancelledError``, so the blocking thread can observe
                 the signal at the next safe point and unwind.
-            lane: Executor lane for the job: "query" or "build". Query is
-                the default; build and maintenance call sites pass
-                ``lane="build"`` so they cannot occupy query threads.
+            lane: Executor lane: "query" (default), "build" for semantic
+                builds/maintenance, or "symbol" for symbol acquisition.
+                Neither long-running lane can occupy query threads.
             **kwargs: Keyword args forwarded to ``fn`` (not including
                 ``cancel_event`` or ``lane``).
         """
-        if lane not in (QUERY_LANE, BUILD_LANE):
+        if lane == QUERY_LANE:
+            executor = self._executor
+        elif lane == BUILD_LANE:
+            executor = self._build_executor
+        elif lane == SYMBOL_LANE:
+            executor = self._symbol_executor
+        else:
             raise ValueError(f"unknown lane: {lane!r}")
-        executor = self._executor if lane == QUERY_LANE else self._build_executor
         job = self._create_job(kind=kind, caller=caller, project=project, lane=lane)
 
         def invoke() -> T:
@@ -205,11 +367,13 @@ class RuntimeSupervisor:
         with self._lock:
             if job.id in self._active:
                 job.future = future
+        # Done callbacks run in registration order. Releasing the project
+        # first means no caller sees the job gone while it still holds it.
+        if release is not None:
+            future.add_done_callback(lambda _: release())
         future.add_done_callback(
             lambda done_future: self._complete_from_future(job.id, done_future)
         )
-        if release is not None:
-            future.add_done_callback(lambda _: release())
 
         try:
             return await asyncio.wrap_future(future)
@@ -237,20 +401,36 @@ class RuntimeSupervisor:
         with self._lock:
             return [job.snapshot(now=now) for job in self._recent]
 
+    def stop_symbol_indexes(self) -> None:
+        """Close explicit admission and request cooperative stop before resource teardown."""
+        with self._lock:
+            self._closed = True
+            job = self._explicit_active
+            if job is not None:
+                job.stop_event.set()
+                if job.future is not None:
+                    job.future.cancel()
+        self.symbol_worker.stop()
+
     def shutdown(self, *, cancel_futures: bool = True) -> None:
-        """Shut down both executors and mark queued/running jobs honestly."""
+        """Shut down all executors and mark queued/running jobs honestly."""
+        self.stop_symbol_indexes()
         with self._lock:
             active_jobs = list(self._active.values())
         for job in active_jobs:
             future = job.future
             if future is not None and future.cancel():
                 self._finish_job(job.id, JobStatus.CANCELLED)
-            elif job.status not in TERMINAL_STATUSES:
+            elif job.kind != "explicit_symbol_index" and job.status not in TERMINAL_STATUSES:
                 with self._lock:
                     if job.id in self._active and job.status not in TERMINAL_STATUSES:
                         job.status = JobStatus.CANCEL_REQUESTED
         self._executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._build_executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._symbol_executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._explicit_executor.shutdown(wait=False, cancel_futures=cancel_futures)
+        self._idle_trimmer.close()
+        self.symbol_worker.shutdown()
 
     def _create_job(
         self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE
@@ -321,6 +501,7 @@ class RuntimeSupervisor:
             job = self._active.pop(job_id, None)
             if job is None:
                 return
+            idle = not self._active
             job.status = status
             job.finished_at = time.time()
             if error is not None:
@@ -329,6 +510,12 @@ class RuntimeSupervisor:
                 job.abandoned = True
             # History retains diagnostics, not results (stores and checkout views).
             job.future = None
+            if job.kind == "explicit_symbol_index":
+                job.request_key = None
+                job.credentials = ()
+                job.stop_event = None
+                self._explicit_active = None
+                self._explicit_recent.append(job)
             self._recent.append(job)
             queue_ms = (
                 round((job.started_at - job.created_at) * 1000, 2)
@@ -356,6 +543,26 @@ class RuntimeSupervisor:
                 "error": job.error,
             }
         log.info("runtime_job_finished", **fields)
+        if idle:
+            self._idle_trimmer.notify_idle()
+
+
+def _explicit_budget_from_env() -> float:
+    raw = os.getenv("LGREP_EXPLICIT_INDEX_BUDGET_S")
+    if not raw:
+        return DEFAULT_EXPLICIT_BUDGET_S
+    try:
+        value = float(raw)
+        if math.isfinite(value) and value > 0:
+            return value
+    except ValueError:
+        pass
+    log.warning(
+        "invalid_explicit_index_budget",
+        setting="LGREP_EXPLICIT_INDEX_BUDGET_S",
+        fallback=DEFAULT_EXPLICIT_BUDGET_S,
+    )
+    return DEFAULT_EXPLICIT_BUDGET_S
 
 
 def _worker_limit_from_env() -> int:

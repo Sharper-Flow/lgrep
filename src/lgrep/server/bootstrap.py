@@ -13,9 +13,8 @@ from logging.handlers import RotatingFileHandler
 import structlog
 
 # Transport kind recorded by ``run_server`` and read lazily by the lifespan.
-# Kept as a module attribute rather than an environment variable so diagnostics
-# can report the actual startup transport without creating a side channel that
-# other code could mistake for configuration.
+# This actual startup value drives diagnostics and explicit-job admission.
+# It is not environment configuration: only stdio has a process-lifetime context.
 _startup_transport: str | None = None
 
 
@@ -169,6 +168,30 @@ def shutdown_logging() -> None:
     _release_log_lock()
 
 
+# Tools that refuse every call without LGREP_ALLOW_DESTRUCTIVE_MCP.
+GRANT_ONLY_TOOLS = ("invalidate_cache", "invalidate_worktree_cache")
+# Explicit symbol-index job tools; they need a process-lifetime stdio context.
+STDIO_ONLY_TOOLS = ("index_symbols_folder", "index_symbols_repo", "get_symbol_index_job")
+
+
+def apply_tool_profile(server, transport: str) -> list[str]:
+    """Unregister tools this server could only refuse, and return their names.
+
+    A tool listed to an agent should be able to succeed. The handlers keep
+    their own grant and stdio checks, so in-process callers stay refused.
+    """
+    from lgrep.server.tools_maintenance import _destructive_grant_present
+
+    hidden: list[str] = []
+    if not _destructive_grant_present():
+        hidden.extend(GRANT_ONLY_TOOLS)
+    if transport != "stdio":
+        hidden.extend(STDIO_ONLY_TOOLS)
+    for name in hidden:
+        server.remove_tool(name)
+    return hidden
+
+
 def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 6285) -> int:
     """Start the MCP server.
 
@@ -179,17 +202,26 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     """
     global _startup_transport
 
+    # First, so no startup event reaches stdout, the stdio MCP channel.
+    configure_logging()
+
+    # Before any worker or LanceDB thread exists, so the cap binds every arena.
+    from lgrep.memory import cap_malloc_arenas
+
+    cap_malloc_arenas()
+
     # Import here to avoid circular imports at module load time
     from lgrep.server import mcp
-
-    configure_logging()
 
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
 
-    # Preserve the startup transport for diagnostics without exposing it as an
+    # Preserve the transport for diagnostics and job admission without exposing it as an
     # environment variable that other code could read or mutate.
     _startup_transport = transport
+
+    hidden = apply_tool_profile(mcp, transport)
+    log.info("lgrep_tool_profile", transport=transport, hidden_tools=hidden)
 
     if transport == "streamable-http":
         mcp.settings.host = host

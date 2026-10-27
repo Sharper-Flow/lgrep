@@ -1,4 +1,4 @@
-"""Semantic tools: search, index, status, watch for the lgrep MCP server."""
+"""Semantic tools: search, index, and status for the lgrep MCP server."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from lgrep.server.lifecycle import (
     _get_project_stats,
     _retain_state,
     _schedule_background_reindex,
-    _stop_watcher,
 )
 from lgrep.server.responses import (
     IndexSemanticResult,
@@ -29,14 +28,10 @@ from lgrep.server.responses import (
     StatusAllProjectsResult,
     StatusSemanticResult,
     ToolError,
-    WatchStartResult,
-    WatchStopAllResult,
-    WatchStopResult,
     error_response,
 )
 from lgrep.storage import has_disk_cache, open_checkout_store
 from lgrep.tools._meta import make_meta
-from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -456,115 +451,3 @@ async def status_semantic(
         _cheap_project_status(proj_path, state) for proj_path, state in app_ctx.projects.items()
     ]
     return StatusAllProjectsResult(projects=projects_status)
-
-
-@mcp.tool(
-    description=(
-        "Start semantic file watching for a local repository to keep index data fresh on edits. "
-        "Use for long-running sessions where code changes during analysis. "
-        "MCP tool call only; do not invoke via shell."
-    ),
-    annotations=ToolAnnotations(
-        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
-    ),
-)
-@time_tool
-async def watch_start_semantic(
-    path: Annotated[
-        str,
-        Field(description="Absolute path to the local repository root to watch."),
-    ],
-    ctx: Context | None = None,
-) -> WatchStartResult | ToolError:
-    """Start watching a directory for changes.
-
-    Args:
-        path: Absolute path to the directory to watch
-
-    Returns:
-        Watching status.
-    """
-    log.info("lgrep_watch_start_semantic", project=path)
-
-    if not ctx:
-        return error_response("Internal error: Context missing")
-
-    app_ctx: LgrepContext = ctx.request_context.lifespan_context
-
-    # 1. Validate path
-    project_path = Path(path).resolve()
-    if not project_path.exists() or not project_path.is_dir():
-        return error_response(f"Path does not exist or is not a directory: {path}")
-
-    # 2. Initialize project components if needed
-    result = await _ensure_project_initialized(app_ctx, project_path)
-    if isinstance(result, dict):
-        return result  # Already a ToolError dict from lifecycle
-    state = result
-    path_key = str(project_path)
-
-    # 3. Start watcher
-    if state.watching and state.watcher:
-        return WatchStartResult(path=path_key, watching=True, message="Already watching")
-
-    try:
-        if not state.watcher:
-            state.watcher = FileWatcher(state.indexer, runtime=app_ctx.runtime)
-
-        state.watcher.start()
-        state.watching = True
-        return WatchStartResult(path=path_key, watching=True, message=None)
-    except Exception as e:
-        log.exception("watcher_start_failed", project=path_key, error=str(e))
-        return error_response("Failed to start watcher. Check server logs for details.")
-
-
-@mcp.tool(
-    description=(
-        "Stop semantic file watching for one repository or all repositories. "
-        "Use to release watcher resources when active syncing is no longer needed. "
-        "MCP tool call only; do not invoke via shell."
-    ),
-    annotations=ToolAnnotations(
-        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
-    ),
-)
-@time_tool
-async def watch_stop_semantic(
-    path: Annotated[
-        str,
-        Field(description="Optional absolute repository path; omit to stop all active watchers."),
-    ] = "",
-    ctx: Context | None = None,
-) -> WatchStopResult | WatchStopAllResult | ToolError:
-    """Stop watching for file changes.
-
-    Args:
-        path: Absolute path to project to stop watching (optional). If omitted, stops all watchers.
-
-    Returns:
-        Stopped status.
-    """
-    log.info("lgrep_watch_stop_semantic", project=path or "(all)")
-
-    if not ctx:
-        return error_response("Internal error: Context missing")
-
-    app_ctx: LgrepContext = ctx.request_context.lifespan_context
-
-    if path:
-        # Stop a specific project's watcher
-        project_path = str(Path(path).resolve())
-        state = app_ctx.projects.get(project_path)
-        if not state or not state.watching or not state.watcher:
-            return WatchStopResult(stopped=True, project=None, message="Not watching")
-
-        _stop_watcher(state, project_path)
-        return WatchStopResult(stopped=True, project=project_path, message=None)
-
-    # Stop all watchers
-    stopped = []
-    for proj_path, state in app_ctx.projects.items():
-        if _stop_watcher(state, proj_path):
-            stopped.append(proj_path)
-    return WatchStopAllResult(stopped=True, projects_stopped=stopped)
