@@ -405,8 +405,7 @@ complete saved index or one whose coverage is unknown (`published=false`). It ma
 replace a known-incomplete baseline only when coverage was limited solely by
 `max_files` or GitHub tree truncation, with every selected file fetched and parsed
 and no deadline stop. Fetch/parse failures or deadline stops preserve any saved
-baseline, even when an earlier limit hides the failure in `truncation_reason`.
-Legacy indexes without a coverage marker and unreadable or malformed baselines
+baseline. Legacy indexes without a coverage marker and unreadable or malformed baselines
 remain protected. The coverage check reads the saved index body under the lock.
 
 Replacement is wholesale; new entries are never merged with older ones. A smaller
@@ -415,10 +414,16 @@ build may publish (`published=true`), with `walk_truncated=true` persisted in it
 index body. A complete refresh replaces any baseline, including a complete empty
 tree. Counters describe the attempt, not the retained snapshot. When publication
 is refused, searches keep using the saved snapshot, which may be outdated.
-Remote truncation reasons also include `"tree_truncated"`, `"fetch_failed"`, and
-`"parse_failed"`. Malformed tree responses fail without publication. The
-publication decision and save share the per-repository lock. Save failures are
-reported, not rolled back; a failure after atomic replacement can leave the new
+Remote `truncation_reasons` lists every observed cause once, in fixed order:
+`"tree_truncated"`, `"max_files"`, `"fetch_failed"`, `"parse_failed"`, `"deadline"`.
+Complete coverage returns an empty list. The existing `truncation_reason` keeps
+its single-reason precedence and may omit later failures. Use the list when
+deciding whether increasing a cap can help. It contains at most five fixed tokens,
+not file paths, source content, or exception messages.
+
+Malformed tree responses fail without publication. The publication decision and
+save share the per-repository lock. Save failures are reported, not rolled back;
+a failure after atomic replacement can leave the new
 index published even though the job failed.
 
 A truncated completion is not full repository coverage. For incremental local

@@ -26,6 +26,7 @@ import structlog
 from lgrep.exceptions import OperationCancelled
 from lgrep.memory import IdleTrimmer
 from lgrep.symbol_worker import InProcessSymbolWorker
+from lgrep.tools._remote_coverage import REMOTE_TRUNCATION_REASONS
 from lgrep.tools.index_repo import credential_values, redact_credentials
 
 if TYPE_CHECKING:
@@ -268,7 +269,12 @@ class RuntimeSupervisor:
         return {
             "job_id": job.id,
             "state": "completed" if job.status == JobStatus.FINISHED else job.status.value,
-            "result": dict(job.result) if job.result is not None else None,
+            "result": {
+                key: list(value) if isinstance(value, list) else value
+                for key, value in job.result.items()
+            }
+            if job.result is not None
+            else None,
             "error": job.error,
         }
 
@@ -298,13 +304,26 @@ class RuntimeSupervisor:
                     "truncation_reason",
                     "published",
                 }
-                job.result = {
+                retained = {
                     key: redact_credentials(value, job.credentials)
                     if isinstance(value, str)
                     else value
                     for key, value in result.items()
                     if key in keys and (value is None or isinstance(value, (str, int, bool)))
                 }
+                reasons = result.get("truncation_reasons")
+                if (
+                    isinstance(reasons, list)
+                    and len(reasons) <= len(REMOTE_TRUNCATION_REASONS)
+                    and all(
+                        isinstance(reason, str) and reason in REMOTE_TRUNCATION_REASONS
+                        for reason in reasons
+                    )
+                ):
+                    retained["truncation_reasons"] = [
+                        reason for reason in REMOTE_TRUNCATION_REASONS if reason in reasons
+                    ]
+                job.result = retained
                 status = JobStatus.FINISHED
         except OperationCancelled:
             status = JobStatus.CANCELLED

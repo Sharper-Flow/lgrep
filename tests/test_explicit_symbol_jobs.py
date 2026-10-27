@@ -465,8 +465,13 @@ async def test_explicit_metadata_and_exception_redaction_precede_projection(fail
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("published", [False, True])
-async def test_remote_publication_outcome_survives_job_status_projection(published):
-    runtime = RuntimeSupervisor()
+@pytest.mark.parametrize(
+    "reasons", [[], ["tree_truncated", "max_files", "fetch_failed", "parse_failed", "deadline"]]
+)
+async def test_remote_publication_outcome_survives_job_status_projection(published, reasons):
+    app = LgrepContext(transport="stdio")
+    runtime = app.runtime
+    produced_reasons = list(reasons)
     try:
         _, job = runtime.submit_symbol_index(
             caller="test",
@@ -480,6 +485,7 @@ async def test_remote_publication_outcome_survives_job_status_projection(publish
                 "symbols_indexed": 1,
                 "truncated": True,
                 "truncation_reason": "tree_truncated",
+                "truncation_reasons": produced_reasons,
                 "published": published,
             },
         )
@@ -487,7 +493,79 @@ async def test_remote_publication_outcome_survives_job_status_projection(publish
         assert final["state"] == "completed"
         assert final["result"]["published"] is published
         assert final["result"]["truncation_reason"] == "tree_truncated"
+        assert final["result"]["truncation_reasons"] == reasons
+        tool = mcp._tool_manager.get_tool("get_symbol_index_job")
+        _, structured = await tool.run(
+            {"job_id": job["job_id"]}, context=context(app), convert_result=True
+        )
+        if tool.fn_metadata.wrap_output:
+            structured = structured["result"]
+        assert structured["result"] == final["result"]
+        produced_reasons.clear()
+        final["result"]["truncation_reasons"].clear()
+        assert (
+            runtime.get_symbol_index_job(job["job_id"])["result"]["truncation_reasons"] == reasons
+        )
     finally:
+        await _shutdown(app)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        "private-cause-sentinel",
+        ["private-cause-sentinel"],
+        [["parse_failed"]],
+        ["parse_failed"] * 6,
+        ["fetch_failed", {"source": "private-cause-sentinel"}],
+    ],
+)
+async def test_remote_cause_projection_rejects_unbounded_or_arbitrary_payloads(invalid):
+    runtime = RuntimeSupervisor()
+    try:
+        _, job = submit(runtime, lambda *_: counters(truncation_reasons=invalid))
+        final = await settled(runtime, job["job_id"])
+        assert final["state"] == "completed"
+        assert "truncation_reasons" not in final["result"]
+        assert "private-cause-sentinel" not in json.dumps(
+            [final, runtime.snapshot_recent_jobs(), runtime.snapshot_active_jobs()]
+        )
+    finally:
+        runtime.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_status_cannot_observe_a_half_projected_cause_list():
+    runtime = RuntimeSupervisor()
+    work_release, projecting, projection_release = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    class HeldReasons(list):
+        def __len__(self):
+            projecting.set()
+            assert projection_release.wait(3)
+            return super().__len__()
+
+    def work(*_):
+        assert work_release.wait(3)
+        return counters(truncation_reasons=HeldReasons(["fetch_failed"]))
+
+    try:
+        _, job = submit(runtime, work)
+        work_release.set()
+        assert await asyncio.to_thread(projecting.wait, 1)
+        assert runtime.get_symbol_index_job(job["job_id"])["result"] is None
+        projection_release.set()
+        final = await settled(runtime, job["job_id"])
+        assert final["result"]["truncation_reasons"] == ["fetch_failed"]
+    finally:
+        work_release.set()
+        projection_release.set()
         runtime.shutdown()
 
 

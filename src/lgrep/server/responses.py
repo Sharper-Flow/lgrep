@@ -19,6 +19,7 @@ from typing import Any, Literal, NotRequired
 from typing_extensions import TypedDict
 
 from lgrep.storage.index_store import SymbolCacheInfo  # noqa: TC001 — runtime schema
+from lgrep.tools._remote_coverage import RemoteTruncationReason  # noqa: TC001 — runtime schema
 
 
 class _Meta(TypedDict):
@@ -166,6 +167,7 @@ class IndexSymbolsRepoResult(TypedDict):
     ref: str
     truncated: bool
     truncation_reason: str | None
+    truncation_reasons: list[RemoteTruncationReason]
     published: bool
 
 
