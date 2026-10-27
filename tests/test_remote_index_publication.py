@@ -342,6 +342,34 @@ async def test_tree_truncation_is_not_hidden_by_the_file_cap(remote):
     assert result["truncation_reason"] == "tree_truncated"
 
 
+@pytest.mark.parametrize("stage", ["before_tree", "tree_timeout", "before_fetch"])
+async def test_deadline_before_fetching_preserves_partial_baseline(tmp_path, monkeypatch, stage):
+    import importlib
+
+    module = importlib.import_module("lgrep.tools.index_repo")
+    storage = tmp_path / "symbols"
+    seed(storage, partial=True)
+    before = saved_bytes(storage)
+    clock = [2.0 if stage == "before_tree" else 0.0]
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    client = httpx.AsyncClient
+
+    def response(request):
+        clock[0] = 2.0
+        if stage == "tree_timeout":
+            raise httpx.ReadTimeout("job budget expired", request=request)
+        tree = {"tree": [{"type": "blob", "path": "new.py"}], "truncated": True}
+        return httpx.Response(200, content=json.dumps(tree).encode())
+
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kw: client(**kw, transport=httpx.MockTransport(response))
+    )
+    result = await index_repo("owner/repo", ref="main", storage_dir=storage, deadline=1.0)
+    assert result["truncation_reason"] == "deadline"
+    assert result["published"] is False
+    assert saved_bytes(storage) == before
+
+
 @pytest.mark.parametrize("stage", ["before_parse", "between_parses"])
 @pytest.mark.parametrize("partial", [False, True])
 async def test_deadline_preserves_baseline_after_successful_fetch(
