@@ -10,14 +10,17 @@ Verifies:
 from __future__ import annotations
 
 import asyncio
+import importlib
 import inspect
 from types import SimpleNamespace
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
+from lgrep import symbol_worker
 from lgrep.server import LgrepContext, mcp, tools_symbols
-from lgrep.server.arguments import SYNONYMS, TOOL_SYNONYMS
+from lgrep.server.arguments import SYNONYMS, TOOL_SYNONYMS, WRONG_TOOL_HINTS
+from lgrep.symbol_worker import InProcessSymbolWorker
 from tests.test_explicit_symbol_jobs import context, settled
 
 
@@ -36,8 +39,6 @@ EXPECTED_SEMANTIC_TOOLS = {
     "search_semantic",
     "index_semantic",
     "status_semantic",
-    "watch_start_semantic",
-    "watch_stop_semantic",
 }
 
 EXPECTED_SYMBOL_TOOLS = {
@@ -51,7 +52,6 @@ EXPECTED_SYMBOL_TOOLS = {
     "search_symbols",
     "search_text",
     "search_references",
-    "get_symbol",
     "get_symbols",
     "invalidate_cache",
     "prune_orphans",
@@ -336,10 +336,12 @@ class TestSymbolToolResponses:
         calls = []
 
         class RuntimeStub:
+            symbol_worker = InProcessSymbolWorker()
+
             async def run_blocking(
                 self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
             ):
-                calls.append({"kind": kind, "caller": caller, "project": project})
+                calls.append({"kind": kind, "caller": caller, "project": project, "lane": lane})
                 return fn_to_run(*args, **kwargs)
 
         ctx = SimpleNamespace(
@@ -354,15 +356,9 @@ class TestSymbolToolResponses:
                 "kind": "search_references",
                 "caller": "search_references",
                 "project": str(tmp_path.resolve()),
+                "lane": "symbol",
             }
         ]
-
-    @pytest.mark.asyncio
-    async def test_get_symbol_missing_index_returns_error(self, tmp_path):
-        fn = self._get_tool_fn("get_symbol")
-        result = await fn(symbol_id="hello.py:function:greet", path=str(tmp_path))
-        data = result
-        assert "error" in data
 
     @pytest.mark.asyncio
     async def test_get_symbols_missing_index_returns_error(self, tmp_path):
@@ -415,6 +411,8 @@ class TestPruneSymbolsTool:
         """Build a fake MCP Context with the given transport kind."""
 
         class RuntimeStub:
+            symbol_worker = InProcessSymbolWorker()
+
             async def run_blocking(
                 self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
             ):
@@ -578,9 +576,9 @@ class TestEverySymbolToolPassesHelperError:
     """Every registered symbol tool returns its helper's error message.
 
     Covers check:pytest/every-symbol-tool-passes-helper-error. The tool list
-    comes from the MCP registry, and every lgrep.tools helper the module calls
-    is stubbed to report an error, so a symbol tool added later is covered
-    without editing this test.
+    comes from the MCP registry, and every lgrep.tools helper the module or the
+    symbol worker's operations call is stubbed to report an error, so a symbol
+    tool added later is covered without editing this test.
     """
 
     STUB_ERROR = "stub helper error"
@@ -618,6 +616,15 @@ class TestEverySymbolToolPassesHelperError:
                 monkeypatch.setattr(tools_symbols, name, stub)
                 stubbed += 1
         assert stubbed, "no lgrep.tools helpers found in tools_symbols"
+        worker_helpers = [
+            *symbol_worker._QUERIES.values(),
+            ("lgrep.tools.index_folder", "index_folder"),
+            ("lgrep.tools.index_repo", "index_repo"),
+        ]
+        for module, name in worker_helpers:
+            value = getattr(importlib.import_module(module), name)
+            stub = async_stub if inspect.iscoroutinefunction(value) else sync_stub
+            monkeypatch.setattr(f"{module}.{name}", stub)
 
     @staticmethod
     def _arguments(tool) -> dict:
@@ -704,7 +711,7 @@ class TestUnknownArgumentRefused:
 
     Covers check:pytest/every-tool-refuses-undeclared-argument. The refusal
     names the tool, the rejected argument, and the declared arguments; the
-    wrong-tool calls name the tool that declares the argument.
+    wrong-tool calls name the tool to call and the argument it declares.
     """
 
     @pytest.mark.asyncio
@@ -729,13 +736,18 @@ class TestUnknownArgumentRefused:
             assert argument in str(excinfo.value)
 
     @pytest.mark.asyncio
-    async def test_search_references_symbol_id_names_get_symbol(self):
+    async def test_search_references_symbol_id_names_get_symbols(self):
         with pytest.raises(ToolError) as excinfo:
             await mcp.call_tool(
                 "search_references",
                 {"query": "absent", "path": "/tmp", "symbol_id": "a.py:function:absent"},
             )
-        assert "get_symbol" in str(excinfo.value)
+        assert "Use tool 'get_symbols' with argument 'symbol_ids'." in str(excinfo.value)
+
+    def test_wrong_tool_hints_name_a_declared_argument(self):
+        for (tool, argument), (target, target_argument) in WRONG_TOOL_HINTS.items():
+            declared = mcp._tool_manager.get_tool(target).parameters.get("properties", {})
+            assert target_argument in declared, (tool, argument, target)
 
     @pytest.mark.asyncio
     async def test_index_symbols_repo_path_names_index_symbols_folder(self):
@@ -864,9 +876,9 @@ class TestRegistryOneNamePerConcept:
         assert "repo" in declared
         assert "path" not in declared
 
-    def test_get_symbol_keeps_path_required(self):
-        tool = self._tools()["get_symbol"]
-        assert "path" in tool.parameters.get("required", [])
+    def test_get_symbols_keeps_path_required(self):
+        tool = self._tools()["get_symbols"]
+        assert {"symbol_ids", "path"} <= set(tool.parameters.get("required", []))
 
     def test_search_tools_require_query_and_path(self):
         tools = self._tools()
@@ -920,7 +932,6 @@ class TestSearchSemanticCompactDefault:
                 ),
             ],
             query_time_ms=1.0,
-            total_chunks=10,
         )
         mock_db.search_hybrid.return_value = results
         return mock_ctx

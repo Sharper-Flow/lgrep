@@ -19,12 +19,6 @@ from lgrep.server import (
 from lgrep.server import (
     status_semantic as lgrep_status,
 )
-from lgrep.server import (
-    watch_start_semantic as lgrep_watch_start,
-)
-from lgrep.server import (
-    watch_stop_semantic as lgrep_watch_stop,
-)
 
 
 @pytest.fixture
@@ -54,7 +48,7 @@ def connect():
 
 @pytest.mark.asyncio
 async def test_full_flow_integration(sample_project):
-    """Test full flow: first search auto-indexes -> check status -> watcher."""
+    """Test full flow: first search auto-indexes -> check status."""
 
     # Mock Voyage API to return deterministic vectors
     def mock_embed_docs(texts, **kwargs):
@@ -109,16 +103,6 @@ async def test_full_flow_integration(sample_project):
         status_data = response
         assert status_data["files"] == 2
         assert status_data["project"] == str(sample_project.resolve())
-
-    # 4. Test Watcher
-    response = await lgrep_watch_start(str(sample_project), ctx=mock_ctx)
-    watch_data = response
-    assert watch_data["watching"] is True
-
-    # 5. Stop Watcher
-    response = await lgrep_watch_stop(ctx=mock_ctx)
-    stop_data = response
-    assert stop_data["stopped"] is True
 
 
 @pytest.mark.asyncio

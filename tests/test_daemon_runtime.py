@@ -47,6 +47,27 @@ async def test_symbol_lane_owns_a_distinct_executor():
 
 
 @pytest.mark.asyncio
+async def test_project_retention_ends_before_job_leaves_active():
+    """A caller that waits for no active jobs must also see the project released."""
+    supervisor = RuntimeSupervisor(max_workers=1)
+    released = threading.Event()
+    seen_at_finish: list[bool] = []
+    supervisor.retain_project = lambda project: released.set
+    finish = supervisor._finish_job
+
+    def recording_finish(job_id, status, error=None):
+        seen_at_finish.append(released.is_set())
+        finish(job_id, status, error=error)
+
+    supervisor._finish_job = recording_finish
+    try:
+        await supervisor.run_blocking("search_text", "test", "/tmp/project", lambda: None)
+        assert seen_at_finish == [True]
+    finally:
+        supervisor.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_timed_out_blocking_job_is_marked_abandoned_then_terminal():
     supervisor = RuntimeSupervisor(max_workers=1, history_limit=10)
     release = threading.Event()

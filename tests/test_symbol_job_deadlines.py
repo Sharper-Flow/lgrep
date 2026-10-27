@@ -15,7 +15,7 @@ from structlog.testing import capture_logs
 
 from lgrep.exceptions import OperationCancelled
 from lgrep.server import LgrepContext, tools_symbols
-from lgrep.storage.index_store import IndexStore
+from lgrep.storage.index_store import CodeIndex, IndexStore
 from tests.test_explicit_symbol_jobs import context, settled
 
 folder = importlib.import_module("lgrep.tools.index_folder")
@@ -151,11 +151,21 @@ def test_folder_deadline_after_finished_work_does_not_replace_stop_reason(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("capped", [False, True])
+@pytest.mark.parametrize("partial_baseline", [False, True])
 async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
-    tmp_path, monkeypatch, capped
+    tmp_path, monkeypatch, capped, partial_baseline
 ):
     import tree_sitter_language_pack
 
+    if partial_baseline:
+        IndexStore(tmp_path / "symbols").save(
+            CodeIndex(
+                repo_path="github:owner/repo@HEAD",
+                files={"old.py": "old-hash"},
+                symbols={},
+                walk_truncated=True,
+            )
+        )
     clock = [0.0]
     monkeypatch.setattr(remote, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     real_client = httpx.AsyncClient
@@ -164,7 +174,11 @@ async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
         if "git/trees" in request.url.path:
             paths = ["a.py", "b.py"] if capped else ["a.py"]
             return httpx.Response(
-                200, json={"tree": [{"type": "blob", "path": path} for path in paths]}
+                200,
+                json={
+                    "tree": [{"type": "blob", "path": path} for path in paths],
+                    "truncated": False,
+                },
             )
         return httpx.Response(200, content=b"def first(): pass\n")
 
@@ -189,6 +203,7 @@ async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
     assert result["files_indexed"] == 1
     assert result["truncated"] is capped
     assert result["truncation_reason"] == ("max_files" if capped else None)
+    assert result["published"] is True
 
 
 @pytest.mark.asyncio
@@ -199,7 +214,9 @@ async def test_remote_last_wave_deadline_timeouts_still_report_deadline(tmp_path
 
     def response(request):
         if "git/trees" in request.url.path:
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         clock[0] = 2.0
         raise httpx.ReadTimeout("remaining job budget expired", request=request)
 
@@ -230,7 +247,10 @@ async def test_remote_shared_deadline_stops_fetch_or_parse(tmp_path, monkeypatch
                 clock[0] = 2.0
             return httpx.Response(
                 200,
-                json={"tree": [{"type": "blob", "path": "a.py"}, {"type": "blob", "path": "b.py"}]},
+                json={
+                    "tree": [{"type": "blob", "path": "a.py"}, {"type": "blob", "path": "b.py"}],
+                    "truncated": False,
+                },
             )
         return httpx.Response(200, content=b"def first(): pass\n")
 
@@ -266,7 +286,9 @@ async def test_remote_job_does_not_stop_at_old_tool_timeout(tmp_path, monkeypatc
     def response(request):
         if "git/trees" in request.url.path:
             clock[0] = 21.0
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         return httpx.Response(200, content=b"def first(): pass\n")
 
     monkeypatch.setattr(
@@ -306,7 +328,9 @@ async def test_remote_shutdown_before_or_during_save(tmp_path, monkeypatch, duri
 
     def response(request):
         return (
-            httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
             if "git/trees" in request.url.path
             else httpx.Response(200, content=b"def first(): pass\n")
         )
@@ -358,7 +382,9 @@ async def test_remote_fetch_errors_redact_explicit_and_resolved_credentials(
 
     def response(request):
         if "git/trees" in request.url.path and not tree_error:
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         raise httpx.ConnectError("x" * 490 + token, request=request)
 
     monkeypatch.setattr(
@@ -392,7 +418,7 @@ async def test_remote_held_fetch_keeps_mcp_loop_available(tmp_path, monkeypatch)
         threads.append(threading.current_thread().name)
         entered.set()
         assert release.wait(3)
-        return httpx.Response(200, json={"tree": []})
+        return httpx.Response(200, json={"tree": [], "truncated": False})
 
     monkeypatch.setattr(
         httpx,

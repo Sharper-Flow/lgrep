@@ -42,12 +42,12 @@ TOOL_SYNONYMS: dict[tuple[str, str], str] = {
     ("search_text", "pattern"): "query",
 }
 
-# (tool, argument) -> tool that declares the argument. The refusal names the
-# owning tool so the caller reroutes instead of retrying the wrong tool with
-# renamed arguments.
-WRONG_TOOL_HINTS: dict[tuple[str, str], str] = {
-    ("search_references", "symbol_id"): "get_symbol",
-    ("index_symbols_repo", "path"): "index_symbols_folder",
+# (tool, argument) -> (tool to call, argument it declares). The refusal names
+# both so the caller reroutes instead of retrying the wrong tool with renamed
+# arguments.
+WRONG_TOOL_HINTS: dict[tuple[str, str], tuple[str, str]] = {
+    ("search_references", "symbol_id"): ("get_symbols", "symbol_ids"),
+    ("index_symbols_repo", "path"): ("index_symbols_folder", "path"),
 }
 
 
@@ -63,13 +63,13 @@ def refusal_message(tool_name: str, argument: str, declared: Iterable[str]) -> s
     """Build the refusal text for an undeclared argument.
 
     The message names the tool, the rejected argument, and the arguments the
-    tool declares. A wrong-tool call also names the tool that declares the
-    argument.
+    tool declares. A wrong-tool call also names the tool to call and the
+    argument it declares.
     """
     message = f"Unknown argument '{argument}' for tool '{tool_name}'."
     hint = WRONG_TOOL_HINTS.get((tool_name, argument))
     if hint is not None:
-        message += f" Argument '{argument}' belongs to tool '{hint}'."
+        message += f" Use tool '{hint[0]}' with argument '{hint[1]}'."
     valid = ", ".join(sorted(declared)) or "(none)"
     message += f" Valid arguments for '{tool_name}': {valid}."
     return message

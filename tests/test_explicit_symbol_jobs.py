@@ -224,8 +224,8 @@ async def test_transport_refuses_every_job_tool_before_helper(transport, monkeyp
         calls.append(True)
         return counters(repo="owner/repo")
 
-    monkeypatch.setattr(tools_symbols, "_index_folder", folder)
-    monkeypatch.setattr(tools_symbols, "_index_repo", repo)
+    monkeypatch.setattr("lgrep.tools.index_folder.index_folder", folder)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", repo)
     ctx = None if transport == "missing" else context(app)
     try:
         results = [
@@ -265,7 +265,7 @@ async def test_submission_is_prompt_and_status_validates(tmp_path, monkeypatch):
             truncation_reason=None,
         )
 
-    monkeypatch.setattr(tools_symbols, "_index_folder", held)
+    monkeypatch.setattr("lgrep.tools.index_folder.index_folder", held)
     ctx = context(app)
     try:
         started = time.monotonic()
@@ -395,7 +395,7 @@ async def test_remote_credentials_and_deadline_are_captured_at_admission(monkeyp
             "truncation_reason": None,
         }
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", remote)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", remote)
     try:
         app.runtime._explicit_executor.submit(lambda: (entered.set(), release.wait(3)))
         assert await asyncio.to_thread(entered.wait, 1)
@@ -464,6 +464,112 @@ async def test_explicit_metadata_and_exception_redaction_precede_projection(fail
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("published", [False, True])
+@pytest.mark.parametrize(
+    "reasons", [[], ["tree_truncated", "max_files", "fetch_failed", "parse_failed", "deadline"]]
+)
+async def test_remote_publication_outcome_survives_job_status_projection(published, reasons):
+    app = LgrepContext(transport="stdio")
+    runtime = app.runtime
+    produced_reasons = list(reasons)
+    try:
+        _, job = runtime.submit_symbol_index(
+            caller="test",
+            project="owner/repo",
+            request_key="remote-publication",
+            credentials=(),
+            work=lambda *_: {
+                "repo": "owner/repo",
+                "ref": "main",
+                "files_indexed": 1,
+                "symbols_indexed": 1,
+                "truncated": True,
+                "truncation_reason": "tree_truncated",
+                "truncation_reasons": produced_reasons,
+                "published": published,
+            },
+        )
+        final = await settled(runtime, job["job_id"])
+        assert final["state"] == "completed"
+        assert final["result"]["published"] is published
+        assert final["result"]["truncation_reason"] == "tree_truncated"
+        assert final["result"]["truncation_reasons"] == reasons
+        tool = mcp._tool_manager.get_tool("get_symbol_index_job")
+        _, structured = await tool.run(
+            {"job_id": job["job_id"]}, context=context(app), convert_result=True
+        )
+        if tool.fn_metadata.wrap_output:
+            structured = structured["result"]
+        assert structured["result"] == final["result"]
+        produced_reasons.clear()
+        final["result"]["truncation_reasons"].clear()
+        assert (
+            runtime.get_symbol_index_job(job["job_id"])["result"]["truncation_reasons"] == reasons
+        )
+    finally:
+        await _shutdown(app)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        "private-cause-sentinel",
+        ["private-cause-sentinel"],
+        [["parse_failed"]],
+        ["parse_failed"] * 6,
+        ["fetch_failed", {"source": "private-cause-sentinel"}],
+    ],
+)
+async def test_remote_cause_projection_rejects_unbounded_or_arbitrary_payloads(invalid):
+    runtime = RuntimeSupervisor()
+    try:
+        _, job = submit(runtime, lambda *_: counters(truncation_reasons=invalid))
+        final = await settled(runtime, job["job_id"])
+        assert final["state"] == "completed"
+        assert "truncation_reasons" not in final["result"]
+        assert "private-cause-sentinel" not in json.dumps(
+            [final, runtime.snapshot_recent_jobs(), runtime.snapshot_active_jobs()]
+        )
+    finally:
+        runtime.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_status_cannot_observe_a_half_projected_cause_list():
+    runtime = RuntimeSupervisor()
+    work_release, projecting, projection_release = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    class HeldReasons(list):
+        def __len__(self):
+            projecting.set()
+            assert projection_release.wait(3)
+            return super().__len__()
+
+    def work(*_):
+        assert work_release.wait(3)
+        return counters(truncation_reasons=HeldReasons(["fetch_failed"]))
+
+    try:
+        _, job = submit(runtime, work)
+        work_release.set()
+        assert await asyncio.to_thread(projecting.wait, 1)
+        assert runtime.get_symbol_index_job(job["job_id"])["result"] is None
+        projection_release.set()
+        final = await settled(runtime, job["job_id"])
+        assert final["result"]["truncation_reasons"] == ["fetch_failed"]
+    finally:
+        work_release.set()
+        projection_release.set()
+        runtime.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_credential_in_local_target_is_not_logged(monkeypatch):
     token = "private-target-token"
     monkeypatch.setenv("LGREP_GITHUB_TOKEN", token)
@@ -491,7 +597,7 @@ async def test_credentials_do_not_cross_result_error_diagnostics_or_logs(monkeyp
     async def failed(*_args, **_kwargs):
         return {"error": "x" * 490 + token + " fetch failed"}
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", failed)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", failed)
     try:
         with capture_logs() as logs:
             result = await tools_symbols.index_symbols_repo(
@@ -523,7 +629,7 @@ async def test_empty_token_argument_uses_deployment_token(monkeypatch):
             "truncation_reason": None,
         }
 
-    monkeypatch.setattr(tools_symbols, "_index_repo", remote)
+    monkeypatch.setattr("lgrep.tools.index_repo.index_repo", remote)
     try:
         result = await tools_symbols.index_symbols_repo(
             "owner/repo", github_token="", ctx=context(app)

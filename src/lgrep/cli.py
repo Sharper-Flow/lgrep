@@ -106,7 +106,9 @@ def _print_help() -> None:
     print("  init-ignore [path]             create recommended .lgrepignore")
     print("  prune-orphans                  inspect or delete orphan semantic caches")
     print("  prune-symbols                  inspect or delete stale symbol-store indexes")
-    print("  gc                             prune orphans + clean worktree aliases")
+    print(
+        "  gc                             prune orphans + clean worktree aliases + optimize tables"
+    )
     print("  remove <path>                  show project index info")
     print("  install-opencode               install lgrep into OpenCode (tool + MCP + skill)")
     print("  uninstall-opencode             remove lgrep from OpenCode")
@@ -152,6 +154,10 @@ def _cmd_search_semantic(args: list[str]) -> int:
     import os
     from dataclasses import asdict
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.indexing import Indexer
@@ -316,6 +322,10 @@ def _cmd_prune_orphans(args: list[str]) -> int:
 
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.tools.prune_orphans import prune_orphans
 
     # Mutual exclusion: refuse to silently pick a mode if the operator
@@ -373,6 +383,10 @@ def _cmd_prune_symbols(args: list[str]) -> int:
 
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.tools.prune_symbols import prune_symbols
 
     # Mutual exclusion: refuse ambiguous intent if both flags are passed.
@@ -409,20 +423,21 @@ def _cmd_prune_symbols(args: list[str]) -> int:
 
 
 def _cmd_gc(args: list[str]) -> int:
-    """Run garbage collection: prune orphans + clean worktree aliases + prune symbol indexes."""
+    """Run garbage collection over the semantic cache and the symbol store."""
     if "--help" in args or "-h" in args:
         print("usage: lgrep gc [--execute] [--dry-run] [--cache-dir DIR] [--symbols-dir DIR]")
         print()
         print("Run garbage collection across both on-disk stores.")
-        print("Combines three sweeps:")
+        print("Combines four sweeps:")
         print("  - prune_orphans      whole orphan semantic-cache directories")
         print(
             "  - gc_worktree_meta   stale worktree aliases and overlay rows inside live cache dirs"
         )
         print("  - prune_symbols      stale symbol-store index_*.json files")
+        print("  - optimize_caches    compact chunk tables and delete superseded versions")
         print()
         print("options:")
-        print("  --execute                      actually delete orphan caches")
+        print("  --execute                      apply every sweep")
         print("  --dry-run                      preview only (default)")
         print("  --cache-dir DIR                override semantic cache directory")
         print("  --symbols-dir DIR              override symbol index storage directory")
@@ -430,7 +445,11 @@ def _cmd_gc(args: list[str]) -> int:
 
     from pathlib import Path
 
-    from lgrep.tools.prune_orphans import gc_worktree_meta, prune_orphans
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
+    from lgrep.tools.prune_orphans import gc_worktree_meta, optimize_caches, prune_orphans
     from lgrep.tools.prune_symbols import prune_symbols
 
     # Mutual exclusion (same pattern as _cmd_prune_orphans)
@@ -465,16 +484,18 @@ def _cmd_gc(args: list[str]) -> int:
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
 
-    # Run all three passes: orphan whole-dir cleanup, alias entry cleanup,
-    # and stale symbol-store index cleanup.
+    # Optimize last, so it skips the caches and overlay rows the earlier
+    # passes delete.
     prune_report = prune_orphans(dry_run=dry_run, cache_dir=cache_dir)
     meta_report = gc_worktree_meta(dry_run=dry_run, cache_dir=cache_dir)
     symbols_report = prune_symbols(dry_run=dry_run, storage_dir=symbols_dir)
+    optimize_report = optimize_caches(dry_run=dry_run, cache_dir=cache_dir)
 
     combined = {
         "prune_orphans": prune_report,
         "gc_worktree_meta": meta_report,
         "prune_symbols": symbols_report,
+        "optimize_caches": optimize_report,
     }
     print(json.dumps(combined))
     return 0
@@ -502,6 +523,10 @@ def _cmd_index_semantic(args: list[str]) -> int:
 
     import os
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.indexing import Indexer
@@ -648,6 +673,10 @@ def _cmd_search_symbols(args: list[str]) -> int:
 
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.tools.search_symbols import search_symbols
 
     # Parse args
@@ -707,6 +736,10 @@ def _cmd_index_symbols(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.tools.index_folder import index_folder
 

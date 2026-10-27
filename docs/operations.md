@@ -55,6 +55,23 @@ you upgrade from `2.x`, remove any `json.loads(response)` wrappers on tool
 output. See [Upgrade from 2.x](../CHANGELOG.md#upgrade-from-2x) in the
 changelog for the full migration path.
 
+## Tool profile
+
+The server lists only tools it can run in its configuration. With no
+destructive grant, a stdio server lists 17 tools and a server started with
+`--transport streamable-http` lists 14:
+
+| Group | Tools | Listed when |
+|---|---|---|
+| Semantic search | `search_semantic`, `index_semantic`, `status_semantic` | always |
+| Symbol and text queries | `search_symbols`, `search_text`, `search_references`, `get_symbols`, `get_file_outline`, `get_repo_outline`, `get_file_tree`, `list_repos` | always |
+| Maintenance and diagnostics | `prune_orphans`, `prune_symbols`, `lgrep_diagnostics` | always |
+| Explicit symbol-index jobs | `index_symbols_folder`, `index_symbols_repo`, `get_symbol_index_job` | stdio transport |
+| Cache invalidation | `invalidate_cache`, `invalidate_worktree_cache` | `LGREP_ALLOW_DESTRUCTIVE_MCP` set |
+
+A Vision-proxied server runs on stdio, so it lists the job tools. Startup logs
+`lgrep_tool_profile` with the hidden tool names.
+
 ## Argument names and normalization
 
 Each concept carries one declared name in every tool schema:
@@ -73,8 +90,8 @@ declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` �
 declares the canonical name and the caller did not send both spellings. Any
 other undeclared argument is refused with the tool's valid argument names;
 `symbol_id` on `search_references` and `path` on `index_symbols_repo` are
-refused with the tool that declares them (`get_symbol` and
-`index_symbols_folder`).
+refused with the tool and argument to use instead (`get_symbols` with
+`symbol_ids`, and `index_symbols_folder` with `path`).
 
 ## Cache maintenance
 
@@ -182,7 +199,9 @@ any shared deployment — including a Vision-proxied server, where the
 subprocess transport still reports `stdio` — and run the CLI
 (`lgrep prune-orphans --execute` / `lgrep prune-symbols --execute`) so the
 operator is explicit. The `invalidate_cache` and `invalidate_worktree_cache`
-tools have no CLI equivalent.
+tools have no CLI equivalent. Because they can only refuse without the grant,
+the server does not list them at all unless the grant is set at startup; the
+pruners stay listed because their dry-run preview is useful.
 
 MCP pruner calls also skip projects currently loaded in the running server.
 `prune_orphans` additionally skips the `symbols/` cache;
@@ -194,7 +213,7 @@ MCP pruner calls also skip projects currently loaded in the running server.
 lgrep gc --execute        # or --dry-run (default)
 ```
 
-Runs three passes over both on-disk stores:
+Runs four passes over both on-disk stores:
 
 1. `prune_orphans` — deletes whole cache directories whose project root no
    longer exists on disk.
@@ -204,6 +223,13 @@ Runs three passes over both on-disk stores:
 3. `prune_symbols` — deletes stale symbol-store index files whose `repo_path`
    is missing, unreadable, or absent from the JSON, plus their sidecars and
    stale temp files.
+4. `optimize_caches` — runs LanceDB `optimize` on every cache's chunks table:
+   compacts it, deletes every version but the latest that was written more
+   than an hour ago, and adds new rows to its indexes. Every write leaves a
+   version behind, and nothing else removes them; a busy cache grows by
+   gigabytes a month. The pass first retrains the vector index, if the table
+   has one, so it stays trained on the current rows rather than the first
+   rows indexed. The dry run reports each cache's version count and size.
 
 The `prune_orphans` pass respects the 1-hour grace window
 (`LGREP_PRUNE_MIN_AGE_S`), and the `prune_symbols` pass respects the same
@@ -214,6 +240,12 @@ so no pass skips projects that a running server holds in memory; only the MCP
 `prune_orphans` and `prune_symbols` tools apply that skip. `--cache-dir` and
 `--symbols-dir` override the store locations for one run. Run
 `lgrep gc --execute` periodically (or from a systemd timer).
+
+`optimize_caches` can take minutes and gigabytes of memory on a large cache
+(a 170k-row, 16k-version cache took 275 s and peaked at 2.3 GiB). A write that
+commits during the run wins; that cache fails for this run and the next run
+retries it. A running server holds a table version the pass deletes, so its
+reads of that cache fail until it rechecks the latest version, within 5 s.
 
 ## Git worktree deduplication
 
@@ -274,7 +306,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   search still returns stale results while the refresh runs, or if it fails.
   Results become fresh once a refresh completes, with no operator
   configuration.
-- `watch_start_semantic` (`LGREP_AUTO_WATCH`) is an incremental-freshness
+- File watching (`LGREP_AUTO_WATCH`) is an incremental-freshness
   **optimization** (per-file background re-index on edit), not a correctness
   dependency. `index_semantic` is only needed for first-time setup or to
   force a guaranteed-fresh refresh before a specific query.
@@ -286,7 +318,7 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   window. `LGREP_AUTO_REFRESH=0` opts out of the symbol-index refresh gate;
   every other value keeps it on.
 - **`Repository not indexed` from symbol tools:** local git checkouts build
-  their own index on the first symbol query (`search_symbols`, `get_symbol`,
+  their own index on the first symbol query (`search_symbols`,
   `get_symbols`, `search_references`). Seeding is root-to-root: when the
   queried path is a checkout root and a linked worktree of the same
   repository already has an index, the new index is seeded from it and an
@@ -318,9 +350,10 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
   checkout identity. Refreshes that publish a changed body retain their
   publication-time stamp.
 - MCP symbol searches share one supervised index check/refresh per repository.
-  It uses a separate `symbol` lane with two workers, independent of query and
+  It uses a separate `symbol` lane with eight threads, independent of query and
   semantic-build workers, and appears as a `symbol_index` job in
-  `lgrep_diagnostics`. A query waits at most five seconds, or half
+  `lgrep_diagnostics`. The check, refresh, and search run in the symbol
+  worker process (see Shared-daemon tuning). A query waits at most five seconds, or half
   `LGREP_TOOL_TIMEOUT_S` if smaller, for that snapshot. If the check, queued
   job, bootstrap, or refresh takes longer, the query returns
   `code="indexing_in_progress"`, `retryable=true`, and no symbol results.
@@ -341,9 +374,11 @@ invalidate_worktree_cache(paths: ["/path/to/worktree"])
 target metadata, and truncation; failed status contains a bounded `error`.
 
 Only a recorded `stdio` startup transport admits these three tools. HTTP has no
-process-lifetime job context; HTTP, missing context, and unknown transport return
-`symbol_index_jobs_unavailable`, retryable=false, without a job ID or work. This
-does not change HTTP lifespan behavior or the query-triggered symbol refresh lane.
+process-lifetime job context, so a server started with
+`--transport streamable-http` does not list them. In-process callers without a
+stdio context still get `symbol_index_jobs_unavailable`, retryable=false, without
+a job ID or work. This does not change HTTP lifespan behavior or the
+query-triggered symbol refresh lane.
 
 Each daemon admits one nonterminal explicit job on a dedicated one-worker lane,
 independent of query, symbol-refresh, and shared semantic-build workers. An identical
@@ -360,20 +395,49 @@ once per supervisor without logging the supplied value. Overrides must be positi
 and finite. One admission-time deadline covers resolution, lock wait, load,
 discovery, fetch, parse, and publication; no stage receives a fresh budget.
 
-Deadline stops publish a partial result with `truncation_reason="deadline"` and
+Deadline stops report a partial result with `truncation_reason="deadline"` and
 `walk_truncated=true` (folder) or `truncated=true` (remote). A file-cap stop reports
 `"max_files"`; an unstopped run reports null. Folder runs preserve out-of-window
-entries under the existing incremental deletion rules. Remote partial publications
-still replace the older remote baseline; they do not preserve a last-good index.
+entries under the existing incremental deletion rules.
+
+Remote results also report `published`. An incomplete refresh never replaces a
+complete saved index or one whose coverage is unknown (`published=false`). It may
+replace a known-incomplete baseline only when coverage was limited solely by
+`max_files` or GitHub tree truncation, with every selected file fetched and parsed
+and no deadline stop. Fetch/parse failures or deadline stops preserve any saved
+baseline. Legacy indexes without a coverage marker and unreadable or malformed baselines
+remain protected. The coverage check reads the saved index body under the lock.
+
+Replacement is wholesale; new entries are never merged with older ones. A smaller
+requested cap may reduce partial coverage. With no saved index, a partial first
+build may publish (`published=true`), with `walk_truncated=true` persisted in its
+index body. A complete refresh replaces any baseline, including a complete empty
+tree. Counters describe the attempt, not the retained snapshot. When publication
+is refused, searches keep using the saved snapshot, which may be outdated.
+Remote `truncation_reasons` lists every observed cause once, in fixed order:
+`"tree_truncated"`, `"max_files"`, `"fetch_failed"`, `"parse_failed"`, `"deadline"`.
+Complete coverage returns an empty list. The existing `truncation_reason` keeps
+its single-reason precedence and may omit later failures. Use the list when
+deciding whether increasing a cap can help. It contains at most five fixed tokens,
+not file paths, source content, or exception messages.
+
+Malformed tree responses fail without publication. The publication decision and
+save share the per-repository lock. Save failures are reported, not rolled back;
+a failure after atomic replacement can leave the new
+index published even though the job failed.
+
 A truncated completion is not full repository coverage. For incremental local
 work, resubmit to advance another window and inspect status again.
 
 Stopping is cooperative: lock waits, one file, blocking I/O, and an already-started
-save can overrun the budget. Shutdown closes admission and signals the stop event.
-A queued cancelled job never enters its helper. Running jobs retain ownership
-until their worker stops. A stop observed before publication starts no save; an
-already-started save finishes or fails normally. There is no preemption, rollback,
-public cancellation tool, or hard shutdown-duration guarantee.
+save can overrun the budget. Shutdown closes admission and signals the stop event,
+which reaches the symbol worker process. A queued cancelled job never enters its
+helper. Running jobs retain ownership until their worker stops. A stop observed
+before publication starts no save; an already-started save finishes or fails
+normally, unless the symbol worker is still running three seconds after shutdown
+began. The daemon then kills it. The index file is replaced atomically, so a
+killed save keeps the previous index and can leave one orphan `.tmp` file beside
+it. There is no preemption, rollback, or public cancellation tool.
 
 Status retains the latest 100 terminal explicit jobs independently of query-job
 diagnostics. Later explicit completions evict old records. Random per-supervisor
@@ -422,8 +486,7 @@ lgrep:
   callers timed out, keep their owners active. Eviction preserves disk data;
   the next query reopens an unchanged index without indexing or embedding.
 - Eviction stops an idle owner's watchers and cancels pending watcher events.
-  Reopening does not restart those watchers. Use `watch_start_semantic` if
-  incremental file watching is still wanted. Search staleness checks remain
+  Reopening does not restart those watchers. Search staleness checks remain
   available independently of watching.
 - If every owner slot is active or retiring, admission returns
   `code: "project_capacity_busy"` and `retryable: true`. Retry after active work
@@ -439,20 +502,33 @@ lgrep:
 - A connection or table-open failure returns an error without deleting the
   last-good cache. An error alone does not authorize destructive recovery.
   Existing model/schema migration checks still apply when a table opens.
-- Its `symbol_cache` snapshot reports process-global `entries`, `tracked_bytes`,
-  and `limit_bytes` without reading index files. The 64 MiB limit counts retained
+- Its `symbol_cache` snapshot reports the symbol worker's `entries`,
+  `tracked_bytes`, and `limit_bytes` as of the worker's last reply, without
+  reading index files; before the worker first replies it reports zero entries. The 64 MiB limit counts retained
   serialized index bytes, not parsed heap or RSS. In-flight callers can keep
   evicted objects alive. Indexes larger than the limit remain readable from disk
   but bypass retention, so repeated queries on those indexes parse them again.
-- Its `process_memory` snapshot is the process-level view and is separate from
-  `symbol_cache`. `rss_bytes` and `swap_bytes` come from `/proc` (null where
+- All symbol work runs in one persistent symbol worker process that the daemon
+  starts with `spawn` on the first symbol call: index checks, refreshes,
+  bootstraps, explicit jobs, symbol queries, outlines, `list_repos`,
+  `invalidate_cache`, and `prune_symbols`. Symbol builds therefore no longer
+  hold the daemon's GIL, and text and semantic searches keep their latency
+  during a build. The worker's log events go through the daemon's sinks with a
+  `worker_pid` field; it never writes to stdout. If the worker exits, its
+  in-flight symbol queries and outlines return `code="symbol_worker_restarted"`,
+  `retryable=true`; in-flight `list_repos`, `invalidate_cache`, and
+  `prune_symbols` calls fail with an MCP error that says to retry; explicit
+  jobs end `failed`. The next symbol call starts a replacement.
+  The worker is never recycled.
+- Its `process_memory` snapshot is the daemon process's view and is separate
+  from `symbol_cache`; it does not include the symbol worker process. `rss_bytes` and `swap_bytes` come from `/proc` (null where
   unreadable). `lance_cache_bytes` is the current size of the one LanceDB
   session that every semantic store shares; `lance_cache_limit_bytes` is its
   fixed bound (256 MiB index plus 256 MiB metadata cache), whatever the number
   of open owners. RSS above that cache is mostly native heap from LanceDB
   scans, not Python objects.
-- On glibc the server caps malloc arenas at startup (`malloc_arena_max`, 4)
-  and returns free heap to the OS after the runtime goes idle, at most once
+- On glibc the server and the symbol worker each cap malloc arenas at startup
+  (`malloc_arena_max`, 4), and the server returns free heap to the OS after the runtime goes idle, at most once
   every 30 seconds (`heap_trims` counts trims). Without both, memory freed
   after scans stays in fragmented per-thread arenas and RSS climbs over days.
   Other C libraries report `malloc_arena_max: null` and no trims. Neither

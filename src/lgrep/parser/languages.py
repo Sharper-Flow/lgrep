@@ -108,7 +108,7 @@ _LANGUAGE_SPECS: list[LanguageSpec] = [
         method_kinds=[],
     ),
     LanguageSpec(
-        name="c_sharp",
+        name="csharp",
         extensions=[".cs"],
         function_kinds=["method_declaration", "constructor_declaration"],
         class_kinds=["class_declaration", "struct_declaration", "record_declaration"],

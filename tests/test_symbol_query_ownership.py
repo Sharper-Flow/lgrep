@@ -13,11 +13,12 @@ import pytest
 import lgrep.server as server
 import lgrep.tools.index_folder as folder
 from lgrep.parser.extractor import SymbolExtractor
-from lgrep.server import LgrepContext, mcp, tools_symbols
+from lgrep.server import LgrepContext, mcp
 from lgrep.server.lifecycle import _shutdown
 from lgrep.server.runtime import RuntimeSupervisor
 from lgrep.storage.index_store import IndexStore
-from lgrep.tools.get_symbol import get_symbol
+from lgrep.tools import search_symbols
+from lgrep.tools.get_symbol import get_symbols
 from lgrep.tools.index_folder import index_folder
 
 
@@ -116,8 +117,8 @@ async def test_two_queries_return_pending_while_one_observable_refresh_finishes(
         assert jobs[0]["project"] == str(state.root)
         old_id = "m35.ts:function:before_35"
         assert old_id in IndexStore().load(str(state.root)).symbols
-        stale = get_symbol(old_id, str(state.root))
-        assert "error" in stale and "symbol" not in stale
+        (stale,) = get_symbols([old_id], str(state.root))["symbols"]
+        assert "error" in stale and "source" not in stale
         monkeypatch.setattr(server, "TOOL_TIMEOUT_S", 10.0)
         await drain(state)
         found = await search(app, state.root, "after_35")
@@ -162,7 +163,7 @@ async def test_failed_acquisition_clears_ownership_and_records_failure(slow_refr
 
     state = slow_refresh
     app = LgrepContext()
-    load = tools_symbols.load_symbol_index
+    load = search_symbols.load_symbol_index
     attempts = 0
 
     def fail_once(*args, **kwargs):
@@ -172,7 +173,7 @@ async def test_failed_acquisition_clears_ownership_and_records_failure(slow_refr
             raise OSError("fixture index read failed")
         return load(*args, **kwargs)
 
-    monkeypatch.setattr(tools_symbols, "load_symbol_index", fail_once)
+    monkeypatch.setattr(search_symbols, "load_symbol_index", fail_once)
     try:
         with pytest.raises(ToolError, match="fixture index read failed"):
             await search(app, state.root, "after_35")
@@ -330,7 +331,7 @@ async def test_slow_symbol_acquisitions_do_not_starve_other_query_tools(
         assert release.wait(30)
         return None, False
 
-    monkeypatch.setattr(tools_symbols, "load_symbol_index", hold_acquisition)
+    monkeypatch.setattr(search_symbols, "load_symbol_index", hold_acquisition)
     callers = [asyncio.create_task(search(app, root, "anything")) for root in roots]
     try:
         for started in entered.values():

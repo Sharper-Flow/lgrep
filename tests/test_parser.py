@@ -165,7 +165,7 @@ class TestLanguageRegistry:
 
         spec = get_language_spec(".cs")
         assert spec is not None
-        assert spec.name == "c_sharp"
+        assert spec.name == "csharp"
 
     def test_unsupported_extension_returns_none(self):
         """Unknown extensions must return None."""

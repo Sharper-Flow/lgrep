@@ -8,7 +8,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 from typing_extensions import TypedDict
@@ -16,10 +16,15 @@ from typing_extensions import TypedDict
 from lgrep.storage import (
     CHUNKS_TABLE,
     DEFAULT_CACHE_DIR,
+    MAINTENANCE_VERSION_RETENTION,
     get_project_db_path,
+    optimize_table,
     prune_overlays,
     read_project_meta,
 )
+
+if TYPE_CHECKING:
+    from datetime import timedelta
 
 log = structlog.get_logger()
 
@@ -535,3 +540,70 @@ def gc_worktree_meta(
         "overlays_removed": overlays_removed,
         "overlay_rows_removed": overlay_rows_removed,
     }
+
+
+class OptimizeEntry(TypedDict, total=False):
+    path: str
+    project_path: str | None
+    versions_before: int
+    versions_after: int
+    vector_index_retrained: bool
+    bytes_before: int
+    bytes_after: int
+
+
+class OptimizeCachesReport(TypedDict):
+    dry_run: bool
+    caches: list[OptimizeEntry]
+    reclaimed_bytes: int
+    failures: list[FailureEntry]
+
+
+def optimize_caches(
+    cache_dir: Path | None = None,
+    dry_run: bool = True,
+    retention: timedelta = MAINTENANCE_VERSION_RETENTION,
+) -> OptimizeCachesReport:
+    """Run ``optimize_table`` on every semantic cache with a chunks table.
+
+    A cache that fails is reported and the sweep continues. With
+    ``dry_run`` the report shows each cache's version count, size, and
+    whether its vector index would be retrained.
+    """
+    root = _resolve_cache_dir(cache_dir)
+    report: OptimizeCachesReport = {
+        "dry_run": dry_run,
+        "caches": [],
+        "reclaimed_bytes": 0,
+        "failures": [],
+    }
+    try:
+        entries = sorted(root.iterdir()) if root.is_dir() else []
+    except OSError:
+        return report
+
+    for child in entries:
+        if not _CACHE_DIR_NAME_RE.match(child.name):
+            continue
+        try:
+            if child.is_symlink() or not (child / f"{CHUNKS_TABLE}.lance").is_dir():
+                continue
+        except OSError:
+            continue
+        meta = read_project_meta(child)
+        entry: OptimizeEntry = {
+            "path": str(child),
+            "project_path": meta.get("project_path") if meta else None,
+            "bytes_before": _dir_size(child),
+        }
+        try:
+            entry.update(optimize_table(child, retention=retention, dry_run=dry_run))
+        except Exception as e:
+            log.warning("gc_optimize_failed", cache_dir=str(child), error=str(e))
+            report["failures"].append({"path": str(child), "error": str(e)})
+            continue
+        if not dry_run:
+            entry["bytes_after"] = _dir_size(child)
+            report["reclaimed_bytes"] += max(0, entry["bytes_before"] - entry["bytes_after"])
+        report["caches"].append(entry)
+    return report

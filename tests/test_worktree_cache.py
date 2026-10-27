@@ -905,9 +905,8 @@ class TestGcWorktreeMeta:
         # No error, no work done on dirs without meta
         assert report["checked"] >= 1
 
-    def test_lgrep_gc_runs_both_passes(self, tmp_path, monkeypatch, capsys):
+    def test_lgrep_gc_runs_both_passes(self, isolated_gc_stores, capsys, cli_logging):
         """lgrep gc --execute runs both prune_orphans AND gc_worktree_meta."""
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         from lgrep.cli import _cmd_gc
 
@@ -1217,7 +1216,7 @@ class TestWorktreeOverlay:
         assert schedule.await_count == 1
 
     def test_first_cli_worktree_search_never_serves_trunk_versions(
-        self, tmp_path, monkeypatch, capsys
+        self, tmp_path, monkeypatch, capsys, cli_logging
     ):
         """The CLI search reconciles a worktree overlay before searching it."""
         import json
@@ -1229,13 +1228,13 @@ class TestWorktreeOverlay:
         monkeypatch.setenv("VOYAGE_API_KEY", "k")
         query_embedder = MagicMock()
         query_embedder.embed_query.return_value = _vector("probe")
+        capsys.readouterr()
 
         with patch("lgrep.embeddings.VoyageEmbedder", return_value=query_embedder):
             rc = _cmd_search_semantic(["return", str(worktree), "--limit", "50"])
 
         assert rc == 0
-        # Structured logs share stdout; the command's JSON is the last line.
-        results = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["results"]
+        results = json.loads(capsys.readouterr().out)["results"]
         hits = {r["file_path"]: r["content"] for r in results}
         assert set(hits) == {"same.py"}
 
@@ -1289,6 +1288,71 @@ class TestWorktreeOverlay:
         assert set(visible) == {"shared.py", "same.py", "branch_only.py"}
         assert "branch version" in visible["shared.py"]
         assert set(self._visible(trunk)) == {"shared.py", "same.py", "trunk_only.py"}
+
+    @pytest.mark.parametrize("overfetch", [1, 4])
+    def test_overlay_search_drops_shadowed_rows_after_checkout_prefilter(
+        self, tmp_path, monkeypatch, overfetch
+    ):
+        """Overlay search ranks exactly as the shadowed-path prefilter would,
+        without sending that path list when over-fetched rows suffice."""
+        from lancedb.rerankers import RRFReranker
+
+        from lgrep.storage import _chunk_store
+
+        repo, worktree = self._setup(tmp_path, monkeypatch)
+        embedder = _RecordingEmbedder()
+        self._index(repo, embedder)
+        overlay = self._index(worktree, embedder)
+        overlay.ensure_fts_index()
+        assert overlay._shadowed_base_paths() == {"shared.py", "trunk_only.py"}
+        monkeypatch.setattr(_chunk_store, "_SHADOW_OVERFETCH", overfetch)
+
+        # The nearest row to this vector is a shadowed base row.
+        trunk_row = overlay.table.search().where("checkout = '' AND file_path = 'shared.py'")
+        probe = trunk_row.limit(1).to_list()[0]["vector"]
+        exact = overlay._visible_where()
+        search = overlay.table.search
+        wheres: list[str] = []
+
+        def recording_search(*args, **kwargs):
+            builder = search(*args, **kwargs)
+            where = builder.where
+
+            def record(predicate, prefilter=False):
+                wheres.append(predicate)
+                return where(predicate, prefilter=prefilter)
+
+            builder.where = record
+            return builder
+
+        monkeypatch.setattr(overlay.table, "search", recording_search)
+        for limit in (1, 2, 3):
+            expected_vector = [
+                (r["file_path"], r["content"])
+                for r in search(probe).where(exact, prefilter=True).limit(limit).to_list()
+            ]
+            expected_hybrid = [
+                (r["file_path"], r["content"])
+                for r in search(query_type="hybrid")
+                .vector(probe)
+                .text("return")
+                .where(exact, prefilter=True)
+                .rerank(RRFReranker())
+                .limit(limit)
+                .to_list()
+            ]
+            wheres.clear()
+            vector = overlay.search_vector(probe, limit)
+            hybrid = overlay.search_hybrid(probe, "return", limit)
+            assert [(r.file_path, r.content) for r in vector.results] == expected_vector
+            assert [(r.file_path, r.content) for r in hybrid.results] == expected_hybrid
+            assert "trunk version" not in "".join(r.content for r in vector.results)
+            sent_exact = any("NOT IN" in w for w in wheres)
+            if overfetch == 4:
+                assert not sent_exact
+            elif limit == 1:
+                # The nearest row is shadowed, so one row is too short a fetch.
+                assert sent_exact
 
     def test_trunk_search_excludes_overlay(self, tmp_path, monkeypatch):
         """Trunk search never returns a worktree's overlay rows."""

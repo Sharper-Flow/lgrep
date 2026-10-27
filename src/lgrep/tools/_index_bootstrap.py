@@ -1,6 +1,6 @@
 """First-use index bootstrap for the symbol query tools.
 
-search_symbols, get_symbol, get_symbols, and search_references answer an
+search_symbols, get_symbols, and search_references answer an
 unindexed checkout with "Repository not indexed", which forces the caller
 to run lgrep_index_symbols_folder first. Local git checkouts now build
 their own index on the first query instead (``ensure_symbol_index``):

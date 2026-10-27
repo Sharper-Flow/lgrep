@@ -24,11 +24,15 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import structlog
 
 from lgrep.exceptions import OperationCancelled
-from lgrep.server.memory import IdleTrimmer
+from lgrep.memory import IdleTrimmer
+from lgrep.symbol_worker import InProcessSymbolWorker
+from lgrep.tools._remote_coverage import REMOTE_TRUNCATION_REASONS
 from lgrep.tools.index_repo import credential_values, redact_credentials
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from lgrep.symbol_worker import SymbolWorkerProcess
 
 T = TypeVar("T")
 
@@ -43,7 +47,7 @@ call_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 DEFAULT_WORKER_MAX_THREADS = 4
 DEFAULT_BUILD_MAX_THREADS = 1
-DEFAULT_SYMBOL_MAX_THREADS = 2
+DEFAULT_SYMBOL_MAX_THREADS = 8
 DEFAULT_HISTORY_LIMIT = 100
 DEFAULT_EXPLICIT_BUDGET_S = 150.0
 
@@ -130,8 +134,12 @@ class RuntimeSupervisor:
     ``LGREP_WORKER_MAX_THREADS``) serves tool-call work, and the build lane
     (``lgrep-build`` threads, sized by ``LGREP_BUILD_MAX_THREADS``) serves
     build/maintenance kinds so they cannot occupy query threads. Symbol
-    acquisition has its own bounded lane (``lgrep-symbol`` threads), so it
-    neither waits behind semantic builds nor occupies their query workers.
+    calls have their own bounded lane (``lgrep-symbol`` threads), so they
+    neither wait behind semantic builds nor occupy query workers.
+
+    ``symbol_worker`` runs symbol operations. The daemon passes a
+    ``SymbolWorkerProcess``, so symbol-lane threads only wait on the worker
+    process; without one, operations run in the lane thread itself.
     """
 
     def __init__(
@@ -141,6 +149,7 @@ class RuntimeSupervisor:
         max_build_workers: int | None = None,
         max_symbol_workers: int = DEFAULT_SYMBOL_MAX_THREADS,
         history_limit: int = DEFAULT_HISTORY_LIMIT,
+        symbol_worker: InProcessSymbolWorker | SymbolWorkerProcess | None = None,
     ):
         if max_workers is None:
             max_workers = _worker_limit_from_env()
@@ -159,6 +168,7 @@ class RuntimeSupervisor:
         self.max_build_workers = max_build_workers
         self.max_symbol_workers = max_symbol_workers
         self.history_limit = history_limit
+        self.symbol_worker = symbol_worker if symbol_worker is not None else InProcessSymbolWorker()
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="lgrep-worker",
@@ -259,7 +269,12 @@ class RuntimeSupervisor:
         return {
             "job_id": job.id,
             "state": "completed" if job.status == JobStatus.FINISHED else job.status.value,
-            "result": dict(job.result) if job.result is not None else None,
+            "result": {
+                key: list(value) if isinstance(value, list) else value
+                for key, value in job.result.items()
+            }
+            if job.result is not None
+            else None,
             "error": job.error,
         }
 
@@ -287,14 +302,28 @@ class RuntimeSupervisor:
                     "walk_truncated",
                     "truncated",
                     "truncation_reason",
+                    "published",
                 }
-                job.result = {
+                retained = {
                     key: redact_credentials(value, job.credentials)
                     if isinstance(value, str)
                     else value
                     for key, value in result.items()
                     if key in keys and (value is None or isinstance(value, (str, int, bool)))
                 }
+                reasons = result.get("truncation_reasons")
+                if (
+                    isinstance(reasons, list)
+                    and len(reasons) <= len(REMOTE_TRUNCATION_REASONS)
+                    and all(
+                        isinstance(reason, str) and reason in REMOTE_TRUNCATION_REASONS
+                        for reason in reasons
+                    )
+                ):
+                    retained["truncation_reasons"] = [
+                        reason for reason in REMOTE_TRUNCATION_REASONS if reason in reasons
+                    ]
+                job.result = retained
                 status = JobStatus.FINISHED
         except OperationCancelled:
             status = JobStatus.CANCELLED
@@ -358,11 +387,13 @@ class RuntimeSupervisor:
         with self._lock:
             if job.id in self._active:
                 job.future = future
+        # Done callbacks run in registration order. Releasing the project
+        # first means no caller sees the job gone while it still holds it.
+        if release is not None:
+            future.add_done_callback(lambda _: release())
         future.add_done_callback(
             lambda done_future: self._complete_from_future(job.id, done_future)
         )
-        if release is not None:
-            future.add_done_callback(lambda _: release())
 
         try:
             return await asyncio.wrap_future(future)
@@ -399,6 +430,7 @@ class RuntimeSupervisor:
                 job.stop_event.set()
                 if job.future is not None:
                     job.future.cancel()
+        self.symbol_worker.stop()
 
     def shutdown(self, *, cancel_futures: bool = True) -> None:
         """Shut down all executors and mark queued/running jobs honestly."""
@@ -418,6 +450,7 @@ class RuntimeSupervisor:
         self._symbol_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._explicit_executor.shutdown(wait=False, cancel_futures=cancel_futures)
         self._idle_trimmer.close()
+        self.symbol_worker.shutdown()
 
     def _create_job(
         self, *, kind: str, caller: str, project: str | None, lane: str = QUERY_LANE

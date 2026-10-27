@@ -69,7 +69,6 @@ class TestSemanticSearchLatency:
                 for i in range(10)
             ],
             query_time_ms=5.0,
-            total_chunks=1000,
         )
         mock_db.search_hybrid.return_value = results
 

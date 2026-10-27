@@ -78,6 +78,88 @@ class TestFileDiscovery:
         assert discovery.is_ignored(temp_project / "tests" / "test_main.py") is True
 
 
+def _write(root: Path, rel: str, text: str = "source\n") -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def _found(discovery: FileDiscovery, root: Path) -> set[str]:
+    return {path.relative_to(root).as_posix() for path in discovery.find_files()}
+
+
+@pytest.mark.parametrize("ignore_name", [".gitignore", ".lgrepignore"])
+class TestGitIgnoreParity:
+    """Cases where git's directory semantics differ from plain path matching."""
+
+    def test_escaped_trailing_space(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("spaced\\ \r\n")
+        _write(tmp_path, "spaced ")
+        _write(tmp_path, "spaced")
+
+        discovery = FileDiscovery(tmp_path)
+
+        assert discovery.is_ignored("spaced ") is True
+        assert discovery.is_ignored("spaced") is False
+
+    def test_contents_pattern_does_not_exclude_its_directory(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("gen/**\n!gen/keep.py\n")
+        _write(tmp_path, "gen/keep.py")
+        _write(tmp_path, "gen/drop.py")
+
+        found = _found(FileDiscovery(tmp_path), tmp_path)
+
+        assert "gen/keep.py" in found
+        assert "gen/drop.py" not in found
+
+    def test_subdirectories_pattern_does_not_exclude_its_directory(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("gen/**/\n/a/\n!a/**/\n")
+        _write(tmp_path, "gen/top.py")
+        _write(tmp_path, "gen/sub/inner.py")
+        _write(tmp_path, "a/sub/inner.py")
+
+        discovery = FileDiscovery(tmp_path)
+
+        assert discovery.is_ignored(tmp_path / "gen") is False
+        assert discovery.is_ignored(tmp_path / "gen" / "sub") is True
+        assert discovery.is_ignored(tmp_path / "a") is True
+        assert _found(discovery, tmp_path) == {"gen/top.py", ignore_name}
+
+    def test_allowlist_reopens_nested_directories(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("*\n!*/\n!*.py\n")
+        _write(tmp_path, "top.py")
+        _write(tmp_path, "src/deep/c.py")
+        _write(tmp_path, "src/deep/notes.txt")
+
+        assert _found(FileDiscovery(tmp_path), tmp_path) == {"top.py", "src/deep/c.py"}
+
+    def test_later_directory_pattern_overrides_earlier_negation(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("!*\n/a/\n")
+        _write(tmp_path, "a/b.py")
+        _write(tmp_path, "c.py")
+
+        discovery = FileDiscovery(tmp_path)
+
+        assert discovery.is_ignored(tmp_path / "a") is True
+        assert _found(discovery, tmp_path) == {"c.py", ignore_name}
+
+    def test_directory_below_excluded_directory_is_excluded(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("/a/\n!a/b/\n")
+        _write(tmp_path, "a/b/c.py")
+
+        assert FileDiscovery(tmp_path).is_ignored(tmp_path / "a" / "b") is True
+
+    def test_invalid_patterns_are_skipped(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("!\ntrailing\\\nbuild/\n")
+        _write(tmp_path, "build/out.py")
+        _write(tmp_path, "src/main.py")
+
+        found = _found(FileDiscovery(tmp_path), tmp_path)
+
+        assert "build/out.py" not in found
+        assert "src/main.py" in found
+
+
 class TestLgrepignoreScaffold:
     def test_scaffold_creates_default_file(self, tmp_path):
         path, created = scaffold_lgrepignore(tmp_path)

@@ -28,6 +28,7 @@ from lgrep.storage import (
     has_disk_cache,
     write_project_meta,
 )
+from lgrep.symbol_worker import SymbolWorkerProcess
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
@@ -142,6 +143,9 @@ class LgrepContext:
     # Shared symbol acquisitions survive individual query cancellation;
     # shutdown owns their cancellation.
     _symbol_index_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+    # Queries still reading each acquisition's snapshot. The worker keeps a
+    # snapshot until its acquisition is done and no query reads it.
+    _symbol_index_readers: dict[asyncio.Task, int] = field(default_factory=dict)
     # Release tasks of cancelled index leaders: each holds the project's
     # single-flight event until the leader's physical window has stopped.
     _index_owner_releases: set[asyncio.Task] = field(default_factory=set)
@@ -268,7 +272,11 @@ async def _startup(server: FastMCP) -> LgrepContext:
 
     transport = _bootstrap.get_startup_transport()
 
-    ctx = LgrepContext(voyage_api_key=voyage_api_key, transport=transport)
+    ctx = LgrepContext(
+        voyage_api_key=voyage_api_key,
+        transport=transport,
+        runtime=RuntimeSupervisor(symbol_worker=SymbolWorkerProcess()),
+    )
     log.info("lgrep_ready", transport=transport)
     return ctx
 
@@ -323,21 +331,31 @@ async def _shutdown(ctx: LgrepContext) -> None:
     ctx._store_retirements.clear()
     ctx.projects.clear()
     ctx._stores.clear()
-    ctx.runtime.shutdown(cancel_futures=True)
+    # Stopping the symbol worker can wait out its grace period.
+    await asyncio.to_thread(ctx.runtime.shutdown, cancel_futures=True)
     ctx.embedder = None
     log.info("lgrep_shutdown_complete")
 
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator[LgrepContext]:
-    """Manage application lifecycle with optional eager warming."""
+    """Manage application lifecycle with optional eager warming.
+
+    Warm-up runs in the background so the server answers ``initialize`` at
+    once; hosts such as Vision abandon a server that is slow to handshake.
+    Tool calls that arrive mid-warm share the same per-owner initialization.
+    """
     ctx = await _startup(server)
-    await _warm_projects(ctx)
-    sweep_task = asyncio.create_task(_schedule_startup_sweep(ctx))
+    background = [
+        asyncio.create_task(_warm_projects(ctx)),
+        asyncio.create_task(_schedule_startup_sweep(ctx)),
+    ]
     try:
         yield ctx
     finally:
-        sweep_task.cancel()
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         await _shutdown(ctx)
 
 

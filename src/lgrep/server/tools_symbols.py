@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import time
+from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -20,7 +21,6 @@ from lgrep.server.responses import (
     GetFileOutlineResult,
     GetFileTreeResult,
     GetRepoOutlineResult,
-    GetSymbolResult,
     GetSymbolsResult,
     InvalidateCacheResult,
     ListReposResult,
@@ -32,28 +32,72 @@ from lgrep.server.responses import (
     ToolError,
     error_response,
 )
+from lgrep.server.runtime import SYMBOL_LANE
 from lgrep.server.tools_maintenance import _destructive_grant_present
 from lgrep.storage.index_store import normalize_repo_key
+from lgrep.symbol_worker import SymbolWorkerLost
 from lgrep.tools._meta import make_meta
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
-from lgrep.tools.get_symbol import get_symbol as _get_symbol
 from lgrep.tools.get_symbol import get_symbols as _get_symbols
-from lgrep.tools.index_folder import index_folder as _index_folder
 from lgrep.tools.index_repo import _resolve_github_token as resolve_github_token
 from lgrep.tools.index_repo import credential_values, redact_credentials
-from lgrep.tools.index_repo import index_repo as _index_repo
 from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
 from lgrep.tools.search_references import search_references as _search_references
-from lgrep.tools.search_symbols import load_symbol_index
 from lgrep.tools.search_symbols import search_symbols as _search_symbols
 from lgrep.tools.search_text import search_text as _search_text
 
 if TYPE_CHECKING:
     from lgrep.server.lifecycle import LgrepContext
-    from lgrep.storage.index_store import CodeIndex
+
+
+# ---------------------------------------------------------------------------
+# Symbol work runs in the daemon's symbol worker, never in its interpreter.
+# ---------------------------------------------------------------------------
+
+
+def _daemon(ctx: Context | None) -> LgrepContext | None:
+    """Return the daemon context, or None for a call outside an MCP request."""
+    if ctx is None:
+        return None
+    try:
+        return ctx.request_context.lifespan_context
+    except ValueError:  # FastMCP: "Context is not available outside of a request"
+        return None
+
+
+async def _in_worker(app_ctx: LgrepContext, job_kind, caller, project, op, /, *args, **kwargs):
+    """Run one symbol operation in the worker, supervised on the symbol lane.
+
+    Positional-only, so a tool argument such as ``kind`` reaches the operation.
+    """
+    worker = app_ctx.runtime.symbol_worker
+    # Bind the operation first: run_blocking owns the names kind, caller, and project.
+    return await app_ctx.runtime.run_blocking(
+        job_kind, caller, project, partial(worker.call, op, *args, **kwargs), lane=SYMBOL_LANE
+    )
+
+
+async def _run_symbol(ctx: Context | None, caller, project, local, /, *args, **kwargs):
+    """Run a symbol tool's helper in the worker, or in-process outside the daemon."""
+    app_ctx = _daemon(ctx)
+    if app_ctx is None:
+        return await asyncio.to_thread(local, *args, **kwargs)
+    return await _in_worker(app_ctx, caller, caller, project, caller, *args, **kwargs)
+
+
+def _worker_lost(exc: SymbolWorkerLost) -> ToolError:
+    return ToolError(error=str(exc), code="symbol_worker_restarted", retryable=True)
+
+
+def _release_snapshot(app_ctx: LgrepContext, task: asyncio.Task) -> None:
+    """Release a finished acquisition's snapshot once no query reads it."""
+    if task in app_ctx._symbol_index_readers or not task.done() or task.cancelled():
+        return
+    if task.exception() is None:
+        app_ctx.runtime.symbol_worker.release(task.result())
 
 
 def _symbol_index_done(app_ctx: LgrepContext, path: str, task: asyncio.Task) -> None:
@@ -62,31 +106,38 @@ def _symbol_index_done(app_ctx: LgrepContext, path: str, task: asyncio.Task) -> 
     # RuntimeSupervisor records failures; retrieve detached task exceptions too.
     if not task.cancelled():
         task.exception()
+    _release_snapshot(app_ctx, task)
 
 
-async def _symbol_index_snapshot(
-    app_ctx: LgrepContext, path: str
-) -> tuple[CodeIndex | None, bool] | None:
+@asynccontextmanager
+async def _symbol_index_snapshot(app_ctx: LgrepContext, path: str):
+    """Yield the worker's checked-snapshot token, or None while acquisition runs."""
     from lgrep.server import TOOL_TIMEOUT_S
 
+    readers = app_ctx._symbol_index_readers
     async with app_ctx._lock:
         if app_ctx._closed:
             raise RuntimeError("lgrep context is shutting down")
         task = app_ctx._symbol_index_tasks.get(path)
         if task is None:
             task = asyncio.create_task(
-                app_ctx.runtime.run_blocking(
-                    "symbol_index", "search_symbols", path, load_symbol_index, path, lane="symbol"
-                ),
+                _in_worker(app_ctx, "symbol_index", "search_symbols", path, "acquire", path),
                 name=f"symbol_index:{path}",
             )
             app_ctx._symbol_index_tasks[path] = task
             task.add_done_callback(partial(_symbol_index_done, app_ctx, path))
-    # Waiting/cancelling a query never cancels the registered physical writer.
-    done, _ = await asyncio.wait((task,), timeout=min(5.0, TOOL_TIMEOUT_S / 2))
-    if app_ctx._closed:
-        raise RuntimeError("lgrep context is shutting down")
-    return task.result() if done else None
+        readers[task] = readers.get(task, 0) + 1
+    try:
+        # Waiting/cancelling a query never cancels the registered physical writer.
+        done, _ = await asyncio.wait((task,), timeout=min(5.0, TOOL_TIMEOUT_S / 2))
+        if app_ctx._closed:
+            raise RuntimeError("lgrep context is shutting down")
+        yield task.result() if done else None
+    finally:
+        readers[task] -= 1
+        if not readers[task]:
+            del readers[task]
+        _release_snapshot(app_ctx, task)
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +235,12 @@ async def index_symbols_folder(
     if redact_credentials(target, credentials) != target:
         return error_response("Index targets must not contain credentials.")
 
-    def work(deadline, stop_event):
-        return _index_folder(
-            target,
-            max_files=max_files,
-            incremental=incremental,
-            deadline=deadline,
-            cancel_event=stop_event,
+    worker = app.runtime.symbol_worker
+
+    def work(deadline, _stop_event):
+        # The worker stops this build through its own shutdown signal.
+        return worker.call(
+            "index_folder", target, max_files=max_files, incremental=incremental, deadline=deadline
         )
 
     return _submit_explicit(
@@ -253,20 +303,17 @@ async def index_symbols_repo(
     if any(redact_credentials(value, credentials) != value for value in (repo, ref)):
         return error_response("Index targets must not contain credentials.")
 
-    def work(deadline, stop_event):
-        async def inline(fn):
-            return fn()
+    worker = app.runtime.symbol_worker
 
-        return asyncio.run(
-            _index_repo(
-                repo,
-                ref=ref,
-                max_files=max_files,
-                github_token=token or "",
-                run_sync=inline,
-                deadline=deadline,
-                cancel_event=stop_event,
-            )
+    def work(deadline, _stop_event):
+        # The worker stops this build through its own shutdown signal.
+        return worker.call(
+            "index_repo",
+            repo,
+            ref=ref,
+            max_files=max_files,
+            github_token=token or "",
+            deadline=deadline,
         )
 
     return _submit_explicit(
@@ -311,14 +358,15 @@ async def get_symbol_index_job(
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
 )
 @time_tool
-async def list_repos() -> ListReposResult:
+async def list_repos(ctx: Context | None = None) -> ListReposResult:
     """List all repositories that have been indexed in the symbol store.
 
     Returns:
         Repos list and meta envelope.
     """
     t0 = time.monotonic()
-    result = await asyncio.to_thread(_list_repos)
+    # Listing can parse an index body whose sidecar is missing.
+    result = await _run_symbol(ctx, "list_repos", None, _list_repos)
     return ListReposResult(
         repos=result["repos"],
         _meta=make_meta(t0, "list_repos"),
@@ -382,6 +430,7 @@ async def get_file_outline(
         str | None,
         Field(description="Optional repository root for stable relative symbol identifiers."),
     ] = None,
+    ctx: Context | None = None,
 ) -> GetFileOutlineResult | ToolError:
     """Get the symbol outline (functions, classes, methods) for a single file.
 
@@ -393,7 +442,12 @@ async def get_file_outline(
         File path, symbols list, count, and meta envelope.
     """
     t0 = time.monotonic()
-    result = await asyncio.to_thread(_get_file_outline, path, repo_root=repo_root)
+    try:
+        result = await _run_symbol(
+            ctx, "get_file_outline", path, _get_file_outline, path, repo_root=repo_root
+        )
+    except SymbolWorkerLost as exc:
+        return _worker_lost(exc)
     if "error" in result:
         return error_response(result["error"])
     return GetFileOutlineResult(
@@ -422,6 +476,7 @@ async def get_repo_outline(
         int,
         Field(description="Maximum number of files to scan while building outlines."),
     ] = 500,
+    ctx: Context | None = None,
 ) -> GetRepoOutlineResult | ToolError:
     """Get the symbol outline across an entire repository.
 
@@ -433,7 +488,12 @@ async def get_repo_outline(
         Repo path, files list, counts, and meta envelope.
     """
     t0 = time.monotonic()
-    result = await asyncio.to_thread(_get_repo_outline, path, max_files=max_files)
+    try:
+        result = await _run_symbol(
+            ctx, "get_repo_outline", path, _get_repo_outline, path, max_files=max_files
+        )
+    except SymbolWorkerLost as exc:
+        return _worker_lost(exc)
     if "error" in result:
         return error_response(result["error"])
     return GetRepoOutlineResult(
@@ -494,29 +554,37 @@ async def search_symbols(
     t0 = time.monotonic()
     if not query or not query.strip():
         return error_response("query must not be empty")
-    if ctx is None:
+    app_ctx = _daemon(ctx)
+    if app_ctx is None:
         result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
     else:
-        app_ctx = ctx.request_context.lifespan_context
         repo_key = normalize_repo_key(path)
-        snapshot = await _symbol_index_snapshot(app_ctx, repo_key)
-        if snapshot is None:
-            return ToolError(
-                error=(
-                    "Symbol index check or refresh is still running. "
-                    "See lgrep_diagnostics for its symbol_index job; query again after it finishes."
-                ),
-                code="indexing_in_progress",
-                retryable=True,
-            )
-        result = await app_ctx.runtime.run_blocking(
-            "search_symbols",
-            "search_symbols",
-            repo_key,
-            partial(
-                _search_symbols, query, repo_key, limit=limit, kind=kind, index_snapshot=snapshot
-            ),
-        )
+        try:
+            async with _symbol_index_snapshot(app_ctx, repo_key) as token:
+                if token is None:
+                    return ToolError(
+                        error=(
+                            "Symbol index check or refresh is still running. "
+                            "See lgrep_diagnostics for its symbol_index job; "
+                            "query again after it finishes."
+                        ),
+                        code="indexing_in_progress",
+                        retryable=True,
+                    )
+                result = await _in_worker(
+                    app_ctx,
+                    "search_symbols",
+                    "search_symbols",
+                    repo_key,
+                    "search_symbols",
+                    token,
+                    query,
+                    repo_key,
+                    limit=limit,
+                    kind=kind,
+                )
+        except SymbolWorkerLost as exc:
+            return _worker_lost(exc)
     if "error" in result:
         return error_response(result["error"])
     return SearchSymbolsResult(
@@ -602,49 +670,10 @@ async def search_text(
 
 @mcp.tool(
     description=(
-        "Get full metadata and source for one symbol ID from the symbol index. "
-        "Use after symbol search to inspect a specific implementation body. "
-        "MCP tool call only; do not invoke via shell."
-    ),
-    annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
-)
-@time_tool
-async def get_symbol(
-    symbol_id: Annotated[
-        str,
-        Field(description="Stable symbol ID in file_path:kind:name format."),
-    ],
-    path: Annotated[
-        str,
-        Field(description="Absolute path to the indexed local repository root."),
-    ],
-) -> GetSymbolResult | ToolError:
-    """Get full metadata and source code for a single symbol by ID.
-
-    Symbol IDs use the format "file_path:kind:name" (e.g. "src/auth.py:function:authenticate").
-    Run lgrep_index_symbols_folder first to build the index.
-
-    Args:
-        symbol_id: Stable symbol ID in format "file_path:kind:name"
-        path: Absolute path to the indexed repository
-
-    Returns:
-        Symbol dict and meta envelope.
-    """
-    t0 = time.monotonic()
-    result = await asyncio.to_thread(_get_symbol, symbol_id, path)
-    if "error" in result:
-        return error_response(result["error"])
-    return GetSymbolResult(
-        symbol=result["symbol"],
-        _meta=make_meta(t0, "get_symbol"),
-    )
-
-
-@mcp.tool(
-    description=(
-        "Batch-get metadata and source for multiple symbol IDs in a single request. "
-        "Use to reduce round-trips after search results provide several relevant IDs. "
+        "Get metadata and source for one or more symbol IDs from the symbol index. "
+        "Use after symbol search to read implementation bodies; pass every relevant ID in one call. "
+        "Each requested ID returns one entry in order. An unknown ID or a stale source range "
+        "returns {id, error} in its entry instead of a top-level error, so check each entry. "
         "MCP tool call only; do not invoke via shell."
     ),
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
@@ -653,24 +682,29 @@ async def get_symbol(
 async def get_symbols(
     symbol_ids: Annotated[
         list[str],
-        Field(description="List of symbol IDs in file_path:kind:name format."),
+        Field(description="One or more symbol IDs in file_path:kind:name format."),
     ],
     path: Annotated[
         str,
         Field(description="Absolute path to the indexed local repository root."),
     ],
+    ctx: Context | None = None,
 ) -> GetSymbolsResult | ToolError:
-    """Get full metadata and source code for multiple symbols in one call.
+    """Get full metadata and source code for one or more symbols in one call.
 
     Args:
         symbol_ids: List of stable symbol IDs (format: "file_path:kind:name")
         path: Absolute path to the indexed repository
 
     Returns:
-        Symbols list and meta envelope.
+        Symbols list and meta envelope. Missing IDs and source-range
+        mismatches appear as per-entry ``{"id", "error"}`` dicts.
     """
     t0 = time.monotonic()
-    result = await asyncio.to_thread(_get_symbols, symbol_ids, path)
+    try:
+        result = await _run_symbol(ctx, "get_symbols", path, _get_symbols, symbol_ids, path)
+    except SymbolWorkerLost as exc:
+        return _worker_lost(exc)
     if "error" in result:
         return error_response(result["error"])
     return GetSymbolsResult(
@@ -732,27 +766,11 @@ async def search_references(
         Candidate occurrences, candidate names, disclaimer, and meta envelope.
     """
     t0 = time.monotonic()
-    resolved_path = str(Path(path).resolve())
-    if ctx is not None:
-        app_ctx = ctx.request_context.lifespan_context
-        # Bind the tool arguments before crossing the supervisor boundary.
-        # run_blocking() owns the names kind/caller/project/fn/cancel_event, so a
-        # bare kind= kwarg would bind to the supervisor's own job-kind parameter.
-        result = await app_ctx.runtime.run_blocking(
+    try:
+        result = await _run_symbol(
+            ctx,
             "search_references",
-            "search_references",
-            resolved_path,
-            partial(
-                _search_references,
-                query,
-                path,
-                limit=limit,
-                usage_filter=usage_filter,
-                kind=kind,
-            ),
-        )
-    else:
-        result = await asyncio.to_thread(
+            str(Path(path).resolve()),
             _search_references,
             query,
             path,
@@ -760,6 +778,8 @@ async def search_references(
             usage_filter=usage_filter,
             kind=kind,
         )
+    except SymbolWorkerLost as exc:
+        return _worker_lost(exc)
 
     if "error" in result:
         return error_response(result["error"])
@@ -803,6 +823,7 @@ async def invalidate_cache(
             description="Absolute path to the local repository root whose symbol cache should be removed."
         ),
     ],
+    ctx: Context | None = None,
 ) -> InvalidateCacheResult:
     """Remove the symbol index for a repository, forcing a full re-index on next use.
 
@@ -822,7 +843,8 @@ async def invalidate_cache(
             _meta=make_meta(t0, "invalidate_cache"),
         )
 
-    result = await asyncio.to_thread(_invalidate_cache, path)
+    # Invalidation loads the index and evicts it from the worker's cache.
+    result = await _run_symbol(ctx, "invalidate_cache", path, _invalidate_cache, path)
     return InvalidateCacheResult(
         status=result["status"],
         refused_reason="",

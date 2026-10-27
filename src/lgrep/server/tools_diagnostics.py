@@ -14,9 +14,9 @@ from mcp.server.fastmcp import Context  # noqa: TC002
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from lgrep.memory import allocator_info, process_rss_swap_bytes
 from lgrep.server import mcp, time_tool
 from lgrep.server.lifecycle import owner_store_snapshot
-from lgrep.server.memory import allocator_info, process_rss_swap_bytes
 from lgrep.server.responses import (  # noqa: TC001
     DiagnosticsResult,
     LoadedProjectEntry,
@@ -134,7 +134,12 @@ async def lgrep_diagnostics(
         loaded_projects=loaded_projects,
         active_jobs=active_jobs,
         recent_jobs=recent_jobs,
-        symbol_cache=IndexStore.cache_info(),
+        # The symbol worker owns the daemon's symbol index cache.
+        symbol_cache=(
+            app_ctx.runtime.symbol_worker.cache_info()
+            if app_ctx is not None
+            else IndexStore.cache_info()
+        ),
         owner_stores=owner_store_snapshot(app_ctx),
         process_memory=process_memory_snapshot(),
         timeout_abandonment_summary=TimeoutAbandonmentSummary(

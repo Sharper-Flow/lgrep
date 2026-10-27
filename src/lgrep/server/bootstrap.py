@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import contextlib
-import errno
-import fcntl
-import logging
-import os
 import sys
-from logging.handlers import RotatingFileHandler
 
 import structlog
+
+from lgrep.logging_setup import configure_logging
+from lgrep.logging_setup import shutdown_logging as shutdown_logging
 
 # Transport kind recorded by ``run_server`` and read lazily by the lifespan.
 # This actual startup value drives diagnostics and explicit-job admission.
@@ -23,149 +20,28 @@ def get_startup_transport() -> str | None:
     return _startup_transport
 
 
-# Fixed rotation bounds for the opt-in ``LGREP_LOG_FILE`` sink.
-LOG_FILE_MAX_BYTES = 10 * 1024 * 1024
-LOG_FILE_BACKUP_COUNT = 3
-
-# Handlers installed by ``configure_logging`` and the fd holding the
-# single-writer log lock. Tracked so reconfiguration is idempotent and
-# ``shutdown_logging`` can release everything it owns.
-_owned_handlers: list[logging.Handler] = []
-_log_lock_fd: int | None = None
+# Tools that refuse every call without LGREP_ALLOW_DESTRUCTIVE_MCP.
+GRANT_ONLY_TOOLS = ("invalidate_cache", "invalidate_worktree_cache")
+# Explicit symbol-index job tools; they need a process-lifetime stdio context.
+STDIO_ONLY_TOOLS = ("index_symbols_folder", "index_symbols_repo", "get_symbol_index_job")
 
 
-def _release_log_lock() -> None:
-    global _log_lock_fd
-    if _log_lock_fd is not None:
-        with contextlib.suppress(OSError):
-            os.close(_log_lock_fd)
-        _log_lock_fd = None
+def apply_tool_profile(server, transport: str) -> list[str]:
+    """Unregister tools this server could only refuse, and return their names.
 
-
-def _remove_owned_handlers() -> None:
-    root = logging.getLogger()
-    for handler in _owned_handlers:
-        root.removeHandler(handler)
-        handler.close()
-    _owned_handlers.clear()
-
-
-def _try_attach_file_sink() -> None:
-    """Attach the ``LGREP_LOG_FILE`` rotating sink when its lock is won.
-
-    One writer is enforced by an exclusive non-blocking flock on the
-    ``<file>.lock`` sidecar, held for process life: flock locks survive
-    RotatingFileHandler renames and make the CPython "one file, many
-    processes is unsupported" constraint structural. A loser warns on
-    stderr and keeps stderr-only logging.
+    A tool listed to an agent should be able to succeed. The handlers keep
+    their own grant and stdio checks, so in-process callers stay refused.
     """
-    global _log_lock_fd
+    from lgrep.server.tools_maintenance import _destructive_grant_present
 
-    log_file = os.environ.get("LGREP_LOG_FILE")
-    if not log_file:
-        return
-
-    try:
-        lock_fd = os.open(f"{log_file}.lock", os.O_CREAT | os.O_RDWR, 0o644)
-    except OSError as exc:
-        print(
-            f"lgrep: cannot open lock sidecar {log_file}.lock ({exc.strerror}); "
-            f"keeping stderr-only logging",
-            file=sys.stderr,
-        )
-        return
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as exc:
-        os.close(lock_fd)
-        if exc.errno in (errno.EACCES, errno.EAGAIN):
-            reason = "is held by another process"
-        else:
-            reason = f"could not be locked ({exc.strerror})"
-        print(
-            f"lgrep: LGREP_LOG_FILE {log_file} {reason} "
-            f"(lock {log_file}.lock); keeping stderr-only logging",
-            file=sys.stderr,
-        )
-        return
-
-    try:
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=LOG_FILE_MAX_BYTES,
-            backupCount=LOG_FILE_BACKUP_COUNT,
-        )
-    except OSError:
-        os.close(lock_fd)
-        print(
-            f"lgrep: cannot open LGREP_LOG_FILE {log_file}; keeping stderr-only logging",
-            file=sys.stderr,
-        )
-        return
-
-    _log_lock_fd = lock_fd
-    _owned_handlers.append(file_handler)
-    logging.getLogger().addHandler(file_handler)
-
-
-def configure_logging() -> None:
-    """Configure structlog through stdlib logging for the MCP server.
-
-    Takes over the root handler set: every handler installed before this
-    call is removed, so structured events reach exactly one formatted
-    stderr handler (plus the optional locked file sink) and never a
-    preinstalled stdout handler. stdout is never a log sink: the stdio
-    MCP channel owns it.
-    """
-    log_level = getattr(
-        logging,
-        os.environ.get("LGREP_LOG_LEVEL", "INFO").upper(),
-        logging.INFO,
-    )
-
-    _remove_owned_handlers()
-    _release_log_lock()
-
-    root = logging.getLogger()
-    root.setLevel(log_level)
-    for foreign_handler in root.handlers[:]:
-        root.removeHandler(foreign_handler)
-
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    _owned_handlers.append(stderr_handler)
-    root.addHandler(stderr_handler)
-
-    _try_attach_file_sink()
-
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            structlog.processors.JSONRenderer(),
-        ],
-        foreign_pre_chain=[
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-        ],
-    )
-    for handler in _owned_handlers:
-        handler.setFormatter(formatter)
-
-    structlog.configure(
-        processors=[
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.format_exc_info,
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        logger_factory=structlog.stdlib.LoggerFactory(),
-    )
-
-
-def shutdown_logging() -> None:
-    """Remove and close handlers installed by ``configure_logging``."""
-    _remove_owned_handlers()
-    _release_log_lock()
+    hidden: list[str] = []
+    if not _destructive_grant_present():
+        hidden.extend(GRANT_ONLY_TOOLS)
+    if transport != "stdio":
+        hidden.extend(STDIO_ONLY_TOOLS)
+    for name in hidden:
+        server.remove_tool(name)
+    return hidden
 
 
 def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 6285) -> int:
@@ -178,15 +54,16 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     """
     global _startup_transport
 
+    # First, so no startup event reaches stdout, the stdio MCP channel.
+    configure_logging()
+
     # Before any worker or LanceDB thread exists, so the cap binds every arena.
-    from lgrep.server.memory import cap_malloc_arenas
+    from lgrep.memory import cap_malloc_arenas
 
     cap_malloc_arenas()
 
     # Import here to avoid circular imports at module load time
     from lgrep.server import mcp
-
-    configure_logging()
 
     log = structlog.get_logger()
     log.info("lgrep_mcp_server_starting", transport=transport, host=host, port=port)
@@ -194,6 +71,9 @@ def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 62
     # Preserve the transport for diagnostics and job admission without exposing it as an
     # environment variable that other code could read or mutate.
     _startup_transport = transport
+
+    hidden = apply_tool_profile(mcp, transport)
+    log.info("lgrep_tool_profile", transport=transport, hidden_tools=hidden)
 
     if transport == "streamable-http":
         mcp.settings.host = host

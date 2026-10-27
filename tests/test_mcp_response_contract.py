@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from lgrep.server import LgrepContext, mcp
+from lgrep.symbol_worker import InProcessSymbolWorker
 
 
 def _tool(name: str):
@@ -29,6 +30,7 @@ def _runtime_ctx():
     class RuntimeStub:
         started_at = time.time()
         max_workers = 4
+        symbol_worker = InProcessSymbolWorker()
 
         async def run_blocking(self, kind, caller, project, fn, *args, lane="query", **kwargs):
             kwargs.pop("cancel_event", None)
@@ -179,11 +181,9 @@ async def test_all_registered_tools_validate_on_trivial_invocation(tmp_path, mon
             args = {"query": "greet", "path": str(tmp_path / "absent")}
         elif tool.name in {"search_symbols", "search_text", "search_references"}:
             args = {"query": "greet", "path": str(repo)}
-        elif tool.name == "get_symbol":
-            args = {"symbol_id": "hello.py:function:greet", "path": str(repo)}
         elif tool.name == "get_symbols":
             args = {"symbol_ids": ["hello.py:function:greet"], "path": str(repo)}
-        elif tool.name in {"index_semantic", "watch_start_semantic"}:
+        elif tool.name == "index_semantic":
             # Semantic indexing requires an embedding backend; skip in this smoke test.
             continue
         elif tool.name == "index_symbols_repo":
@@ -191,7 +191,7 @@ async def test_all_registered_tools_validate_on_trivial_invocation(tmp_path, mon
             continue
         elif tool.name == "get_symbol_index_job":
             args = {"job_id": "unknown"}
-        elif tool.name in {"status_semantic", "watch_stop_semantic"}:
+        elif tool.name == "status_semantic":
             args = {}
 
         try:
