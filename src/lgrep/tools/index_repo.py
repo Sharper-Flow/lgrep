@@ -73,6 +73,27 @@ def _looks_like_local_path(value: str) -> bool:
         return False
 
 
+def _validate_tree(data: object) -> None:
+    """Distinguish a complete empty tree from a malformed observation."""
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("tree"), list)
+        or not isinstance(data.get("truncated"), bool)
+    ):
+        raise ValueError("expected a tree array and a boolean truncation flag")
+    paths = set()
+    for item in data["tree"]:
+        if (
+            not isinstance(item, dict)
+            or item.get("type") not in ("blob", "tree", "commit")
+            or not isinstance(item.get("path"), str)
+            or not item["path"]
+            or item["path"] in paths
+        ):
+            raise ValueError("invalid or duplicate tree entry")
+        paths.add(item["path"])
+
+
 async def index_repo(
     repo: str,
     ref: str = "HEAD",
@@ -94,7 +115,8 @@ async def index_repo(
         github_token: Optional GitHub personal access token for private repos
 
     Returns:
-        Dict with files_indexed, symbols_indexed, and repo
+        Counters for this attempt, its coverage, and whether it was published.
+        Incomplete attempts never replace an existing saved index.
     """
     credentials = credential_values((github_token,) if github_token else ())
 
@@ -180,9 +202,19 @@ async def index_repo(
                 truncation_reason = "deadline"
                 tree_data = {}
             else:
-                tree_data = resp.json()
+                try:
+                    tree_data = resp.json()
+                    _validate_tree(tree_data)
+                except (ValueError, RecursionError) as exc:
+                    return error_response(
+                        redact_credentials(
+                            f"Invalid GitHub tree response for {repo}: {exc}", credentials
+                        )
+                    )
         check_stop()
         if tree_data.get("truncated"):
+            truncated = True
+            truncation_reason = "tree_truncated"
             log.warning("github_tree_truncated", repo=redact_credentials(repo, credentials))
 
         blob_items = [item for item in tree_data.get("tree", []) if item.get("type") == "blob"]
@@ -212,8 +244,8 @@ async def index_repo(
             return file_path, content_resp.content
 
         # Fetch in bounded waves. The wave boundary is where the budget is
-        # checked: expired with unattempted files means stop, save the
-        # partial index, and report truncated with the deadline reason.
+        # checked: expired with unattempted files means stop and report the
+        # deadline. Only a first build may publish that partial observation.
         for wave_start in range(0, len(eligible), _FETCH_CONCURRENCY):
             wave = eligible[wave_start : wave_start + _FETCH_CONCURRENCY]
 
@@ -237,9 +269,11 @@ async def index_repo(
 
             for (file_path, spec), result in zip(wave, results, strict=True):
                 if isinstance(result, BaseException):
+                    truncated = True
                     if isinstance(result, httpx.TimeoutException) and expired():
-                        truncated = True
                         truncation_reason = "deadline"
+                    elif truncation_reason is None:
+                        truncation_reason = "fetch_failed"
                     if isinstance(result, (httpx.HTTPStatusError, httpx.RequestError)):
                         log.warning(
                             "github_file_fetch_failed",
@@ -268,18 +302,17 @@ async def index_repo(
                 truncated = True
                 truncation_reason = "deadline"
                 break
-            file_hash = hashlib.sha256(content).hexdigest()
-            files_dict[file_path] = file_hash
             try:
                 parser = get_parser(spec.name)
                 tree = parser.parse(content)
                 syms = _extract_symbols_from_tree(tree.root_node, content, file_path, spec)
+                file_symbols = {}
                 for sym in syms:
                     symbol_id = sym.id
-                    if symbol_id in symbols_dict:
+                    if symbol_id in file_symbols or symbol_id in symbols_dict:
                         symbol_id = f"{sym.id}@{sym.start_byte}"
 
-                    symbols_dict[symbol_id] = {
+                    file_symbols[symbol_id] = {
                         "id": symbol_id,
                         "name": sym.name,
                         "kind": sym.kind,
@@ -291,23 +324,41 @@ async def index_repo(
                         "parent": sym.parent,
                     }
             except Exception as e:
+                truncated = True
+                if truncation_reason is None:
+                    truncation_reason = "parse_failed"
                 log.warning(
                     "github_parse_failed",
                     file=redact_credentials(file_path, credentials),
                     error=redact_credentials(str(e), credentials)[:500],
                 )
+                continue
+            files_dict[file_path] = hashlib.sha256(content).hexdigest()
+            symbols_dict.update(file_symbols)
             files_processed += 1
 
         index = CodeIndex(
             repo_path=repo_key,
             files=files_dict,
             symbols=symbols_dict,
+            walk_truncated=truncated,
         )
         check_stop()
-        store.save(index)
-        return files_processed, len(symbols_dict)
+        # Check at publication, not before remote work: another writer may
+        # have published a complete index while this attempt was fetching.
+        with store.repo_lock(repo_key):
+            check_stop()
+            if truncated:
+                try:
+                    store._index_path(repo_key).stat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    return files_processed, len(symbols_dict), False
+            store.save(index)
+        return files_processed, len(symbols_dict), True
 
-    files_processed, symbols_count = await run_sync(_parse_and_persist)
+    files_processed, symbols_count, published = await run_sync(_parse_and_persist)
 
     return {
         "repo": redact_credentials(repo, credentials),
@@ -316,4 +367,5 @@ async def index_repo(
         "symbols_indexed": symbols_count,
         "truncated": truncated,
         "truncation_reason": truncation_reason,
+        "published": published,
     }

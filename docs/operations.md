@@ -395,11 +395,24 @@ once per supervisor without logging the supplied value. Overrides must be positi
 and finite. One admission-time deadline covers resolution, lock wait, load,
 discovery, fetch, parse, and publication; no stage receives a fresh budget.
 
-Deadline stops publish a partial result with `truncation_reason="deadline"` and
+Deadline stops report a partial result with `truncation_reason="deadline"` and
 `walk_truncated=true` (folder) or `truncated=true` (remote). A file-cap stop reports
 `"max_files"`; an unstopped run reports null. Folder runs preserve out-of-window
-entries under the existing incremental deletion rules. Remote partial publications
-still replace the older remote baseline; they do not preserve a last-good index.
+entries under the existing incremental deletion rules.
+
+Remote results also report `published`. An incomplete refresh leaves an existing
+saved index unchanged (`published=false`); searches keep using that snapshot,
+which may be outdated. New entries are not merged with older ones. With no saved
+index, a partial first build may publish (`published=true`), with
+`walk_truncated=true` persisted in its index body. Subsequent incomplete attempts
+preserve that baseline too. A complete refresh replaces the baseline, including
+a complete empty tree. Counters describe the attempt, not the retained snapshot.
+Remote truncation reasons also include `"tree_truncated"`, `"fetch_failed"`, and
+`"parse_failed"`. Malformed tree responses fail without publication. The
+publication decision and save share the per-repository lock. Save failures are
+reported, not rolled back; a failure after atomic replacement can leave the new
+index published even though the job failed.
+
 A truncated completion is not full repository coverage. For incremental local
 work, resubmit to advance another window and inspect status again.
 

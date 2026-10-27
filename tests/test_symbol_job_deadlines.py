@@ -164,7 +164,11 @@ async def test_remote_deadline_after_last_parse_does_not_replace_stop_reason(
         if "git/trees" in request.url.path:
             paths = ["a.py", "b.py"] if capped else ["a.py"]
             return httpx.Response(
-                200, json={"tree": [{"type": "blob", "path": path} for path in paths]}
+                200,
+                json={
+                    "tree": [{"type": "blob", "path": path} for path in paths],
+                    "truncated": False,
+                },
             )
         return httpx.Response(200, content=b"def first(): pass\n")
 
@@ -199,7 +203,9 @@ async def test_remote_last_wave_deadline_timeouts_still_report_deadline(tmp_path
 
     def response(request):
         if "git/trees" in request.url.path:
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         clock[0] = 2.0
         raise httpx.ReadTimeout("remaining job budget expired", request=request)
 
@@ -230,7 +236,10 @@ async def test_remote_shared_deadline_stops_fetch_or_parse(tmp_path, monkeypatch
                 clock[0] = 2.0
             return httpx.Response(
                 200,
-                json={"tree": [{"type": "blob", "path": "a.py"}, {"type": "blob", "path": "b.py"}]},
+                json={
+                    "tree": [{"type": "blob", "path": "a.py"}, {"type": "blob", "path": "b.py"}],
+                    "truncated": False,
+                },
             )
         return httpx.Response(200, content=b"def first(): pass\n")
 
@@ -266,7 +275,9 @@ async def test_remote_job_does_not_stop_at_old_tool_timeout(tmp_path, monkeypatc
     def response(request):
         if "git/trees" in request.url.path:
             clock[0] = 21.0
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         return httpx.Response(200, content=b"def first(): pass\n")
 
     monkeypatch.setattr(
@@ -306,7 +317,9 @@ async def test_remote_shutdown_before_or_during_save(tmp_path, monkeypatch, duri
 
     def response(request):
         return (
-            httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
             if "git/trees" in request.url.path
             else httpx.Response(200, content=b"def first(): pass\n")
         )
@@ -358,7 +371,9 @@ async def test_remote_fetch_errors_redact_explicit_and_resolved_credentials(
 
     def response(request):
         if "git/trees" in request.url.path and not tree_error:
-            return httpx.Response(200, json={"tree": [{"type": "blob", "path": "a.py"}]})
+            return httpx.Response(
+                200, json={"tree": [{"type": "blob", "path": "a.py"}], "truncated": False}
+            )
         raise httpx.ConnectError("x" * 490 + token, request=request)
 
     monkeypatch.setattr(
@@ -392,7 +407,7 @@ async def test_remote_held_fetch_keeps_mcp_loop_available(tmp_path, monkeypatch)
         threads.append(threading.current_thread().name)
         entered.set()
         assert release.wait(3)
-        return httpx.Response(200, json={"tree": []})
+        return httpx.Response(200, json={"tree": [], "truncated": False})
 
     monkeypatch.setattr(
         httpx,

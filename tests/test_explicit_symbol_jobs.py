@@ -464,6 +464,34 @@ async def test_explicit_metadata_and_exception_redaction_precede_projection(fail
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("published", [False, True])
+async def test_remote_publication_outcome_survives_job_status_projection(published):
+    runtime = RuntimeSupervisor()
+    try:
+        _, job = runtime.submit_symbol_index(
+            caller="test",
+            project="owner/repo",
+            request_key="remote-publication",
+            credentials=(),
+            work=lambda *_: {
+                "repo": "owner/repo",
+                "ref": "main",
+                "files_indexed": 1,
+                "symbols_indexed": 1,
+                "truncated": True,
+                "truncation_reason": "tree_truncated",
+                "published": published,
+            },
+        )
+        final = await settled(runtime, job["job_id"])
+        assert final["state"] == "completed"
+        assert final["result"]["published"] is published
+        assert final["result"]["truncation_reason"] == "tree_truncated"
+    finally:
+        runtime.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_credential_in_local_target_is_not_logged(monkeypatch):
     token = "private-target-token"
     monkeypatch.setenv("LGREP_GITHUB_TOKEN", token)

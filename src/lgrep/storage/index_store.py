@@ -58,9 +58,8 @@ class CodeIndex:
         symbols: Dict mapping symbol IDs to symbol metadata dicts
         occurrences: Dict mapping identifier names to lists of occurrence dicts
         version: Index format version (for future compatibility)
-        walk_truncated: True when the indexing walk stopped at max_files
-            before covering the whole tree, so ``files`` is a partial
-            projection of the working tree and file-set equality with a
+        walk_truncated: True when a local walk or remote observation is
+            incomplete, so ``files`` is a partial projection and equality with a
             fresh walk can never hold. Freshness gates use this to ignore
             un-indexed additions on truncated indexes. Absent on legacy
             index bodies, which load as False (complete).

@@ -287,7 +287,7 @@ Without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, the pruners return 
 
 `lgrep` supports two transports: `stdio` and `streamable-http`. stdio is the local default and suits one session. Use streamable HTTP only when you want one shared local daemon.
 
-Explicit symbol-index jobs require stdio, so a streamable-HTTP server does not list their tools. Both submission tools return a `job_id`, not final counters; call `get_symbol_index_job` before using their results. Two limits can stop a run: `max_files` caps the file count, and a separate cooperative job budget, 150 seconds by default, caps the time. Status reports `truncation_reason` as `"max_files"`, `"deadline"`, or null. A truncated run does not cover the whole repository. See [job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
+Explicit symbol-index jobs require stdio, so a streamable-HTTP server does not list their tools. Both submission tools return a `job_id`, not final counters; call `get_symbol_index_job` before using their results. Two limits can stop a run: `max_files` caps the file count, and a separate cooperative job budget, 150 seconds by default, caps the time. Status reports coverage and its `truncation_reason`. Remote results also report `published`: incomplete refreshes preserve an existing saved index rather than mixing old and new entries. A truncated run does not cover the whole repository. See [job ownership and recovery](docs/operations.md#explicit-symbol-index-jobs).
 
 - The HTTP server binds `127.0.0.1` by default and has no built-in authentication.
 - lgrep sets no CORS headers. Do not connect browser-based clients directly to the streamable-HTTP endpoint.
