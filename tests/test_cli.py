@@ -666,9 +666,8 @@ class TestGcSubcommand:
         mock_prune.assert_called_once()
         assert mock_prune.call_args[1]["dry_run"] is True
 
-    def test_gc_execute(self, tmp_path, monkeypatch, capsys):
+    def test_gc_execute(self, isolated_gc_stores, capsys):
         """lgrep gc --execute runs prune_orphans with dry_run=False."""
-        monkeypatch.setenv("LGREP_CACHE_DIR", str(tmp_path / "cache"))
 
         with patch("lgrep.tools.prune_orphans.prune_orphans") as mock_prune:
             mock_prune.return_value = {

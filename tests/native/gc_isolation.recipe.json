@@ -1,0 +1,34 @@
+{
+  "kind": "target_runner_v1",
+  "materializer": "uv",
+  "runner": "pytest",
+  "root": ".",
+  "harness_files": [
+    "conftest.py",
+    "tests/native/test_gc_isolation.py"
+  ],
+  "support_files": [
+    "tests/conftest.py"
+  ],
+  "cases": {
+    "case:gc-cli-absent": [
+      "tests/native/test_gc_isolation.py::test_execute_stores_stay_in_fixture[cli-absent]"
+    ],
+    "case:gc-cli-inherited": [
+      "tests/native/test_gc_isolation.py::test_execute_stores_stay_in_fixture[cli-inherited]"
+    ],
+    "case:gc-worktree-absent": [
+      "tests/native/test_gc_isolation.py::test_execute_stores_stay_in_fixture[worktree-absent]"
+    ],
+    "case:gc-worktree-inherited": [
+      "tests/native/test_gc_isolation.py::test_execute_stores_stay_in_fixture[worktree-inherited]"
+    ]
+  },
+  "pin": {
+    "python": "3.13.7",
+    "uv": "0.11.26",
+    "pytest": "9.1.1",
+    "dep_manifest": "pyproject.toml",
+    "dep_lock": "uv.lock"
+  }
+}
