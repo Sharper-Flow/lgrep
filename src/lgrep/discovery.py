@@ -3,7 +3,7 @@
 Walks directory trees and identifies files to index, respecting
 .gitignore and .lgrepignore patterns.
 
-Security hardening (v2.0.0):
+Security exclusions:
 - Path traversal validation (files outside root are rejected)
 - Symlink escape detection (symlinks pointing outside root are rejected)
 - Secret file detection (.env, .pem, credentials.*, etc.)
@@ -18,11 +18,13 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import gitignorefile
 import structlog
+from pathspec import GitIgnoreSpec
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from pathspec import RegexPattern
 
 log = structlog.get_logger()
 
@@ -208,6 +210,82 @@ def scaffold_lgrepignore(root_path: str | Path, force: bool = False) -> tuple[Pa
     return lgrepignore_path, True
 
 
+class _IgnoreFile:
+    """Exclusion rules from one root ignore file, evaluated the way git evaluates them.
+
+    pathspec compiles the patterns; this class applies them. The last pattern
+    that matches a path itself decides it, so ``gen/**`` matches the contents
+    of ``gen`` but not ``gen``. A directory below an excluded directory stays
+    excluded. A file with no pattern of its own takes its directory's decision;
+    a file pattern still decides a file inside an excluded directory, which
+    ``find_files`` never visits because it prunes that directory.
+
+    For directories, directory-only patterns drop their trailing ``/`` so they
+    match the directory path itself.
+    """
+
+    def __init__(self, path: Path) -> None:
+        file_lines: list[str] = []
+        dir_lines: list[str] = []
+        for number, line in enumerate(path.read_text().splitlines(), start=1):
+            dir_line = _directory_form(line)
+            try:
+                GitIgnoreSpec.from_lines([line, dir_line])
+            except ValueError as exc:
+                # Git skips invalid patterns, such as a lone "!".
+                log.warning("ignore_pattern_skipped", path=str(path), line=number, error=str(exc))
+                continue
+            file_lines.append(line)
+            dir_lines.append(dir_line)
+        self._file_patterns = _compile(file_lines)
+        self._dir_patterns = _compile(dir_lines)
+        self._excluded_dirs: dict[str, bool] = {}
+
+    def excludes(self, rel_path: str, is_dir: bool) -> bool:
+        """Return whether a root-relative POSIX path is excluded."""
+        parent = rel_path.rpartition("/")[0]
+        if not is_dir:
+            own = _last_match(self._file_patterns, rel_path)
+            if own is not None:
+                return own
+            return bool(parent) and self.excludes(parent, is_dir=True)
+        excluded = self._excluded_dirs.get(rel_path)
+        if excluded is None:
+            excluded = (bool(parent) and self.excludes(parent, is_dir=True)) or bool(
+                _last_match(self._dir_patterns, rel_path)
+            )
+            self._excluded_dirs[rel_path] = excluded
+        return excluded
+
+
+def _compile(lines: list[str]) -> list[RegexPattern]:
+    return [p for p in GitIgnoreSpec.from_lines(lines).patterns if p.include is not None]
+
+
+def _directory_form(line: str) -> str:
+    """Return the pattern with its directory-only ``/`` removed."""
+    if line.endswith("\\ "):
+        return line
+    stripped = line.rstrip(" ")
+    if stripped.endswith("/") and stripped.lstrip("!") != "/":
+        return stripped[:-1]
+    return line
+
+
+def _last_match(patterns: list[RegexPattern], rel_path: str) -> bool | None:
+    """Return the decision of the last pattern matching the path itself, if any.
+
+    pathspec sets the ``ps_d`` group when a pattern matches through a leading
+    directory; those matches belong to an ancestor and are skipped here.
+    """
+    decision = None
+    for pattern in patterns:
+        result = pattern.match_file(rel_path)
+        if result is not None and result.match.groupdict().get("ps_d") is None:
+            decision = bool(pattern.include)
+    return decision
+
+
 class FileDiscovery:
     """Discovers files in a project directory while respecting ignore patterns.
 
@@ -228,19 +306,12 @@ class FileDiscovery:
         """
         self.root_path = Path(root_path).resolve()
 
-        # Initialize gitignore matchers
-        self.gitignore_match = None
-        self.lgrepignore_match = None
-
-        gitignore_path = self.root_path / ".gitignore"
-        if gitignore_path.exists():
-            self.gitignore_match = gitignorefile.parse(str(gitignore_path))
-            log.debug("gitignore_loaded", path=str(gitignore_path))
-
-        lgrepignore_path = self.root_path / ".lgrepignore"
-        if lgrepignore_path.exists():
-            self.lgrepignore_match = gitignorefile.parse(str(lgrepignore_path))
-            log.debug("lgrepignore_loaded", path=str(lgrepignore_path))
+        self._ignore_files: list[_IgnoreFile] = []
+        for name in (".gitignore", ".lgrepignore"):
+            ignore_path = self.root_path / name
+            if ignore_path.exists():
+                self._ignore_files.append(_IgnoreFile(ignore_path))
+                log.debug("ignore_file_loaded", path=str(ignore_path))
 
         log.info("file_discovery_initialized", root=str(self.root_path))
 
@@ -304,10 +375,9 @@ class FileDiscovery:
                 return True
 
         # 7. Gitignore rules
-        str_path = str(abs_path)
-        if self.gitignore_match and self.gitignore_match(str_path):
-            return True
-        if self.lgrepignore_match and self.lgrepignore_match(str_path):
+        rel_path = abs_path.relative_to(self.root_path).as_posix()
+        is_dir = abs_path.is_dir()
+        if any(ignore_file.excludes(rel_path, is_dir) for ignore_file in self._ignore_files):
             return True
 
         # 8. Legacy: always ignore .git directory parts
