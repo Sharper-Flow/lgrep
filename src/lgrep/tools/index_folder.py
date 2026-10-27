@@ -237,8 +237,7 @@ def _index_folder_with_snapshot(
     # deliberately covers the (slow) walk as well: deletion detection and
     # the merge consume the walk's output, so the snapshot must stay
     # coherent for the entire window. Per-key — unrelated repos never
-    # serialize. index_repo is NOT locked: it performs no load() and
-    # writes github: keys, a namespace disjoint from local paths.
+    # serialize. Remote publication uses github: keys, disjoint from local paths.
     with store.repo_lock(resolved_root):
         check_stop()
         checked_at_ns = time.time_ns()

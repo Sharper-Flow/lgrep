@@ -166,6 +166,7 @@ class IndexSymbolsRepoResult(TypedDict):
     ref: str
     truncated: bool
     truncation_reason: str | None
+    published: bool
 
 
 SymbolIndexJobState = Literal["queued", "running", "completed", "failed", "cancelled"]

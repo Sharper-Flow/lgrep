@@ -244,7 +244,11 @@ from `lgrep_get_symbol_index_job`, not the submission acknowledgement.
 - States: `queued`, `running`, `completed`, `failed`, `cancelled` (shutdown only).
 - A completed job returns final counters in `result`. Check `walk_truncated`
   (folder) or `truncated` (remote), and `truncation_reason`: `"max_files"`,
-  `"deadline"`, or null. Completion with truncation is not full repository coverage.
+  `"deadline"`, or null; remote jobs can also report `"tree_truncated"`,
+  `"fetch_failed"`, or `"parse_failed"`. Completion with truncation is not full
+  repository coverage. For remote jobs, check `published`: false means searches
+  still use the saved baseline; true means this attempt was saved. See
+  [publication and recovery](https://github.com/Sharper-Flow/lgrep/blob/main/docs/operations.md#explicit-symbol-index-jobs).
 - Identical nonterminal submissions join one job. Different ones return
   `symbol_index_busy`, retryable=true. Retry later, rather than submitting in parallel.
 - Only the latest 100 terminal explicit jobs are retained; unrelated queries do

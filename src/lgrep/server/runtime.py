@@ -296,6 +296,7 @@ class RuntimeSupervisor:
                     "walk_truncated",
                     "truncated",
                     "truncation_reason",
+                    "published",
                 }
                 job.result = {
                     key: redact_credentials(value, job.credentials)
