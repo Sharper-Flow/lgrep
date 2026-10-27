@@ -155,6 +155,10 @@ def _cmd_search_semantic(args: list[str]) -> int:
     from dataclasses import asdict
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.indexing import Indexer
     from lgrep.storage import BASE_CHECKOUT, get_project_db_path, open_checkout_store
@@ -508,6 +512,10 @@ def _cmd_index_semantic(args: list[str]) -> int:
     import os
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.embeddings import VoyageEmbedder
     from lgrep.indexing import Indexer
     from lgrep.storage import BASE_CHECKOUT, open_checkout_store
@@ -653,6 +661,10 @@ def _cmd_search_symbols(args: list[str]) -> int:
 
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.tools.search_symbols import search_symbols
 
     # Parse args
@@ -712,6 +724,10 @@ def _cmd_index_symbols(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.tools.index_folder import index_folder
 

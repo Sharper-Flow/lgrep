@@ -1217,7 +1217,7 @@ class TestWorktreeOverlay:
         assert schedule.await_count == 1
 
     def test_first_cli_worktree_search_never_serves_trunk_versions(
-        self, tmp_path, monkeypatch, capsys
+        self, tmp_path, monkeypatch, capsys, cli_logging
     ):
         """The CLI search reconciles a worktree overlay before searching it."""
         import json
@@ -1229,13 +1229,13 @@ class TestWorktreeOverlay:
         monkeypatch.setenv("VOYAGE_API_KEY", "k")
         query_embedder = MagicMock()
         query_embedder.embed_query.return_value = _vector("probe")
+        capsys.readouterr()
 
         with patch("lgrep.embeddings.VoyageEmbedder", return_value=query_embedder):
             rc = _cmd_search_semantic(["return", str(worktree), "--limit", "50"])
 
         assert rc == 0
-        # Structured logs share stdout; the command's JSON is the last line.
-        results = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["results"]
+        results = json.loads(capsys.readouterr().out)["results"]
         hits = {r["file_path"]: r["content"] for r in results}
         assert set(hits) == {"same.py"}
 
