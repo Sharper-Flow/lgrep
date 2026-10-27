@@ -7,7 +7,9 @@
     "conftest.py",
     "tests/native/test_gc_isolation.py"
   ],
-  "support_files": [],
+  "support_files": [
+    "tests/conftest.py"
+  ],
   "cases": {
     "case:gc-cli-absent": [
       "tests/native/test_gc_isolation.py::test_execute_stores_stay_in_fixture[cli-absent]"
