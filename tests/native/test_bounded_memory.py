@@ -116,6 +116,12 @@ def test_repeated_query_cycles_keep_rss_flat(tmp_path):
         "print(json.dumps(run_probe(Path(sys.argv[1]))))"
     )
     repo = Path(__file__).resolve().parents[2]
+    # The child loads conftest.py's sys.path insert only via PYTHONPATH: the
+    # native runner runs with --no-install-project, so src/ is the sole lgrep
+    # source, and repo root resolves the tests.native import.
+    environment["PYTHONPATH"] = os.pathsep.join(
+        p for p in (str(repo / "src"), str(repo), environment.get("PYTHONPATH")) if p
+    )
     completed = subprocess.run(
         [sys.executable, "-c", code, str(tmp_path / "stores")],
         cwd=repo,
