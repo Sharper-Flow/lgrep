@@ -100,6 +100,7 @@ async def test_incomplete_refresh_keeps_saved_bytes_and_search_results(remote, m
     assert saved_bytes(remote.storage) == before
     assert result["truncated"] is True
     assert result["truncation_reason"] == reason
+    assert result["truncation_reasons"] == [reason]
     assert result["published"] is False
     assert search_symbols("previous", KEY, storage_dir=remote.storage)["total_matches"] == 1
     assert search_symbols("refreshed", KEY, storage_dir=remote.storage)["total_matches"] == 0
@@ -117,6 +118,7 @@ async def test_first_partial_build_is_published_with_persisted_coverage(
 
     assert result["truncated"] is True
     assert result["truncation_reason"] == reason
+    assert result["truncation_reasons"] == [reason]
     assert result["published"] is True
     store = IndexStore(storage_dir=remote.storage)
     assert store.load(KEY).walk_truncated is True
@@ -172,6 +174,7 @@ async def test_complete_refresh_replaces_old_index_including_complete_empty_tree
 
     assert result["published"] is True
     assert result["truncated"] is False
+    assert result["truncation_reasons"] == []
     current = store.load(KEY)
     assert current.walk_truncated is False
     assert "old.py" not in current.files
@@ -274,6 +277,7 @@ async def test_a_limit_reason_cannot_hide_a_failed_partial_refresh(
     result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage, **kwargs)
     assert result["published"] is False
     assert result["truncation_reason"] == limit
+    assert result["truncation_reasons"] == [limit, failure]
     assert saved_bytes(remote.storage) == before
 
 
@@ -340,6 +344,7 @@ async def test_tree_truncation_is_not_hidden_by_the_file_cap(remote):
     result = await index_repo("owner/repo", ref="main", storage_dir=remote.storage, max_files=1)
     assert result["truncated"] is True
     assert result["truncation_reason"] == "tree_truncated"
+    assert result["truncation_reasons"] == ["tree_truncated", "max_files"]
 
 
 @pytest.mark.parametrize("stage", ["before_tree", "tree_timeout", "before_fetch"])
@@ -366,6 +371,9 @@ async def test_deadline_before_fetching_preserves_partial_baseline(tmp_path, mon
     )
     result = await index_repo("owner/repo", ref="main", storage_dir=storage, deadline=1.0)
     assert result["truncation_reason"] == "deadline"
+    assert result["truncation_reasons"] == (
+        ["tree_truncated", "deadline"] if stage == "before_fetch" else ["deadline"]
+    )
     assert result["published"] is False
     assert saved_bytes(storage) == before
 
@@ -403,6 +411,7 @@ async def test_deadline_preserves_baseline_after_successful_fetch(
     )
     assert result["files_indexed"] == (0 if stage == "before_parse" else 1)
     assert result["truncation_reason"] == "deadline"
+    assert result["truncation_reasons"] == ["deadline"]
     assert result["published"] is False
     assert saved_bytes(remote.storage) == before
 
@@ -488,3 +497,68 @@ async def test_save_failure_is_not_reported_as_success_or_rolled_back(
     else:
         assert saved_bytes(remote.storage) == before
     assert not list(remote.storage.glob("*.tmp"))
+
+
+async def test_all_remote_coverage_causes_survive_one_attempt(tmp_path, monkeypatch):
+    import importlib
+
+    import lgrep.parser.extractor as extractor
+
+    module = importlib.import_module("lgrep.tools.index_repo")
+    storage = tmp_path / "symbols"
+    seed(storage, partial=True)
+    before = saved_bytes(storage)
+    clock = [0.0]
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    names = ["fetch-one", "fetch-two", "parse", "good", "pending", "capped"]
+    client = httpx.AsyncClient
+    secret = "private-cause-sentinel"
+
+    def response(request):
+        if "git/trees" in request.url.path:
+            return httpx.Response(
+                200,
+                json={
+                    "tree": [{"type": "blob", "path": f"{name}.py"} for name in names],
+                    "truncated": True,
+                },
+            )
+        if "/fetch-" in request.url.path:
+            raise httpx.ReadError(secret, request=request)
+        return httpx.Response(200, content=b"def source_must_not_be_retained(): pass\n")
+
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kw: client(**kw, transport=httpx.MockTransport(response))
+    )
+    original_extract = extractor._extract_symbols_from_tree
+
+    def extract(node, content, file_path, spec):
+        if file_path == "parse.py":
+            raise RuntimeError(secret)
+        symbols = original_extract(node, content, file_path, spec)
+        clock[0] = 2.0
+        return symbols
+
+    monkeypatch.setattr(extractor, "_extract_symbols_from_tree", extract)
+    result = await index_repo(
+        "owner/repo",
+        ref="main",
+        storage_dir=storage,
+        max_files=5,
+        deadline=1.0,
+        github_token=secret,
+    )
+
+    assert result["truncation_reasons"] == [
+        "tree_truncated",
+        "max_files",
+        "fetch_failed",
+        "parse_failed",
+        "deadline",
+    ]
+    assert result["truncation_reason"] == "deadline"
+    assert result["truncated"] is True and result["published"] is False
+    assert result["files_indexed"] == 1
+    assert saved_bytes(storage) == before
+    assert secret not in json.dumps(result)
+    assert "source_must_not_be_retained" not in json.dumps(result)

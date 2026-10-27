@@ -17,9 +17,12 @@ import structlog
 from lgrep.exceptions import OperationCancelled
 from lgrep.storage.index_store import CodeIndex, IndexStore
 from lgrep.tools._meta import error_response
+from lgrep.tools._remote_coverage import REMOTE_TRUNCATION_REASONS
 
 if TYPE_CHECKING:
     import threading
+
+    from lgrep.tools._remote_coverage import RemoteTruncationReason
 
 log = structlog.get_logger()
 
@@ -174,17 +177,14 @@ async def index_repo(
     repo_key = f"github:{repo}@{ref}"
 
     fetched: list[tuple[str, object, bytes]] = []
-    truncated = False
+    truncation_reasons: set[RemoteTruncationReason] = set()
     truncation_reason: str | None = None
-    # A cap/tree reason may hide later failures. Keep publication health separate.
-    limit_only = True
 
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
         # Get the file tree from GitHub
         tree_url = f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1"
         if expired():
-            truncated = True
-            limit_only = False
+            truncation_reasons.add("deadline")
             truncation_reason = "deadline"
             tree_data = {}
         else:
@@ -202,8 +202,7 @@ async def index_repo(
                     return error_response(
                         redact_credentials(f"Network error fetching {repo}: {e}", credentials)
                     )
-                truncated = True
-                limit_only = False
+                truncation_reasons.add("deadline")
                 truncation_reason = "deadline"
                 tree_data = {}
             else:
@@ -218,7 +217,7 @@ async def index_repo(
                     )
         check_stop()
         if tree_data.get("truncated"):
-            truncated = True
+            truncation_reasons.add("tree_truncated")
             truncation_reason = "tree_truncated"
             log.warning("github_tree_truncated", repo=redact_credentials(repo, credentials))
 
@@ -239,7 +238,7 @@ async def index_repo(
                 break
             eligible.append((file_path, spec))
         if not eligible_exhausted:
-            truncated = True
+            truncation_reasons.add("max_files")
             if truncation_reason is None:
                 truncation_reason = "max_files"
 
@@ -257,8 +256,7 @@ async def index_repo(
 
             check_stop()
             if expired():
-                truncated = True
-                limit_only = False
+                truncation_reasons.add("deadline")
                 truncation_reason = "deadline"
                 log.info(
                     "index_repo_deadline_reached",
@@ -276,12 +274,13 @@ async def index_repo(
 
             for (file_path, spec), result in zip(wave, results, strict=True):
                 if isinstance(result, BaseException):
-                    truncated = True
-                    limit_only = False
                     if isinstance(result, httpx.TimeoutException) and expired():
+                        truncation_reasons.add("deadline")
                         truncation_reason = "deadline"
-                    elif truncation_reason is None:
-                        truncation_reason = "fetch_failed"
+                    else:
+                        truncation_reasons.add("fetch_failed")
+                        if truncation_reason is None:
+                            truncation_reason = "fetch_failed"
                     if isinstance(result, (httpx.HTTPStatusError, httpx.RequestError)):
                         log.warning(
                             "github_file_fetch_failed",
@@ -300,15 +299,14 @@ async def index_repo(
                 fetched.append((file_path, spec, content))
 
     def _parse_and_persist():
-        nonlocal truncated, truncation_reason, limit_only
+        nonlocal truncation_reason
         files_processed = 0
         files_dict: dict[str, str] = {}
         symbols_dict: dict[str, dict] = {}
         for file_path, spec, content in fetched:
             check_stop()
             if expired():
-                truncated = True
-                limit_only = False
+                truncation_reasons.add("deadline")
                 truncation_reason = "deadline"
                 break
             try:
@@ -333,8 +331,7 @@ async def index_repo(
                         "parent": sym.parent,
                     }
             except Exception as e:
-                truncated = True
-                limit_only = False
+                truncation_reasons.add("parse_failed")
                 if truncation_reason is None:
                     truncation_reason = "parse_failed"
                 log.warning(
@@ -351,19 +348,20 @@ async def index_repo(
             repo_path=repo_key,
             files=files_dict,
             symbols=symbols_dict,
-            walk_truncated=truncated,
+            walk_truncated=bool(truncation_reasons),
         )
         check_stop()
         # Check at publication, not before remote work: another writer may
         # have published a complete index while this attempt was fetching.
         with store.repo_lock(repo_key):
             check_stop()
-            if truncated:
+            if truncation_reasons:
                 try:
                     store._index_path(repo_key).stat()
                 except FileNotFoundError:
                     pass
                 else:
+                    limit_only = truncation_reasons <= {"tree_truncated", "max_files"}
                     if not limit_only or not store.has_incomplete_index(repo_key):
                         return files_processed, len(symbols_dict), False
             check_stop()
@@ -377,7 +375,10 @@ async def index_repo(
         "ref": redact_credentials(ref, credentials),
         "files_indexed": files_processed,
         "symbols_indexed": symbols_count,
-        "truncated": truncated,
+        "truncated": bool(truncation_reasons),
         "truncation_reason": truncation_reason,
+        "truncation_reasons": [
+            reason for reason in REMOTE_TRUNCATION_REASONS if reason in truncation_reasons
+        ],
         "published": published,
     }
