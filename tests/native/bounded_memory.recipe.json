@@ -1,0 +1,23 @@
+{
+  "kind": "target_runner_v1",
+  "materializer": "uv",
+  "runner": "pytest",
+  "root": ".",
+  "harness_files": [
+    "conftest.py",
+    "tests/native/test_bounded_memory.py"
+  ],
+  "support_files": [],
+  "cases": {
+    "case:semantic-cycles-rss-flat": [
+      "tests/native/test_bounded_memory.py::test_repeated_query_cycles_keep_rss_flat"
+    ]
+  },
+  "pin": {
+    "python": "3.13.7",
+    "uv": "0.11.26",
+    "pytest": "9.1.1",
+    "dep_manifest": "pyproject.toml",
+    "dep_lock": "uv.lock"
+  }
+}
