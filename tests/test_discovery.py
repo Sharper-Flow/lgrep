@@ -112,6 +112,27 @@ class TestGitIgnoreParity:
         assert "gen/keep.py" in found
         assert "gen/drop.py" not in found
 
+    def test_subdirectories_pattern_does_not_exclude_its_directory(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("gen/**/\n/a/\n!a/**/\n")
+        _write(tmp_path, "gen/top.py")
+        _write(tmp_path, "gen/sub/inner.py")
+        _write(tmp_path, "a/sub/inner.py")
+
+        discovery = FileDiscovery(tmp_path)
+
+        assert discovery.is_ignored(tmp_path / "gen") is False
+        assert discovery.is_ignored(tmp_path / "gen" / "sub") is True
+        assert discovery.is_ignored(tmp_path / "a") is True
+        assert _found(discovery, tmp_path) == {"gen/top.py", ignore_name}
+
+    def test_allowlist_reopens_nested_directories(self, tmp_path, ignore_name):
+        (tmp_path / ignore_name).write_text("*\n!*/\n!*.py\n")
+        _write(tmp_path, "top.py")
+        _write(tmp_path, "src/deep/c.py")
+        _write(tmp_path, "src/deep/notes.txt")
+
+        assert _found(FileDiscovery(tmp_path), tmp_path) == {"top.py", "src/deep/c.py"}
+
     def test_later_directory_pattern_overrides_earlier_negation(self, tmp_path, ignore_name):
         (tmp_path / ignore_name).write_text("!*\n/a/\n")
         _write(tmp_path, "a/b.py")

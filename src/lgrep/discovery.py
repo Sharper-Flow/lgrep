@@ -211,62 +211,79 @@ def scaffold_lgrepignore(root_path: str | Path, force: bool = False) -> tuple[Pa
 
 
 class _IgnoreFile:
-    """Exclusion rules from one root ignore file.
+    """Exclusion rules from one root ignore file, evaluated the way git evaluates them.
 
-    pathspec decides files. It models only file paths, so directories are
-    decided here the way git decides them: a pattern such as ``gen/**`` matches
-    the contents of ``gen`` but not ``gen`` itself, the last pattern matching the
-    directory wins, and a directory below an excluded directory stays excluded.
+    pathspec compiles the patterns; this class applies them. The last pattern
+    that matches a path itself decides it, so ``gen/**`` matches the contents
+    of ``gen`` but not ``gen``. A directory below an excluded directory stays
+    excluded. A file with no pattern of its own takes its directory's decision;
+    a file pattern still decides a file inside an excluded directory, which
+    ``find_files`` never visits because it prunes that directory.
+
+    For directories, directory-only patterns drop their trailing ``/`` so they
+    match the directory path itself.
     """
 
     def __init__(self, path: Path) -> None:
-        valid_lines = []
+        file_lines: list[str] = []
+        dir_lines: list[str] = []
         for number, line in enumerate(path.read_text().splitlines(), start=1):
+            dir_line = _directory_form(line)
             try:
-                GitIgnoreSpec.from_lines([line])
+                GitIgnoreSpec.from_lines([line, dir_line])
             except ValueError as exc:
                 # Git skips invalid patterns, such as a lone "!".
                 log.warning("ignore_pattern_skipped", path=str(path), line=number, error=str(exc))
                 continue
-            valid_lines.append(line)
-        self._spec = GitIgnoreSpec.from_lines(valid_lines)
-        self._dir_patterns: list[RegexPattern] = [
-            pattern for pattern in self._spec.patterns if pattern.include is not None
-        ]
+            file_lines.append(line)
+            dir_lines.append(dir_line)
+        self._file_patterns = _compile(file_lines)
+        self._dir_patterns = _compile(dir_lines)
         self._excluded_dirs: dict[str, bool] = {}
 
     def excludes(self, rel_path: str, is_dir: bool) -> bool:
         """Return whether a root-relative POSIX path is excluded."""
+        parent = rel_path.rpartition("/")[0]
         if not is_dir:
-            return self._spec.match_file(rel_path)
+            own = _last_match(self._file_patterns, rel_path)
+            if own is not None:
+                return own
+            return bool(parent) and self.excludes(parent, is_dir=True)
         excluded = self._excluded_dirs.get(rel_path)
         if excluded is None:
-            parent = rel_path.rpartition("/")[0]
-            excluded = bool(parent) and self.excludes(parent, is_dir=True)
-            if not excluded:
-                for pattern in self._dir_patterns:
-                    if _matches_directory(pattern, rel_path):
-                        excluded = bool(pattern.include)
+            excluded = (bool(parent) and self.excludes(parent, is_dir=True)) or bool(
+                _last_match(self._dir_patterns, rel_path)
+            )
             self._excluded_dirs[rel_path] = excluded
         return excluded
 
 
-def _matches_directory(pattern: RegexPattern, rel_dir: str) -> bool:
-    """Return whether a pattern matches the directory itself rather than an ancestor.
+def _compile(lines: list[str]) -> list[RegexPattern]:
+    return [p for p in GitIgnoreSpec.from_lines(lines).patterns if p.include is not None]
 
-    pathspec marks a match through a directory with the ``ps_d`` group. Only a
-    marker at the end of ``rel_dir/`` names this directory; an earlier marker
-    names an ancestor, which ``_IgnoreFile.excludes`` decides separately.
+
+def _directory_form(line: str) -> str:
+    """Return the pattern with its directory-only ``/`` removed."""
+    if line.endswith("\\ "):
+        return line
+    stripped = line.rstrip(" ")
+    if stripped.endswith("/") and stripped.lstrip("!") != "/":
+        return stripped[:-1]
+    return line
+
+
+def _last_match(patterns: list[RegexPattern], rel_path: str) -> bool | None:
+    """Return the decision of the last pattern matching the path itself, if any.
+
+    pathspec sets the ``ps_d`` group when a pattern matches through a leading
+    directory; those matches belong to an ancestor and are skipped here.
     """
-    result = pattern.match_file(rel_dir)
-    if result is not None and result.match.groupdict().get("ps_d") is None:
-        return True
-    result = pattern.match_file(rel_dir + "/")
-    return (
-        result is not None
-        and result.match.groupdict().get("ps_d") is not None
-        and result.match.end("ps_d") == len(rel_dir) + 1
-    )
+    decision = None
+    for pattern in patterns:
+        result = pattern.match_file(rel_path)
+        if result is not None and result.match.groupdict().get("ps_d") is None:
+            decision = bool(pattern.include)
+    return decision
 
 
 class FileDiscovery:
