@@ -322,6 +322,10 @@ def _cmd_prune_orphans(args: list[str]) -> int:
 
     from pathlib import Path
 
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
+
     from lgrep.tools.prune_orphans import prune_orphans
 
     # Mutual exclusion: refuse to silently pick a mode if the operator
@@ -378,6 +382,10 @@ def _cmd_prune_symbols(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.tools.prune_symbols import prune_symbols
 
@@ -436,6 +444,10 @@ def _cmd_gc(args: list[str]) -> int:
         return 0
 
     from pathlib import Path
+
+    from lgrep.logging_setup import configure_logging
+
+    configure_logging(file_sink=False)
 
     from lgrep.tools.prune_orphans import gc_worktree_meta, optimize_caches, prune_orphans
     from lgrep.tools.prune_symbols import prune_symbols

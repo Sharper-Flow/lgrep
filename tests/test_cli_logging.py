@@ -134,3 +134,129 @@ for name in ('lgrep.server', 'lgrep.indexing', 'lancedb', 'mcp'):
     )
     assert result.returncode == 0, result.stderr
     assert "error" in json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("command", ["gc", "prune-orphans", "prune-symbols"])
+@pytest.mark.parametrize("level, execute", [("DEBUG", False), ("INFO", True), ("ERROR", True)])
+def test_maintenance_reports_keep_logs_off_stdout(tmp_path, command, level, execute):
+    script = """
+import logging
+import sys
+from unittest.mock import patch
+
+import structlog
+from lgrep.cli import main
+
+def report(*, dry_run, **kwargs):
+    log = structlog.get_logger()
+    log.debug('maintenance_debug')
+    log.info('maintenance_info')
+    log.warning('maintenance_warning')
+    log.error('maintenance_error')
+    logging.getLogger('maintenance').warning('maintenance_stdlib_warning')
+    return {'dry_run': dry_run, 'failures': ['offline maintenance failure']}
+
+logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+with (
+    patch('lgrep.tools.prune_orphans.prune_orphans', side_effect=report),
+    patch('lgrep.tools.prune_orphans.gc_worktree_meta', side_effect=report),
+    patch('lgrep.tools.prune_orphans.optimize_caches', side_effect=report),
+    patch('lgrep.tools.prune_symbols.prune_symbols', side_effect=report),
+):
+    code = main()
+assert 'lgrep.server' not in sys.modules
+assert 'mcp' not in sys.modules
+sys.exit(code)
+"""
+    args = ["-c", script, command]
+    if command == "prune-symbols":
+        args.extend(["--storage-dir", str(tmp_path / "symbols")])
+    else:
+        args.extend(["--cache-dir", str(tmp_path / "cache")])
+    if command == "gc":
+        args.extend(["--symbols-dir", str(tmp_path / "symbols")])
+    if execute:
+        args.append("--execute")
+    result = _run(args, level, tmp_path / "daemon.log")
+    assert result.returncode == 0, result.stderr
+    expected = {"dry_run": not execute, "failures": ["offline maintenance failure"]}
+    if command == "gc":
+        expected = {
+            key: expected
+            for key in ("prune_orphans", "gc_worktree_meta", "prune_symbols", "optimize_caches")
+        }
+    assert json.loads(result.stdout) == expected
+    events = [json.loads(line)["event"] for line in result.stderr.splitlines()]
+    expected_events = {
+        "DEBUG": [
+            "maintenance_debug",
+            "maintenance_info",
+            "maintenance_warning",
+            "maintenance_error",
+            "maintenance_stdlib_warning",
+        ],
+        "INFO": [
+            "maintenance_info",
+            "maintenance_warning",
+            "maintenance_error",
+            "maintenance_stdlib_warning",
+        ],
+        "ERROR": ["maintenance_error"],
+    }
+    assert events == expected_events[level] * (4 if command == "gc" else 1)
+    assert not (tmp_path / "daemon.log").exists()
+    assert not (tmp_path / "daemon.log.lock").exists()
+
+
+@pytest.mark.parametrize("command", ["gc", "prune-orphans", "prune-symbols"])
+def test_real_maintenance_refusals_leave_json_and_protected_files(tmp_path, command):
+    script = """
+import sys
+from pathlib import Path
+from unittest.mock import patch
+from lgrep.cli import main
+
+root = Path(sys.argv.pop())
+orphan = {'path': str(root / 'protected'), 'reason': 'missing_meta',
+          'bytes': 8, 'project_path': None}
+stale = {'path': str(root / 'protected' / 'index_protected.json'),
+         'reason': 'repo_path_enoent', 'bytes': 8, 'repo_path': None}
+with (
+    patch('lgrep.tools.prune_orphans.find_orphans', return_value=[orphan]),
+    patch('lgrep.tools.prune_symbols.find_stale_indexes', return_value=[stale]),
+):
+    sys.exit(main())
+"""
+    cache, symbols = tmp_path / "cache", tmp_path / "symbols"
+    cache.mkdir()
+    symbols.mkdir()
+    protected = tmp_path / "protected"
+    protected.mkdir()
+    sentinel = protected / "index_protected.json"
+    sentinel.write_text("preserve")
+    args = ["-c", script, command, "--execute"]
+    if command == "prune-symbols":
+        args.extend(["--storage-dir", str(symbols)])
+    else:
+        args.extend(["--cache-dir", str(cache)])
+    if command == "gc":
+        args.extend(["--symbols-dir", str(symbols)])
+    args.append(str(tmp_path))
+    result = _run(args, "INFO", tmp_path / "daemon.log")
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    reports = [report["prune_orphans"], report["prune_symbols"]] if command == "gc" else [report]
+    for entry in reports:
+        assert entry["dry_run"] is False
+        assert len(entry["failures"]) == 1
+        assert entry["failures"][0]["error"].startswith("refused: path is outside")
+        assert entry["reclaimed_bytes"] == 0
+        assert entry.get("deleted_dirs", entry.get("deleted_files")) == 0
+    events = [json.loads(line) for line in result.stderr.splitlines()]
+    assert len(events) == (2 if command == "gc" else 1)
+    assert all(event["event"] == "prune_refused_outside_root" for event in events)
+    assert all(event["level"] == "warning" for event in events)
+    assert sentinel.read_text() == "preserve"
+    assert not (tmp_path / "daemon.log").exists()
+    assert not (tmp_path / "daemon.log.lock").exists()
