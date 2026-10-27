@@ -5,6 +5,27 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture
+def cli_logging(capsys):
+    """Release CLI handlers before the test's temporary stderr stream closes."""
+    import logging
+
+    import structlog
+
+    from lgrep.server.bootstrap import shutdown_logging
+
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    config = structlog.get_config().copy()
+    try:
+        yield
+    finally:
+        shutdown_logging()
+        root.handlers[:] = handlers
+        root.setLevel(level)
+        structlog.configure(**config)
+
+
 @pytest.fixture(autouse=True)
 def _restore_tool_registry():
     """Restore the shared server's tool registry after each test.

@@ -24,14 +24,7 @@ from lgrep.server import _startup
 
 @pytest.fixture()
 def clean_logging_state():
-    """Snapshot root logging state; restore it after logging tests.
-
-    structlog stays routed through stdlib logging after teardown: the
-    suite's ambient contract is that structlog never writes to stdout, and
-    ``structlog.reset_defaults()`` would restore the stdout-printing library
-    default that leaks into CLI JSON output (tests/test_cli.py relies on
-    this contract).
-    """
+    """Restore root handlers and level after testing logging configuration."""
     root = logging.getLogger()
     saved_handlers = root.handlers[:]
     saved_level = root.level

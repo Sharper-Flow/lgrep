@@ -109,13 +109,13 @@ def _try_attach_file_sink() -> None:
 
 
 def configure_logging() -> None:
-    """Configure structlog through stdlib logging for the MCP server.
+    """Configure structlog through stdlib logging for server and CLI commands.
 
     Takes over the root handler set: every handler installed before this
     call is removed, so structured events reach exactly one formatted
     stderr handler (plus the optional locked file sink) and never a
     preinstalled stdout handler. stdout is never a log sink: the stdio
-    MCP channel owns it.
+    MCP channel or CLI result owns it.
     """
     log_level = getattr(
         logging,
