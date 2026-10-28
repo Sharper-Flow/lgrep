@@ -3,8 +3,10 @@
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from structlog.testing import capture_logs
 
 from lgrep.chunking import (
     DEFAULT_CHUNK_SIZE,
@@ -168,6 +170,94 @@ def second_function():
         for chunk in result.chunks:
             assert chunk.start_line >= 1
             assert chunk.end_line >= chunk.start_line
+
+
+class TestJsonTextRouting:
+    """JSON routes to the text chunker; chonkie's AST constructor is never tried."""
+
+    @staticmethod
+    def _patch_chonkie(monkeypatch, **mock_kwargs):
+        import chonkie.experimental
+
+        constructor = Mock(**{"wraps": chonkie.experimental.CodeChunker, **mock_kwargs})
+        monkeypatch.setattr(chonkie.experimental, "CodeChunker", constructor)
+        return constructor
+
+    def test_json_skips_ast_constructor_and_uses_fallback(self, tmp_path, monkeypatch):
+        """No chonkie construction, no warning, json metadata, fallback chunks."""
+        constructor = self._patch_chonkie(monkeypatch)
+        path = tmp_path / "data.json"
+        path.write_text('{\n  "a": 1,\n  "b": 2\n}', encoding="utf-8")
+        chunker = CodeChunker(chunk_size=6)
+
+        with capture_logs() as events:
+            results = [
+                chunker.chunk_file(path),
+                chunker.chunk_file(path, path.read_text(encoding="utf-8")),
+            ]
+
+        assert constructor.call_count == 0
+        assert [e for e in events if e["event"] == "chunker_creation_failed"] == []
+        assert results[0].chunks == results[1].chunks
+        for result in results:
+            assert result.language == "json"
+            assert result.error is None
+            assert [(c.text, c.start_line, c.end_line) for c in result.chunks] == [
+                ('{\n  "a": 1,', 1, 2),
+                ('  "b": 2\n}', 3, 4),
+            ]
+
+    def test_json_chunks_equal_unknown_extension_chunks(self):
+        """The json result is the same text chunking an unmapped extension gets."""
+        content = '{\n  "a": 1,\n  "b": 2,\n  "c": 3\n}\n'
+        as_json = CodeChunker(chunk_size=6).chunk_file("data.json", content)
+        as_text = CodeChunker(chunk_size=6).chunk_file("data.unknownext", content)
+        assert as_json.language == "json"
+        assert as_json.chunks == as_text.chunks
+
+    def test_empty_json_stays_empty(self):
+        """Empty and whitespace-only JSON behave as any other empty file."""
+        for content in ["", " \n\t "]:
+            result = CodeChunker().chunk_file("empty.json", content)
+            assert result.language is None
+            assert result.chunks == []
+            assert result.error is None
+
+    def test_json_stays_watcher_eligible(self):
+        """.json keeps its LANGUAGE_MAP entry and detected language."""
+        from lgrep.watcher import SUPPORTED_EXTENSIONS
+
+        assert ".json" in SUPPORTED_EXTENSIONS
+        assert detect_language("data.json") == "json"
+        assert detect_language("data.JSON") == "json"
+
+    def test_supported_language_constructor_cached_across_calls(self, monkeypatch):
+        """Non-JSON AST chunking constructs once and repeats identically."""
+        constructor = self._patch_chonkie(monkeypatch)
+        chunker = CodeChunker()
+        source = "def compute_answer():\n    return 42\n"
+        results = [chunker.chunk_file("sample.py", source) for _ in range(2)]
+        assert constructor.call_count == 1
+        assert constructor.call_args.kwargs == {"language": "python", "chunk_size": 500}
+        assert results[0].chunks == results[1].chunks
+        assert all(result.chunks and result.language == "python" for result in results)
+
+    def test_unexpected_constructor_failure_still_warns(self, monkeypatch):
+        """An unexpected constructor error warns per call and is not cached."""
+        constructor = self._patch_chonkie(
+            monkeypatch, side_effect=RuntimeError("unexpected constructor failure")
+        )
+        chunker = CodeChunker()
+        source = "def compute_answer():\n    return 42\n"
+
+        with capture_logs() as events:
+            results = [chunker.chunk_file("sample.py", source) for _ in range(2)]
+
+        assert constructor.call_count == 2
+        failures = [e for e in events if e["event"] == "chunker_creation_failed"]
+        assert len(failures) == 2
+        assert all(e["error"] == "unexpected constructor failure" for e in failures)
+        assert all(result.chunks and result.error is None for result in results)
 
 
 class TestCodeChunkResult:

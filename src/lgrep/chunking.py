@@ -63,6 +63,13 @@ LANGUAGE_MAP = {
 DEFAULT_CHUNK_SIZE = 500
 MIN_CHUNK_TOKENS = 10  # Skip tiny chunks
 
+# Languages chonkie's CodeChunker cannot construct a parser for: creation
+# raises "Language json is not registered in the configs." on every attempt
+# (chonkie 1.6.5). They are routed straight to the text chunker below, but
+# keep their LANGUAGE_MAP entries so extension support, detect_language
+# results, result metadata and watcher eligibility are unchanged.
+TEXT_ONLY_LANGUAGES = frozenset({"json"})
+
 # chonkie's experimental CodeChunker (add_split_context=True, the default)
 # prepends the enclosing node's header to chunks of a split node:
 # ``header + "\n\n" + body`` for the first chunk and
@@ -300,9 +307,11 @@ class CodeChunker:
 
         language = detect_language(file_path)
 
-        # Try AST-based chunking, then fallback to text
+        # Try AST-based chunking, then fallback to text. Languages in
+        # TEXT_ONLY_LANGUAGES have no chonkie AST constructor, so they skip
+        # straight to the text fallback without a creation attempt.
         chunks = None
-        if language:
+        if language and language not in TEXT_ONLY_LANGUAGES:
             chunks = self._try_ast_chunk(content, language, str_path)
 
         if chunks is None:
