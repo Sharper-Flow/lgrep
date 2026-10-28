@@ -1,0 +1,32 @@
+{
+  "kind": "target_runner_v1",
+  "materializer": "uv",
+  "runner": "pytest",
+  "root": ".",
+  "harness_files": [
+    "conftest.py",
+    "tests/native/test_json_chunking.py"
+  ],
+  "support_files": ["tests/conftest.py"],
+  "cases": {
+    "case:json-routing": [
+      "tests/native/test_json_chunking.py::test_json_uses_text_chunking[pretty]",
+      "tests/native/test_json_chunking.py::test_json_uses_text_chunking[compact]",
+      "tests/native/test_json_chunking.py::test_json_uses_text_chunking[partial]",
+      "tests/native/test_json_chunking.py::test_json_uses_text_chunking[upper]"
+    ],
+    "case:json-empty": [
+      "tests/native/test_json_chunking.py::test_empty_json_stays_empty[empty]",
+      "tests/native/test_json_chunking.py::test_empty_json_stays_empty[whitespace]"
+    ],
+    "case:ast-preserved": ["tests/native/test_json_chunking.py::test_supported_language_still_uses_ast"],
+    "case:errors-preserved": ["tests/native/test_json_chunking.py::test_unexpected_constructor_failure_still_warns"]
+  },
+  "pin": {
+    "python": "3.13.7",
+    "uv": "0.11.26",
+    "pytest": "9.1.1",
+    "dep_manifest": "pyproject.toml",
+    "dep_lock": "uv.lock"
+  }
+}
