@@ -7,15 +7,16 @@ from __future__ import annotations
 
 import threading
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
 
 from lgrep.tools._meta import error_response
+from lgrep.tools._paths import resolve_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 log = structlog.get_logger()
 
@@ -78,6 +79,26 @@ def _source_files(root: Path) -> Iterator[Path]:
         _file_lists[key] = (now, files)
 
 
+def _search_files(root: Path, named_file: Path | None) -> Iterator[Path]:
+    """Yield the one named file, or the repository's searchable files.
+
+    A named file is searched whatever the ignore rules say about it, since
+    the caller asked for it by name. It keeps the size cap discovery applies
+    to every searched file, so one call cannot read an unbounded file.
+    """
+    if named_file is None:
+        yield from _source_files(root)
+        return
+
+    from lgrep.discovery import MAX_FILE_SIZE_BYTES
+
+    try:
+        if named_file.stat().st_size <= MAX_FILE_SIZE_BYTES:
+            yield named_file
+    except OSError:
+        return
+
+
 def search_text(
     query: str,
     repo_path: str,
@@ -88,11 +109,13 @@ def search_text(
     cancel_event: threading.Event | None = None,
     progress: SearchProgress | None = None,
 ) -> dict:
-    """Search for literal text across all source files in a repository.
+    """Search for literal text in a repository, or in one named file.
 
     Args:
         query: Text to search for
-        repo_path: Absolute path to the repository root
+        repo_path: Absolute path to the repository root, or to one file to
+            search. A file is one unit of work and its matches carry the
+            file's name as ``file_path``.
         max_results: Maximum number of results to return (default: 50)
         case_sensitive: Whether to perform case-sensitive matching (default: False)
 
@@ -104,12 +127,11 @@ def search_text(
     if not query or not query.strip():
         return error_response("query must not be empty")
 
-    root = Path(repo_path)
-
-    if not root.exists() or not root.is_dir():
-        return error_response(
-            f"Path does not exist or is not a directory: {repo_path}",
-        )
+    target = resolve_path(repo_path, "file")
+    if isinstance(target, dict):
+        return target
+    named_file = target if target.is_file() else None
+    root = target.parent if named_file else target
 
     progress = progress if progress is not None else SearchProgress()
     remaining = max_results
@@ -129,7 +151,7 @@ def search_text(
     if remaining <= 0:
         return progress.snapshot(truncated=False)
 
-    for file_path in _source_files(root):
+    for file_path in _search_files(root, named_file):
         reason = stopped()
         if reason:
             return progress.snapshot(truncated=True, reason=reason)

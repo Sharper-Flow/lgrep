@@ -29,6 +29,7 @@ from lgrep.storage import (
     write_project_meta,
 )
 from lgrep.symbol_worker import SymbolWorkerProcess
+from lgrep.tools._paths import resolve_path_async
 from lgrep.watcher import FileWatcher
 
 if TYPE_CHECKING:
@@ -1270,6 +1271,20 @@ def _retain_ownership_until_stopped(
     task.add_done_callback(app_ctx._index_owner_releases.discard)
 
 
+async def _search_project_path(app_ctx: LgrepContext, path: str) -> str | dict:
+    """Return the project path a semantic search of ``path`` runs against.
+
+    A project already loaded under ``path`` is served without touching the
+    filesystem. Otherwise a file names its Git checkout root, and a missing
+    path or a file outside a checkout is refused.
+    """
+    project_path = str(Path(path).resolve())
+    if app_ctx.projects.get(project_path) is not None:
+        return project_path
+    resolved = await resolve_path_async(path, "checkout")
+    return str(resolved) if isinstance(resolved, Path) else resolved
+
+
 async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> ProjectState | dict:
     """Resolve project path and ensure a ready ProjectState for search."""
     if app_ctx._closed:
@@ -1285,11 +1300,12 @@ async def _ensure_search_project_state(app_ctx: LgrepContext, path: str) -> Proj
         result = await _ensure_project_initialized(app_ctx, Path(project_path))
         return result
 
-    path_obj = Path(project_path)
-    if not path_obj.exists() or not path_obj.is_dir():
-        return _error_response(f"Path does not exist or is not a directory: {path}")
+    # A caller maps a file to its checkout root first; see _search_project_path.
+    resolved = await resolve_path_async(path, "directory")
+    if isinstance(resolved, dict):
+        return resolved
 
-    result = await _auto_index_project_single_flight(app_ctx, project_path, path_obj)
+    result = await _auto_index_project_single_flight(app_ctx, project_path, Path(project_path))
     if isinstance(result, ProjectState):
         if app_ctx.projects.get(project_path) is not result:
             return await _ensure_search_project_state(app_ctx, path)

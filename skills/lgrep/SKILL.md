@@ -132,12 +132,14 @@ To remove them: `lgrep uninstall-opencode`.
 
 > **Argument names:** every tool declares `query` (search text or symbol name), `path` (local repository root or file), `limit` (result cap), and `max_files` (file input/parse budget; incremental symbol indexing counts changed/new parses, not unchanged files). Before validation the server renames fixed legacy spellings — `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` → `query`, `pattern` → `query` on `lgrep_search_text` only, `file_path`/`file`/`folder` → `path` — and refuses any other undeclared argument, naming the tool's valid arguments. `symbol_id` on `lgrep_search_references` and `path` on `lgrep_index_symbols_repo` are refused with the tool and argument to use instead (`lgrep_get_symbols` with `symbol_ids` / `lgrep_index_symbols_folder` with `path`).
 
+For a file `path`, `lgrep_search_text` searches only that file. `lgrep_get_file_tree` and `lgrep_get_repo_outline` use its parent directory and report it in `repo_path`. `lgrep_search_semantic`, `lgrep_index_semantic`, `lgrep_search_symbols`, `lgrep_search_references`, and `lgrep_get_symbols` use the enclosing Git checkout root and name it in the result (`path` or `repo_path`); `lgrep_index_symbols_folder` does the same and names it in the job result. These tools refuse a file outside a checkout. A directory keeps its existing scope. The CLI `init-ignore` and `index-semantic` commands require a directory and refuse a file.
+
 ### lgrep_search_semantic
 
 Searches a project semantically.
 
 - `query` (string, **required**): Natural language search query.
-- `path` (string, **required**): Absolute path to the project to search. Auto-loads from disk if previously indexed in a prior session.
+- `path` (string, **required**): Absolute path to the project to search, or a file inside its Git checkout. Auto-loads from disk if previously indexed in a prior session.
 - `limit` (int): Maximum results (default 10).
 - `hybrid` (bool): Use hybrid search (default true). Combines vector + keyword search.
 - `include_content` (bool): Add the full stored chunk text as `content` on each hit (default false).
@@ -155,7 +157,7 @@ lgrep_search_semantic(query="JWT verification and token handling", path="/home/u
 
 Indexes a project for semantic search. Call this once per project to build the initial index, or to force a full refresh. **Not required after server restart** — `lgrep_search_semantic` auto-loads existing disk indexes. **Not required when files change** — `lgrep_search_semantic` runs a built-in staleness check and re-indexes drifted files automatically (see *Staleness Handling* below).
 
-- `path` (string, **required**): Absolute path to project root.
+- `path` (string, **required**): Absolute path to project root or a file inside its Git checkout.
 
 ### lgrep_status_semantic
 
@@ -224,7 +226,7 @@ Submit a local background job on stdio. The acknowledgement contains `job_id`,
 `state`, and `duplicate`, not final counters. Read `lgrep_get_symbol_index_job`
 before using `lgrep_search_symbols` or `lgrep_get_symbols`.
 
-- `path` (string, **required**): Absolute path to the repository/folder root.
+- `path` (string, **required**): Absolute path to the repository/folder root or a file inside its Git checkout.
 - `max_files` (int): Changed/new file parse cap (default: 500); unchanged files do not consume it. A separate default 150-second cooperative budget, configured by `LGREP_EXPLICIT_INDEX_BUDGET_S`, also bounds the job. Deadline stops report `truncation_reason="deadline"` in status.
 - `incremental` (bool): Skip files whose SHA-256 hash matches the stored index (default: `true`). Set to `false` to force a full re-index.
 
@@ -268,7 +270,7 @@ List all repositories that have been indexed in the symbol store.
 
 Get the file tree of a repository (respects .gitignore). **No index needed.**
 
-- `path` (string, **required**): Absolute path to the repository root.
+- `path` (string, **required**): Absolute path to the repository root or a file, which selects its parent directory.
 
 ### lgrep_get_file_outline
 
@@ -285,14 +287,14 @@ lgrep_get_file_outline(path="/home/user/dev/project/src/auth.py")
 
 Get the symbol outline across an entire repository.
 
-- `path` (string, **required**): Absolute path to the repository root.
+- `path` (string, **required**): Absolute path to the repository root or a file, which selects its parent directory.
 
 ### lgrep_search_symbols
 
 Search for symbols by name (case-insensitive substring match). Requires prior indexing with `lgrep_index_symbols_folder`.
 
 - `query` (string, **required**): Symbol name to search for.
-- `path` (string, **required**): Absolute path to the indexed repository.
+- `path` (string, **required**): Absolute path to the indexed repository root or a file inside its Git checkout.
 - `limit` (int): Maximum results (default: 20).
 - `kind` (string, optional): Filter by kind (`function`, `class`, `method`, `interface`).
 
@@ -306,7 +308,7 @@ lgrep_search_symbols(query="authenticate", path="/home/user/dev/project")
 Literal text search across all source files.
 
 - `query` (string, **required**): Text to search for.
-- `path` (string, **required**): Absolute path to the repository root.
+- `path` (string, **required**): Absolute path to the repository root or a file to search.
 - `limit` (int): Maximum results (default: 50).
 - `case_sensitive` (bool): Case-sensitive matching (default: false).
 
@@ -320,7 +322,7 @@ request stops the worker cooperatively without returning a result.
 Search for candidate references/usages of a symbol name in an indexed Python repository.
 
 - `query` (string, **required**): Symbol name to look up (e.g. `helper`).
-- `path` (string, **required**): Absolute path to the indexed repository.
+- `path` (string, **required**): Absolute path to the indexed repository root or a file inside its Git checkout.
 - `limit` (int): Maximum results (default: 20).
 - `usage_filter` (string): One of `production_first` (default), `include_tests`, or `tests_only`.
 - `kind` (string, optional): Occurrence kind filter (`call`, `attribute`, `import`, `reference`).
@@ -338,7 +340,7 @@ Get full metadata and source code for one or more symbols by ID. Pass every
 relevant ID in one call.
 
 - `symbol_ids` (list[string], **required**): One or more IDs in format `file_path:kind:name`.
-- `path` (string, **required**): Absolute path to the indexed repository.
+- `path` (string, **required**): Absolute path to the indexed repository root or a file inside its Git checkout.
 
 The response holds one entry per requested ID, in order. An unknown ID or a
 source range that no longer matches the file returns `{"id": ..., "error": ...}`

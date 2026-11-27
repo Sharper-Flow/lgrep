@@ -12,6 +12,7 @@ import structlog
 from lgrep.parser.extractor import SymbolExtractor
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.tools._meta import error_response
+from lgrep.tools._paths import resolve_repo
 
 log = structlog.get_logger()
 
@@ -98,14 +99,18 @@ def get_symbols(
 
     Args:
         symbol_ids: List of stable symbol IDs
-        repo_path: Absolute path to the indexed repository
+        repo_path: Absolute path to the indexed repository, or to a file
+            inside its Git checkout
         storage_dir: Optional override for the symbol index storage directory
 
     Returns:
-        Dict with a symbols list.
+        Dict with repo_path (the root read) and a symbols list.
         Returns error dict if the repo is not indexed.
         Missing symbols and source-range mismatches produce per-symbol errors.
     """
+    repo_path = resolve_repo(repo_path)
+    if isinstance(repo_path, dict):
+        return repo_path
     store = IndexStore(storage_dir=storage_dir)
 
     repo_key = normalize_repo_key(repo_path)
@@ -141,5 +146,6 @@ def get_symbols(
         symbols.append(sym_data)
 
     return {
+        "repo_path": repo_path,
         "symbols": symbols,
     }

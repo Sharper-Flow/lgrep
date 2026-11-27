@@ -35,9 +35,9 @@ from lgrep.server.responses import (
 )
 from lgrep.server.runtime import SYMBOL_LANE
 from lgrep.server.tools_maintenance import _destructive_grant_present
-from lgrep.storage.index_store import normalize_repo_key
 from lgrep.symbol_worker import SymbolWorkerLost
 from lgrep.tools._meta import make_meta
+from lgrep.tools._paths import resolve_repo
 from lgrep.tools.get_file_outline import get_file_outline as _get_file_outline
 from lgrep.tools.get_file_tree import get_file_tree as _get_file_tree
 from lgrep.tools.get_repo_outline import get_repo_outline as _get_repo_outline
@@ -213,7 +213,9 @@ _EXPLICIT_BUDGET_DESCRIPTION = (
 async def index_symbols_folder(
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root for symbol indexing."),
+        Field(
+            description="Absolute path to a local repository root or file inside its Git checkout."
+        ),
     ],
     max_files: Annotated[
         int,
@@ -387,7 +389,9 @@ async def list_repos(ctx: Context | None = None) -> ListReposResult:
 async def get_file_tree(
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root."),
+        Field(
+            description="Absolute path to a local repository root or file; a file uses its parent."
+        ),
     ],
     max_files: Annotated[
         int,
@@ -408,6 +412,7 @@ async def get_file_tree(
     if "error" in result:
         return error_response(result["error"])
     return GetFileTreeResult(
+        repo_path=result["repo_path"],
         files=result["files"],
         total_files=result["total_files"],
         _meta=make_meta(t0, "get_file_tree"),
@@ -472,7 +477,9 @@ async def get_file_outline(
 async def get_repo_outline(
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root."),
+        Field(
+            description="Absolute path to a local repository root or file; a file uses its parent."
+        ),
     ],
     max_files: Annotated[
         int,
@@ -524,7 +531,9 @@ async def search_symbols(
     ],
     path: Annotated[
         str,
-        Field(description="Absolute path to the indexed repository root."),
+        Field(
+            description="Absolute path to an indexed repository root or file inside its Git checkout."
+        ),
     ],
     limit: Annotated[
         int,
@@ -560,7 +569,9 @@ async def search_symbols(
     if app_ctx is None:
         result = await asyncio.to_thread(_search_symbols, query, path, limit=limit, kind=kind)
     else:
-        repo_key = normalize_repo_key(path)
+        repo_key = await asyncio.to_thread(resolve_repo, path)
+        if isinstance(repo_key, dict):
+            return repo_key
         try:
             async with _symbol_index_snapshot(app_ctx, repo_key) as token:
                 if token is None:
@@ -590,6 +601,7 @@ async def search_symbols(
     if "error" in result:
         return error_response(result["error"])
     return SearchSymbolsResult(
+        repo_path=result["repo_path"],
         results=result["results"],
         total_matches=result["total_matches"],
         index_refreshed=result.get("index_refreshed", False),
@@ -613,7 +625,7 @@ async def search_text(
     ],
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root."),
+        Field(description="Absolute path to a local repository root or file to search."),
     ],
     limit: Annotated[
         int,
@@ -712,7 +724,9 @@ async def get_symbols(
     ],
     path: Annotated[
         str,
-        Field(description="Absolute path to the indexed local repository root."),
+        Field(
+            description="Absolute path to an indexed repository root or file inside its Git checkout."
+        ),
     ],
     ctx: Context | None = None,
 ) -> GetSymbolsResult | ToolError:
@@ -734,6 +748,7 @@ async def get_symbols(
     if "error" in result:
         return error_response(result["error"])
     return GetSymbolsResult(
+        repo_path=result["repo_path"],
         symbols=result["symbols"],
         _meta=make_meta(t0, "get_symbols"),
     )
@@ -756,7 +771,9 @@ async def search_references(
     ],
     path: Annotated[
         str,
-        Field(description="Absolute path to the indexed repository root."),
+        Field(
+            description="Absolute path to an indexed repository root or file inside its Git checkout."
+        ),
     ],
     limit: Annotated[
         int,
@@ -811,6 +828,7 @@ async def search_references(
         return error_response(result["error"])
 
     return SearchReferencesResult(
+        repo_path=result["repo_path"],
         query=result["query"],
         usage_filter=result["usage_filter"],
         total_matches=result["total_matches"],

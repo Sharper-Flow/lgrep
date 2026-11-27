@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from lgrep.storage.index_store import IndexStore
 from lgrep.tools._index_freshness import load_fresh_index
 from lgrep.tools._meta import error_response
+from lgrep.tools._paths import resolve_repo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -46,7 +47,8 @@ def search_symbols(
 
     Args:
         query: Search query (matched against symbol names)
-        repo_path: Absolute path to the indexed repository
+        repo_path: Absolute path to the indexed repository, or to a file
+            inside its Git checkout
         storage_dir: Optional override for the symbol index storage directory
         limit: Maximum number of results to return (default: 20)
         kind: Optional filter by symbol kind (function, class, method, etc.)
@@ -54,7 +56,8 @@ def search_symbols(
                         Omit to acquire it synchronously, as CLI callers do.
 
     Returns:
-        Dict with results list and total_matches.
+        Dict with repo_path (the root searched), results list and
+        total_matches.
         Returns error dict if the repo has not been indexed.
     """
     # Input validation
@@ -62,6 +65,10 @@ def search_symbols(
         return error_response("query must not be empty")
     if limit < 0:
         limit = 1
+    if index_snapshot is None:
+        repo_path = resolve_repo(repo_path)
+        if isinstance(repo_path, dict):
+            return repo_path
 
     index, refreshed = (
         load_symbol_index(repo_path, storage_dir) if index_snapshot is None else index_snapshot
@@ -85,6 +92,7 @@ def search_symbols(
             break
 
     return {
+        "repo_path": repo_path,
         "results": results,
         "total_matches": len(results),
         "index_refreshed": refreshed,
