@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from functools import partial
@@ -47,6 +48,7 @@ from lgrep.tools.invalidate_cache import invalidate_cache as _invalidate_cache
 from lgrep.tools.list_repos import list_repos as _list_repos
 from lgrep.tools.search_references import search_references as _search_references
 from lgrep.tools.search_symbols import search_symbols as _search_symbols
+from lgrep.tools.search_text import SearchProgress
 from lgrep.tools.search_text import search_text as _search_text
 
 if TYPE_CHECKING:
@@ -635,22 +637,40 @@ async def search_text(
         Results list and meta envelope.
     """
     t0 = time.monotonic()
+    import lgrep.server as server
+
+    deadline = t0 + 0.8 * server.TOOL_TIMEOUT_S
+    cancel_event = threading.Event()
+    progress = SearchProgress()
+    scan = partial(
+        _search_text,
+        query,
+        path,
+        max_results=limit,
+        case_sensitive=case_sensitive,
+        deadline=deadline,
+        cancel_event=cancel_event,
+        progress=progress,
+    )
     if ctx is not None:
         app_ctx = ctx.request_context.lifespan_context
-        result = await app_ctx.runtime.run_blocking(
+        work = app_ctx.runtime.run_blocking(
             "search_text",
             "search_text",
             str(Path(path).resolve()),
-            _search_text,
-            query,
-            path,
-            max_results=limit,
-            case_sensitive=case_sensitive,
+            scan,
+            cancel_event=cancel_event,
         )
     else:
-        result = await asyncio.to_thread(
-            _search_text, query, path, max_results=limit, case_sensitive=case_sensitive
-        )
+        work = asyncio.to_thread(scan)
+    try:
+        result = await asyncio.wait_for(work, timeout=max(0.0, deadline - time.monotonic()))
+    except TimeoutError:
+        cancel_event.set()
+        result = progress.snapshot(truncated=True, reason="deadline")
+    except asyncio.CancelledError:
+        cancel_event.set()
+        raise
 
     if "error" in result:
         return SearchTextResult(
@@ -658,6 +678,9 @@ async def search_text(
             limit=limit,
             _meta=make_meta(t0, "search_text"),
             error=result["error"],
+            truncated=False,
+            truncation_reason="",
+            files_searched=0,
         )
 
     return SearchTextResult(
@@ -665,6 +688,9 @@ async def search_text(
         limit=limit,
         _meta=make_meta(t0, "search_text"),
         error="",
+        truncated=result["truncated"],
+        truncation_reason=result["truncation_reason"],
+        files_searched=result["files_searched"],
     )
 
 

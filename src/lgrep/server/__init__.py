@@ -8,6 +8,7 @@ import os
 import time
 import uuid
 from importlib import import_module
+from inspect import signature
 from pathlib import Path
 
 import structlog
@@ -22,7 +23,7 @@ AUTO_INDEX_MAX_ATTEMPTS = 2
 AUTO_INDEX_RETRY_BASE_DELAY_S = 0.1
 
 # Server-side timeout for tool operations.
-TOOL_TIMEOUT_S = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "45"))
+TOOL_TIMEOUT_S = float(os.environ.get("LGREP_TOOL_TIMEOUT_S", "25"))
 
 
 def _new_call_id() -> str:
@@ -71,9 +72,12 @@ def time_tool(func):
                 if tool_name == "search_text":
                     return {
                         "results": [],
-                        "limit": kwargs.get("limit", 50),
+                        "limit": signature(func).bind(*args, **kwargs).arguments.get("limit", 50),
                         "_meta": make_meta(start, tool_name),
-                        "error": message,
+                        "error": "",
+                        "truncated": True,
+                        "truncation_reason": "deadline",
+                        "files_searched": 0,
                     }
 
                 if tool_name == "search_references":

@@ -1058,6 +1058,113 @@ class TestSearchSymbols:
 
 
 class TestSearchText:
+    def test_result_limit_returns_without_resuming_the_walk(self, tmp_path, monkeypatch):
+        from lgrep.discovery import FileDiscovery
+        from lgrep.tools.search_text import search_text
+
+        first = tmp_path / "first.py"
+        first.write_text("needle first\n")
+
+        def files(_self):
+            yield first
+            pytest.fail("search resumed walking after reaching the result limit")
+
+        monkeypatch.setattr(FileDiscovery, "find_files", files)
+        result = search_text("needle", str(tmp_path), max_results=1)
+        assert [row["line"] for row in result["results"]] == ["needle first"]
+        assert result["files_searched"] == 1
+        assert result["truncated"] is False
+
+    def test_deadline_returns_partial_results_without_caching_walk(self, tmp_path, monkeypatch):
+        from lgrep.tools import search_text as module
+
+        first = tmp_path / "first.py"
+        second = tmp_path / "second.py"
+        first.write_text("needle first\n")
+        second.write_text("needle second\n")
+        clock = [0.0]
+        monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(module, "_file_lists", {})
+        from lgrep.discovery import FileDiscovery
+
+        def files(_self):
+            yield first
+            clock[0] = 10.0
+            yield second
+
+        monkeypatch.setattr(FileDiscovery, "find_files", files)
+        result = module.search_text("needle", str(tmp_path), deadline=5.0)
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "deadline"
+        assert result["files_searched"] == 1
+        assert [row["line"] for row in result["results"]] == ["needle first"]
+        assert module._file_lists == {}
+
+    def test_deadline_after_last_file_is_not_truncation(self, tmp_path, monkeypatch):
+        from lgrep.tools import search_text as module
+
+        only = tmp_path / "only.py"
+        only.write_text("needle\n")
+        clock = [0.0]
+        monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(module, "_file_lists", {})
+        from lgrep.discovery import FileDiscovery
+
+        def files(_self):
+            yield only
+            clock[0] = 10.0
+
+        monkeypatch.setattr(FileDiscovery, "find_files", files)
+        result = module.search_text("needle", str(tmp_path), deadline=5.0)
+        assert result["truncated"] is False
+        assert result["truncation_reason"] == ""
+        assert result["files_searched"] == 1
+        assert [row["line"] for row in result["results"]] == ["needle"]
+
+    def test_expired_deadline_does_not_start_walk(self, tmp_path, monkeypatch):
+        from lgrep.tools import search_text as module
+
+        def unexpected_walk(*args):
+            raise AssertionError("walk started after deadline")
+
+        monkeypatch.setattr(module.time, "monotonic", lambda: 10.0)
+        monkeypatch.setattr(module, "_source_files", unexpected_walk)
+        result = module.search_text("needle", str(tmp_path), deadline=5.0)
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "deadline"
+        assert result["files_searched"] == 0
+        assert result["results"] == []
+
+    def test_cancelled_search_does_not_start_walk(self, tmp_path, monkeypatch):
+        import threading
+
+        from lgrep.tools import search_text as module
+
+        def unexpected_walk(*args):
+            raise AssertionError("walk started after cancellation")
+
+        monkeypatch.setattr(module, "_source_files", unexpected_walk)
+        event = threading.Event()
+        event.set()
+        result = module.search_text("needle", str(tmp_path), cancel_event=event)
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "cancelled"
+        assert result["files_searched"] == 0
+        assert result["results"] == []
+
+    def test_prefilter_preserves_case_and_line_matches(self, tmp_path):
+        from lgrep.tools.search_text import search_text
+
+        (tmp_path / "sample.py").write_text("other\nNEEDLE one\nneedle two\n")
+        insensitive = search_text("needle", str(tmp_path))
+        sensitive = search_text("needle", str(tmp_path), case_sensitive=True)
+        assert [(r["line_number"], r["line"]) for r in insensitive["results"]] == [
+            (2, "NEEDLE one"),
+            (3, "needle two"),
+        ]
+        assert [(r["line_number"], r["line"]) for r in sensitive["results"]] == [(3, "needle two")]
+        assert insensitive["truncated"] is False
+
     def test_returns_dict(self, tmp_repo):
         from lgrep.tools.search_text import search_text
 
