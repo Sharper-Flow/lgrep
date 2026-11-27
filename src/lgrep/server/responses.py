@@ -119,6 +119,7 @@ class IndexSemanticResult(TypedDict):
     chunk_count: int
     duration_ms: float
     total_tokens: int
+    path: str
 
 
 class _StatusSemanticRequired(TypedDict):
@@ -205,6 +206,7 @@ class GetFileTreeResult(TypedDict):
 
     files: list[str]
     total_files: int
+    repo_path: str
     _meta: _Meta
 
 
@@ -233,6 +235,7 @@ class SearchSymbolsResult(TypedDict):
     results: list[Any]
     total_matches: int
     index_refreshed: bool
+    repo_path: str
     _meta: _Meta
 
 
@@ -285,6 +288,7 @@ class _SearchReferencesResultRequired(TypedDict):
     """Required response fields for search_references."""
 
     query: str
+    repo_path: str
     usage_filter: str
     total_matches: int
     # Match/return counts per group, so truncation is visible rather than inferred.
@@ -314,6 +318,7 @@ class GetSymbolsResult(TypedDict):
     """Response for get_symbols."""
 
     symbols: list[dict[str, Any]]
+    repo_path: str
     _meta: _Meta
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from lgrep.discovery import MAX_FILE_SIZE_BYTES
 from lgrep.storage.index_store import IndexStore, normalize_repo_key
 from lgrep.tools._meta import error_response
+from lgrep.tools._paths import resolve_repo
 
 _USAGE_FILTERS = frozenset({"production_first", "include_tests", "tests_only"})
 _OCCURRENCE_KINDS = frozenset({"call", "attribute", "import", "reference"})
@@ -86,7 +87,8 @@ def search_references(
 
     Args:
         query: Symbol name to look up (e.g. "authenticate").
-        repo_path: Absolute path to the indexed repository root.
+        repo_path: Absolute path to the indexed repository root, or to a file
+            inside its Git checkout.
         storage_dir: Optional override for the symbol index storage directory.
         limit: Maximum number of occurrence results to return (default: 20,
             capped at 100).
@@ -95,13 +97,17 @@ def search_references(
             "reference").
 
     Returns:
-        Dict with query, usage_filter, total_matches, results list,
-        candidate_names, and disclaimer.
+        Dict with query, usage_filter, repo_path (the root searched),
+        total_matches, results list, candidate_names, and disclaimer.
         Returns an error dict for invalid input or missing/stale index.
     """
     if not query or not query.strip():
         return error_response("query must not be empty")
     query = query.strip()
+
+    repo_path = resolve_repo(repo_path)
+    if isinstance(repo_path, dict):
+        return repo_path
 
     if usage_filter not in _USAGE_FILTERS:
         return error_response(
@@ -143,6 +149,7 @@ def search_references(
 
     if not candidate_names:
         return {
+            "repo_path": repo_path,
             "query": query,
             "usage_filter": usage_filter,
             "total_matches": 0,
@@ -200,6 +207,7 @@ def search_references(
     results, stale_file_count = _annotate_staleness(results, Path(repo_path), index.files)
 
     return {
+        "repo_path": repo_path,
         "query": query,
         "usage_filter": usage_filter,
         "total_matches": total_matches,

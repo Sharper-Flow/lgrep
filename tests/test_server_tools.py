@@ -162,7 +162,7 @@ class TestSymbolToolResponses:
 
         def slow_get_file_tree(path, max_files=500):
             time.sleep(0.02)
-            return {"files": [], "total_files": 0}
+            return {"repo_path": str(path), "files": [], "total_files": 0}
 
         monkeypatch.setattr(symbols_module, "_get_file_tree", slow_get_file_tree)
         fn = self._get_tool_fn("get_file_tree")

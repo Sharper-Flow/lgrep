@@ -1,7 +1,10 @@
 """lgrep CLI entry point."""
 
+from __future__ import annotations
+
 import json
 import sys
+from pathlib import Path
 
 
 def main() -> int:
@@ -243,6 +246,22 @@ def _cmd_search_semantic(args: list[str]) -> int:
         return 1
 
 
+def _directory_argument(positional: list[str]) -> Path | None:
+    """Return the directory a command's optional path argument names.
+
+    Prints the refusal and returns None for a missing path or a file. Only
+    commands that write into the directory they are given use this, so a
+    file is never redirected to another directory.
+    """
+    from lgrep.tools._paths import resolve_path
+
+    resolved = resolve_path(positional[0] if positional else str(Path.cwd()), "directory")
+    if isinstance(resolved, dict):
+        print(json.dumps(resolved))
+        return None
+    return resolved
+
+
 def _cmd_init_ignore(args: list[str]) -> int:
     """Create a recommended .lgrepignore file in a project.
 
@@ -259,8 +278,6 @@ def _cmd_init_ignore(args: list[str]) -> int:
         print("options:")
         print("  --force                        overwrite existing .lgrepignore")
         return 0
-
-    from pathlib import Path
 
     from lgrep.discovery import scaffold_lgrepignore
 
@@ -279,9 +296,8 @@ def _cmd_init_ignore(args: list[str]) -> int:
             positional.append(args[i])
             i += 1
 
-    path = Path(positional[0]).resolve() if positional else Path.cwd().resolve()
-    if not path.exists() or not path.is_dir():
-        print(json.dumps({"error": f"Path does not exist or is not a directory: {path}"}))
+    path = _directory_argument(positional)
+    if path is None:
         return 1
 
     try:
@@ -522,7 +538,6 @@ def _cmd_index_semantic(args: list[str]) -> int:
         return 0
 
     import os
-    from pathlib import Path
 
     from lgrep.logging_setup import configure_logging
 
@@ -548,11 +563,8 @@ def _cmd_index_semantic(args: list[str]) -> int:
             positional.append(args[i])
             i += 1
 
-    path = Path(positional[0]).resolve() if positional else Path.cwd().resolve()
-
-    # Validate path
-    if not path.exists() or not path.is_dir():
-        print(json.dumps({"error": f"Path does not exist or is not a directory: {path}"}))
+    path = _directory_argument(positional)
+    if path is None:
         return 1
 
     # Validate environment

@@ -83,6 +83,12 @@ Each concept carries one declared name in every tool schema:
 | Result cap | `limit` |
 | File input/parse budget (unchanged symbol-index files do not count) | `max_files` |
 
+For a file path, text search scans only the file; the file tree and repository
+outline cover its parent directory and report it in `repo_path`. Semantic and
+symbol tools use the enclosing Git checkout root, name it in the result, and
+refuse a file outside a checkout. CLI `init-ignore` and `index-semantic`
+require directories and refuse files.
+
 Before validation, the server renames a fixed set of legacy spellings to the
 declared name: `max_results`/`maxResults` → `limit`, `symbol`/`symbol_name` →
 `query`, `pattern` → `query` on `search_text` only, and

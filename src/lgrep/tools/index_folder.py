@@ -20,6 +20,7 @@ from lgrep.parser.languages import get_language_spec
 from lgrep.storage._occurrences import STORAGE_VERSION
 from lgrep.storage.index_store import CodeIndex, IndexStore, _version_tuple
 from lgrep.tools._meta import error_response
+from lgrep.tools._paths import resolve_path
 
 if TYPE_CHECKING:
     import threading
@@ -184,7 +185,8 @@ def index_folder(
     """Index all symbols in a local folder.
 
     Args:
-        repo_path: Absolute path to the repository/folder root
+        repo_path: Absolute path to the repository/folder root, or to a file
+            inside a Git checkout, which is then indexed
         storage_dir: Optional override for the symbol index storage directory
         max_files: Maximum changed/new files to parse (default: 500).
                    Unchanged files are checked but do not consume this budget.
@@ -222,10 +224,9 @@ def _index_folder_with_snapshot(
     if not repo_path or not repo_path.strip():
         return error_response("repo_path must not be empty"), None
 
-    root = Path(repo_path)
-
-    if not root.exists() or not root.is_dir():
-        return error_response(f"Path does not exist or is not a directory: {repo_path}"), None
+    root = resolve_path(repo_path, "checkout")
+    if isinstance(root, dict):
+        return root, None
 
     store = IndexStore(storage_dir=storage_dir)
     resolved_root = str(root.resolve())

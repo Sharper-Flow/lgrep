@@ -21,6 +21,7 @@ from lgrep.server.lifecycle import (
     _get_project_stats,
     _retain_state,
     _schedule_background_reindex,
+    _search_project_path,
 )
 from lgrep.server.responses import (
     IndexSemanticResult,
@@ -32,6 +33,7 @@ from lgrep.server.responses import (
 )
 from lgrep.storage import has_disk_cache, open_checkout_store
 from lgrep.tools._meta import make_meta
+from lgrep.tools._paths import resolve_path_async
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -216,7 +218,7 @@ async def search_semantic(
     ],
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root to search."),
+        Field(description="Absolute path to a repository root or file inside its Git checkout."),
     ],
     limit: Annotated[
         int,
@@ -259,9 +261,11 @@ async def search_semantic(
         return error_response("Internal error: Context missing")
 
     app_ctx: LgrepContext = ctx.request_context.lifespan_context
-    project_path = str(Path(path).resolve())
+    project_path = await _search_project_path(app_ctx, path)
+    if isinstance(project_path, dict):
+        return project_path
 
-    result = await _ensure_search_project_state(app_ctx, path)
+    result = await _ensure_search_project_state(app_ctx, project_path)
     if isinstance(result, dict) and "error" in result:
         return result  # Already a ToolError dict from lifecycle
 
@@ -284,7 +288,7 @@ async def search_semantic(
 async def index_semantic(
     path: Annotated[
         str,
-        Field(description="Absolute path to the local repository root to index."),
+        Field(description="Absolute path to a repository root or file inside its Git checkout."),
     ],
     ctx: Context | None = None,
 ) -> IndexSemanticResult | ToolError:
@@ -304,9 +308,10 @@ async def index_semantic(
     app_ctx: LgrepContext = ctx.request_context.lifespan_context
 
     # Validate path
-    project_path = Path(path).resolve()
-    if not project_path.exists() or not project_path.is_dir():
-        return error_response(f"Path does not exist or is not a directory: {path}")
+    resolved = await resolve_path_async(path, "checkout")
+    if isinstance(resolved, dict):
+        return resolved
+    project_path = resolved
 
     # Initialize components if project not yet cached
     result = await _ensure_project_initialized(app_ctx, project_path)
@@ -350,6 +355,7 @@ async def index_semantic(
             state.db.get_latest_indexed_at,
         )
         return IndexSemanticResult(
+            path=str(project_path),
             file_count=status.file_count,
             chunk_count=status.chunk_count,
             duration_ms=round(status.duration_ms, 2),
