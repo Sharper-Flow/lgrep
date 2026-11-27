@@ -243,6 +243,9 @@ class _SearchTextResultRequired(TypedDict):
     limit: int
     _meta: _Meta
     error: str
+    truncated: bool
+    truncation_reason: str
+    files_searched: int
 
 
 class SearchTextResult(_SearchTextResultRequired, total=False):
@@ -251,6 +254,8 @@ class SearchTextResult(_SearchTextResultRequired, total=False):
     ``error`` is always present. Success uses an empty string so FastMCP's
     structured-output layer never serializes an omitted optional string as
     ``null`` for clients that validate strictly.
+    ``truncation_reason`` is empty unless the scan was truncated.
+    ``files_searched`` counts files examined, excluding any file still being scanned.
     """
 
 

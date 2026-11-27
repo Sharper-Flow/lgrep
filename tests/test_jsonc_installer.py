@@ -173,7 +173,7 @@ class TestSystemdLogPath:
         for token in (
             "LGREP_WORKTREE_DEDUP=1",
             "LGREP_AUTO_WARM_DISK=false",
-            "LGREP_TOOL_TIMEOUT_S=8",
+            "LGREP_TOOL_TIMEOUT_S=25",
             "LGREP_WORKER_MAX_THREADS=4",
             "lgrep_diagnostics",
             "lgrep_status_semantic",
@@ -183,7 +183,7 @@ class TestSystemdLogPath:
         for token in (
             "Environment=LGREP_WORKTREE_DEDUP=1",
             "Environment=LGREP_AUTO_WARM_DISK=false",
-            "Environment=LGREP_TOOL_TIMEOUT_S=8",
+            "Environment=LGREP_TOOL_TIMEOUT_S=25",
             "Environment=LGREP_WORKER_MAX_THREADS=4",
         ):
             assert token in inst._SYSTEMD_SERVICE

@@ -80,11 +80,11 @@ lgrep:
     LGREP_WORKTREE_DEDUP: "1"
     LGREP_WARM_PATHS: "/abs/path/to/primary-repo:/abs/path/to/tooling-repo"
     LGREP_AUTO_WARM_DISK: "false"
-    LGREP_TOOL_TIMEOUT_S: "8"
+    LGREP_TOOL_TIMEOUT_S: "25"
     LGREP_WORKER_MAX_THREADS: "4"
 ```
 
-Use explicit `LGREP_WARM_PATHS` for repos agents actively use. Do not warm every cached repo by default on large multi-repo machines. Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client deadline so agents receive structured lgrep errors instead of transport-level deadline failures. Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent sessions cannot create unbounded blocking work.
+Use explicit `LGREP_WARM_PATHS` for repos agents actively use. Do not warm every cached repo by default on large multi-repo machines. Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client deadline so agents receive a structured lgrep response instead of a transport-level deadline failure. Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent sessions cannot create unbounded blocking work.
 
 If a Vision/shared HTTP daemon shows high CPU or many threads, call `lgrep_diagnostics` first. Check `worker_max_threads`, `active_jobs`, `recent_jobs`, and `timeout_abandonment_summary`; do not infer correctness from process names alone. `lgrep_status_semantic(path="")` is cheap/memory-only; pass a specific `path` for deep file/chunk counts. Shared HTTP destructive prune requests are forced to dry-run; run `lgrep prune-orphans --execute` locally for intentional deletion.
 
@@ -309,6 +309,11 @@ Literal text search across all source files.
 - `path` (string, **required**): Absolute path to the repository root.
 - `limit` (int): Maximum results (default: 50).
 - `case_sensitive` (bool): Case-sensitive matching (default: false).
+
+A deadline returns matches from files already examined, `truncated: true`, and
+`truncation_reason: "deadline"`. `files_searched` counts the files examined in
+every response; files not yet scanned may hold more matches. Cancelling an MCP
+request stops the worker cooperatively without returning a result.
 
 ### lgrep_search_references
 

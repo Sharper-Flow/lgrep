@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import importlib
 import inspect
+import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -213,6 +215,9 @@ class TestSymbolToolResponses:
         assert "results" in data
         assert data["limit"] == 50
         assert data["error"] == ""
+        assert data["truncated"] is False
+        assert data["truncation_reason"] == ""
+        assert data["files_searched"] == 1
 
     @pytest.mark.asyncio
     async def test_search_text_missing_path_returns_structured_error(self, tmp_path):
@@ -221,6 +226,8 @@ class TestSymbolToolResponses:
         assert "error" in result
         assert result["results"] == []
         assert result["limit"] == 50
+        assert result["truncation_reason"] == ""
+        assert result["files_searched"] == 0
 
     @pytest.mark.asyncio
     async def test_search_text_uses_runtime_supervisor_when_context_available(self, tmp_path):
@@ -230,7 +237,15 @@ class TestSymbolToolResponses:
 
         class RuntimeStub:
             async def run_blocking(
-                self, kind, caller, project, fn_to_run, *args, lane="query", **kwargs
+                self,
+                kind,
+                caller,
+                project,
+                fn_to_run,
+                *args,
+                lane="query",
+                cancel_event=None,
+                **kwargs,
             ):
                 calls.append(
                     {
@@ -260,17 +275,106 @@ class TestSymbolToolResponses:
     async def test_search_text_timeout_keeps_schema_shape(self, monkeypatch):
         import lgrep.server as server_mod
 
-        monkeypatch.setattr(server_mod, "TOOL_TIMEOUT_S", 0.01)
+        monkeypatch.setattr(server_mod, "TOOL_TIMEOUT_S", 0)
 
-        @server_mod.time_tool
-        async def search_text(limit=7):
-            await asyncio.sleep(0.05)
-
-        result = await search_text(limit=7)
+        result = await server_mod.search_text("needle", "/unused", 7)
 
         assert result["results"] == []
         assert result["limit"] == 7
-        assert "error" in result
+        assert result["error"] == ""
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "deadline"
+        assert result["files_searched"] == 0
+
+    @pytest.mark.asyncio
+    async def test_search_text_deadline_returns_partial_results_and_cancels(
+        self, tmp_path, monkeypatch
+    ):
+        from lgrep.discovery import FileDiscovery
+        from lgrep.tools import search_text as scan_module
+
+        first = tmp_path / "a.py"
+        second = tmp_path / "b.py"
+        first.write_text("greet first\n")
+        second.write_text("greet second\n")
+        monkeypatch.setattr(FileDiscovery, "find_files", lambda self: iter((first, second)))
+        loop = asyncio.get_running_loop()
+        clock = [loop.time()]
+        deadlines = []
+        call_at = loop.call_at
+
+        def now():
+            return clock[0]
+
+        def track_timer(when, callback, *args, **kwargs):
+            deadlines.append(when)
+            return call_at(when, callback, *args, **kwargs)
+
+        monkeypatch.setattr(loop, "time", now)
+        monkeypatch.setattr(loop, "call_at", track_timer)
+        monkeypatch.setattr(tools_symbols, "time", SimpleNamespace(monotonic=now))
+        monkeypatch.setattr(scan_module, "time", SimpleNamespace(monotonic=now))
+        scanning = asyncio.Event()
+        release = threading.Event()
+        finished = asyncio.Event()
+        seen = {}
+
+        class SlowText(str):
+            def splitlines(self, *args, **kwargs):
+                loop.call_soon_threadsafe(scanning.set)
+                release.wait()
+                return super().splitlines(*args, **kwargs)
+
+        read_text = Path.read_text
+
+        def read(self, *args, **kwargs):
+            text = read_text(self, *args, **kwargs)
+            return SlowText(text) if self == second else text
+
+        monkeypatch.setattr(Path, "read_text", read)
+
+        class StalledRuntime:
+            async def run_blocking(self, kind, caller, project, scan, *, cancel_event):
+                seen["cancel_event"] = cancel_event
+
+                def run():
+                    try:
+                        return scan()
+                    finally:
+                        loop.call_soon_threadsafe(finished.set)
+
+                return await asyncio.to_thread(run)
+
+        ctx = SimpleNamespace(
+            request_context=SimpleNamespace(
+                lifespan_context=SimpleNamespace(runtime=StalledRuntime())
+            )
+        )
+
+        tool = mcp._tool_manager.get_tool("search_text")
+        call = asyncio.create_task(
+            tool.run({"query": "greet", "path": str(tmp_path)}, context=ctx, convert_result=True)
+        )
+        stalled = asyncio.create_task(scanning.wait())
+        try:
+            done, _ = await asyncio.wait((call, stalled), return_when=asyncio.FIRST_COMPLETED)
+            assert stalled in done, "scan returned before reaching the second file"
+            clock[0] = min(deadlines)  # Only the first deadline is due.
+            result = _structured_result(await call)
+        finally:
+            release.set()
+            call.cancel()
+            stalled.cancel()
+            await asyncio.gather(call, stalled, return_exceptions=True)
+            if scanning.is_set():
+                await finished.wait()
+
+        assert result["error"] == ""
+        assert result["truncated"] is True
+        assert result["truncation_reason"] == "deadline"
+        assert result["files_searched"] == 1
+        assert [row["line"] for row in result["results"]] == ["greet first"]
+        assert seen["cancel_event"].is_set()
 
     @pytest.mark.asyncio
     async def test_search_references_missing_index_returns_error(self, tmp_path):

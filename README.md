@@ -213,7 +213,7 @@ The server lists only the tools it can run in its configuration. A stdio server 
 | `get_file_outline(path, repo_root=None)` | Symbol outline for one file |
 | `get_repo_outline(path, max_files=500)` | Symbol outlines across a repo |
 | `search_symbols(query, path, limit=20, kind=None)` | Search symbols by name (case-insensitive substring) |
-| `search_text(query, path, limit=50, case_sensitive=false)` | Search literal text |
+| `search_text(query, path, limit=50, case_sensitive=false)` | Search literal text; return partial matches marked `truncated` on deadline |
 | `search_references(query, path, limit=20, usage_filter="production_first", kind=None)` | Bounded candidate usages; not compiler-exhaustive |
 | `get_symbols(symbol_ids, path)` | Metadata and source for one or more symbols; an unknown ID or stale range errors in its own entry |
 | `invalidate_cache(path)` | Drop one repo's symbol index (listed only with the destructive-MCP grant) |
@@ -267,7 +267,7 @@ Without the server-side `LGREP_ALLOW_DESTRUCTIVE_MCP` grant, the pruners return 
 | `LGREP_WARM_PATHS` | none | Colon-separated projects to warm on startup |
 | `LGREP_AUTO_WARM_DISK` | `true` | Auto-load discoverable disk caches at startup when no warm paths are set; set `false` on large shared machines |
 | `LGREP_AUTO_WATCH` | `false` | Auto-start file watchers for warmed projects |
-| `LGREP_TOOL_TIMEOUT_S` | `45` | Per-tool server-side timeout (seconds) |
+| `LGREP_TOOL_TIMEOUT_S` | `25` | Per-tool server-side timeout (seconds) |
 | `LGREP_EXPLICIT_INDEX_BUDGET_S` | `150` | Cooperative budget for explicit symbol-index jobs, independent of the tool timeout; positive finite overrides only |
 | `LGREP_STALENESS_DEADLINE_S` | `4.0` | Bound on the per-search staleness check |
 | `LGREP_ENSURE_BUDGET_S` | `8.0` | Budget for a worktree search to make its trunk base index current; `0` always defers to the background |

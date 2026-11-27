@@ -461,7 +461,7 @@ lgrep:
     LGREP_WORKTREE_DEDUP: "1"
     LGREP_WARM_PATHS: "/home/you/dev/primary:/home/you/dev/tooling"
     LGREP_AUTO_WARM_DISK: "false"
-    LGREP_TOOL_TIMEOUT_S: "8"
+    LGREP_TOOL_TIMEOUT_S: "25"
     LGREP_WORKER_MAX_THREADS: "4"
 ```
 
@@ -470,7 +470,9 @@ lgrep:
 - `LGREP_AUTO_WARM_DISK=false` prevents surprise startup work from old cache
   entries.
 - Set `LGREP_TOOL_TIMEOUT_S` below the MCP proxy/client timeout so callers get
-  a structured lgrep error before a transport deadline.
+  a structured lgrep response before a transport deadline. Literal search uses
+  80% of the tool timeout for scanning and returns partial results marked
+  `truncated` at that deadline.
 - Keep `LGREP_WORKER_MAX_THREADS` small for shared daemons so concurrent
   agents cannot create unbounded blocking work.
 - Leave `LGREP_BUILD_MAX_THREADS` at `1` on shared daemons: builds are

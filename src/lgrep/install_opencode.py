@@ -92,7 +92,7 @@ Environment=LGREP_WARM_PATHS={warm_paths_placeholder}
 Environment=LGREP_WORKTREE_DEDUP=1
 Environment=LGREP_AUTO_WARM_DISK=false
 Environment=LGREP_AUTO_WATCH=false
-Environment=LGREP_TOOL_TIMEOUT_S=8
+Environment=LGREP_TOOL_TIMEOUT_S=25
 Environment=LGREP_WORKER_MAX_THREADS=4
 StandardOutput=append:$HOME/.cache/lgrep/lgrep.log
 StandardError=append:$HOME/.cache/lgrep/lgrep.log
@@ -140,7 +140,7 @@ def _print_daemon_instructions() -> None:
     print("  LGREP_WORKTREE_DEDUP=1 \\")
     print("  LGREP_AUTO_WARM_DISK=false \\")
     print("  LGREP_AUTO_WATCH=false \\")
-    print("  LGREP_TOOL_TIMEOUT_S=8 \\")
+    print("  LGREP_TOOL_TIMEOUT_S=25 \\")
     print("  LGREP_WORKER_MAX_THREADS=4 \\")
     print(f"  {lgrep_bin} --transport streamable-http --port 6285")
     print()
